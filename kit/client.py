@@ -57,18 +57,30 @@ class AletheiaClient:
     def audit(self, payload: str, action: str, origin: str) -> AuditResult:
         """Send a payload to the engine; return the result + signed receipt."""
         resp = self._client.post(
-            "/v1/audit",
+            "/api/v1/audit",
             json={"payload": payload, "action": action, "origin": origin},
         )
         # 403 is a valid "DENIED" response from the engine, not an HTTP error
         if resp.status_code not in (200, 403):
             resp.raise_for_status()
 
+        content_type = resp.headers.get("content-type", "")
+        if "application/json" not in content_type.lower():
+            snippet = resp.text[:180].replace("\n", " ")
+            raise RuntimeError(
+                f"Expected JSON audit response but got {content_type or 'unknown content type'} "
+                f"(status {resp.status_code}): {snippet}"
+            )
+
         body = resp.json()
+        decision = body.get("decision")
+        if not decision and resp.status_code == 403:
+            decision = "DENIED"
+
         return AuditResult(
             request_id=body.get("request_id") or body.get("metadata", {}).get("request_id", ""),
-            decision=body.get("decision", "UNKNOWN"),
-            reason=body.get("reason"),
+            decision=decision or "UNKNOWN",
+            reason=body.get("reason") or body.get("error"),
             receipt=body.get("receipt", {}),
             raw=body,
         )

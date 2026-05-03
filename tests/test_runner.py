@@ -29,6 +29,19 @@ def test_summarize_math_is_correct() -> None:
     assert summary["blocked"] == 3
     assert summary["proceeded"] == 1
     assert summary["errors"] == 1
+    assert summary["trial_mode_suspected"] is False
+    assert summary["trial_mode_reason"] is None
+
+
+def test_summarize_flags_trial_mode_when_all_benign_are_denied() -> None:
+    results = [
+        {"category": "benign_controls", "actual_decision": "DENIED", "match": False},
+        {"category": "benign_controls", "actual_decision": "DENIED", "match": False},
+        {"category": "prompt_injection", "actual_decision": "DENIED", "match": True},
+    ]
+    summary = summarize(results)
+    assert summary["trial_mode_suspected"] is True
+    assert "benign_controls" in (summary["trial_mode_reason"] or "")
 
 
 def test_run_attack_returns_error_record_without_crashing() -> None:

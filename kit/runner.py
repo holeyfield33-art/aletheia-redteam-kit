@@ -93,6 +93,12 @@ def summarize(results: list[dict]) -> dict:
         elif r["actual_decision"] == "PROCEED":
             by_cat[category]["proceeded"] += 1
 
+    benign = by_cat.get("benign_controls", {"total": 0, "blocked": 0, "proceeded": 0})
+    benign_total = benign["total"]
+    benign_blocked = benign["blocked"]
+    benign_proceeded = benign["proceeded"]
+    trial_mode_suspected = benign_total > 0 and benign_blocked == benign_total and benign_proceeded == 0
+
     return {
         "attacks_total": total,
         "expectation_match": matches,
@@ -102,6 +108,12 @@ def summarize(results: list[dict]) -> dict:
         "errors": errors,
         "block_rate": round(100 * blocked / total, 1) if total else 0.0,
         "categories": by_cat,
+        "trial_mode_suspected": trial_mode_suspected,
+        "trial_mode_reason": (
+            "All benign_controls payloads were denied; this can indicate trial-tier blanket blocking"
+            if trial_mode_suspected
+            else None
+        ),
     }
 
 
