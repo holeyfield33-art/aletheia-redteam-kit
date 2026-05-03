@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aletheia Red Team Kit Dashboard</title>
+  <style>
+    :root {
+      --crimson: #8B1A2A;
+      --deep-crimson: #5C0F1A;
+      --silver: #A8B0B8;
+      --paper: #f4f0ed;
+      --ink: #130f10;
+      --ok: #2f8f4e;
+      --warn: #b8892f;
+      --bad: #a72c2c;
+      --panel: #201718;
+      --panel-soft: #2b2022;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+      color: var(--paper);
+      background:
+        radial-gradient(circle at 85% -20%, #7a1c2e 0%, transparent 45%),
+        radial-gradient(circle at 10% 120%, #3d0d15 0%, transparent 50%),
+        linear-gradient(145deg, #2f0c12 0%, var(--deep-crimson) 50%, #2a0a11 100%);
+      min-height: 100vh;
+    }
+
+    .frame {
+      width: min(1200px, 95vw);
+      margin: 1.25rem auto 2rem;
+    }
+
+    .header {
+      border: 1px solid color-mix(in srgb, var(--silver) 60%, transparent);
+      background: linear-gradient(95deg, #3f0e17, #6d1422 55%, #410e18);
+      border-radius: 16px;
+      padding: 1rem;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      margin-bottom: 1rem;
+    }
+
+    .title {
+      margin: 0;
+      font-size: clamp(1.4rem, 3.6vw, 2rem);
+      font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+      letter-spacing: 0.02em;
+      color: #fff4f1;
+    }
+
+    .meta {
+      display: grid;
+      gap: 0.35rem;
+      margin-top: 0.6rem;
+      color: var(--silver);
+      font-size: 0.9rem;
+    }
+
+    .meta b {
+      color: #efe6e8;
+      font-weight: 600;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.7rem;
+      margin: 1rem 0;
+    }
+
+    .drop-zone {
+      border: 1px dashed color-mix(in srgb, var(--silver) 70%, transparent);
+      border-radius: 14px;
+      background: rgba(20, 14, 15, 0.45);
+      padding: 0.9rem;
+      color: var(--silver);
+      text-align: center;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+
+    .drop-zone.drag {
+      border-color: #f3d8dd;
+      background: rgba(255, 255, 255, 0.09);
+      color: #fff;
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    button,
+    input[type="file"]::file-selector-button {
+      border: 1px solid color-mix(in srgb, var(--silver) 70%, transparent);
+      background: #3a2024;
+      color: #f2e8ea;
+      border-radius: 10px;
+      padding: 0.5rem 0.8rem;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    button:hover,
+    input[type="file"]::file-selector-button:hover {
+      background: #4e282d;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.7rem;
+      margin-bottom: 1rem;
+    }
+
+    .card {
+      border: 1px solid color-mix(in srgb, var(--silver) 55%, transparent);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(36, 24, 25, 0.9), rgba(23, 16, 17, 0.9));
+      padding: 0.8rem;
+    }
+
+    .card-label {
+      color: var(--silver);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .card-value {
+      margin-top: 0.25rem;
+      font-family: "Playfair Display", Georgia, serif;
+      font-size: 1.6rem;
+      color: #fff;
+      line-height: 1.1;
+    }
+
+    .bars {
+      border: 1px solid color-mix(in srgb, var(--silver) 50%, transparent);
+      border-radius: 14px;
+      padding: 0.85rem;
+      background: rgba(19, 14, 15, 0.85);
+      margin-bottom: 1rem;
+    }
+
+    .bars h2,
+    .table-wrap h2,
+    .detail h2 {
+      margin: 0 0 0.7rem;
+      font-size: 1rem;
+      color: #fff0f4;
+      font-family: "Playfair Display", Georgia, serif;
+      letter-spacing: 0.03em;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: 170px 1fr 110px;
+      gap: 0.55rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .bar-track {
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      background: #352527;
+      overflow: hidden;
+      border: 1px solid #4f3b3e;
+    }
+
+    .bar-fill {
+      height: 100%;
+      width: 0;
+      transition: width 0.5s ease;
+    }
+
+    .table-wrap {
+      border: 1px solid color-mix(in srgb, var(--silver) 45%, transparent);
+      border-radius: 14px;
+      background: rgba(15, 11, 11, 0.9);
+      padding: 0.75rem;
+    }
+
+    .scroll {
+      overflow: auto;
+      max-height: 420px;
+      border: 1px solid #453336;
+      border-radius: 10px;
+      background: #150f10;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1050px;
+      font-size: 0.82rem;
+    }
+
+    th,
+    td {
+      padding: 0.52rem;
+      text-align: left;
+      border-bottom: 1px solid #352729;
+      white-space: nowrap;
+      vertical-align: top;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #231819;
+      z-index: 1;
+      color: #e5d3d6;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    tbody tr {
+      cursor: pointer;
+    }
+
+    tbody tr:hover {
+      background: #241a1b;
+    }
+
+    .match {
+      font-weight: 700;
+      color: #99dcae;
+    }
+
+    .mismatch {
+      font-weight: 700;
+      color: #f4b1b1;
+    }
+
+    .detail {
+      border: 1px solid color-mix(in srgb, var(--silver) 55%, transparent);
+      border-radius: 14px;
+      background: rgba(18, 13, 14, 0.92);
+      padding: 0.8rem;
+      margin-top: 1rem;
+    }
+
+    .detail-top {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.7rem;
+    }
+
+    pre {
+      margin: 0;
+      background: #100c0d;
+      border: 1px solid #423135;
+      border-radius: 10px;
+      padding: 0.8rem;
+      color: #e0d4d7;
+      overflow: auto;
+      max-height: 300px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .muted {
+      color: var(--silver);
+      font-size: 0.84rem;
+    }
+
+    .status {
+      margin-top: 0.55rem;
+      color: #f1d2d7;
+      font-size: 0.85rem;
+      min-height: 1.2rem;
+    }
+
+    @media (max-width: 780px) {
+      .controls {
+        grid-template-columns: 1fr;
+      }
+
+      .bar-row {
+        grid-template-columns: 1fr;
+      }
+
+      .bar-row .bar-track {
+        order: 2;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="header">
+      <h1 class="title">Aletheia Red Team Kit</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+
+    <div class="controls">
+      <div class="drop-zone" id="dropZone">Drop a summary.json file here, or use the picker.</div>
+      <div class="button-row">
+        <input id="fileInput" type="file" accept="application/json,.json">
+        <button id="loadDefaultBtn" type="button">Load ./summary.json</button>
+        <button id="verifyAllBtn" type="button">Verify All Signatures</button>
+      </div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="bars">
+      <h2>Per-Category Blocking Ratio</h2>
+      <div id="bars"></div>
+    </div>
+
+    <div class="table-wrap">
+      <h2>Receipt Table</h2>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>ID</th>
+              <th>Category</th>
+              <th>Name</th>
+              <th>Expected</th>
+              <th>Actual</th>
+              <th>Match</th>
+              <th>Latency ms</th>
+              <th>Signature</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="detail" id="detail">
+      <h2>Receipt Detail</h2>
+      <p class="muted">Click any row to inspect the full receipt JSON.</p>
+      <div class="detail-top">
+        <button id="copyReceiptBtn" type="button" disabled>Copy Receipt JSON</button>
+        <button id="verifyBtn" type="button" disabled>Verify Signature</button>
+      </div>
+      <pre id="receiptView">No selection.</pre>
+      <div class="status" id="verifyStatus"></div>
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_SUMMARY_PATH = "./summary.json";
+    const WELL_KNOWN_PEM_URL = "https://aletheia-core.com/.well-known/aletheia-receipt-key.pem";
+    const FALLBACK_PUBLIC_KEY_PEM = "";
+    const VERIFY_FIELDS = [
+      "request_id",
+      "decision",
+      "rule_id",
+      "severity",
+      "action",
+      "policy_version",
+      "semantic_engine"
+    ];
+
+    const state = {
+      summary: null,
+      selected: null,
+      verifyStats: { checked: 0, valid: 0 },
+      rowVerification: new Map()
+    };
+
+    const metaEl = document.getElementById("meta");
+    const statsEl = document.getElementById("stats");
+    const barsEl = document.getElementById("bars");
+    const rowsEl = document.getElementById("rows");
+    const statusEl = document.getElementById("status");
+    const verifyStatusEl = document.getElementById("verifyStatus");
+    const receiptViewEl = document.getElementById("receiptView");
+    const fileInputEl = document.getElementById("fileInput");
+    const dropZoneEl = document.getElementById("dropZone");
+    const copyReceiptBtnEl = document.getElementById("copyReceiptBtn");
+    const verifyBtnEl = document.getElementById("verifyBtn");
+    const verifyAllBtnEl = document.getElementById("verifyAllBtn");
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+        .replace(/`/g, "&#96;");
+    }
+
+    function truncateSignature(sig) {
+      const text = String(sig || "");
+      return text ? text.slice(0, 12) : "-";
+    }
+
+    function percent(numerator, denominator) {
+      if (!denominator) return "0.0";
+      return ((100 * numerator) / denominator).toFixed(1);
+    }
+
+    function toIsoOrDash(value) {
+      if (!value) return "-";
+      try {
+        return new Date(value).toISOString();
+      } catch (_) {
+        return String(value);
+      }
+    }
+
+    function setStatus(message) {
+      statusEl.innerHTML = escapeHtml(message);
+    }
+
+    function setVerifyStatus(message) {
+      verifyStatusEl.innerHTML = escapeHtml(message);
+    }
+
+    function renderMeta(summary) {
+      const generated = toIsoOrDash(summary.generated_at);
+      const engineUrl = summary.engine_url || "(unknown)";
+      const attacksTotal = summary.attacks_total || (summary.results || []).length || 0;
+      metaEl.innerHTML = [
+        "<div><b>Generated:</b> " + escapeHtml(generated) + "</div>",
+        "<div><b>Engine URL:</b> " + escapeHtml(engineUrl) + "</div>",
+        "<div><b>Total attacks:</b> " + escapeHtml(attacksTotal) + "</div>"
+      ].join("");
+    }
+
+    function renderStats(summary) {
+      const total = Number(summary.attacks_total || 0);
+      const blocked = Number(summary.blocked || 0);
+      const blockRate = Number(summary.block_rate || 0);
+      const matchRate = Number(summary.expectation_match_rate || 0);
+      const verified = state.verifyStats.valid;
+      const checked = state.verifyStats.checked;
+      const verifyPct = checked ? Number(percent(verified, checked)) : 0;
+
+      const cards = [
+        { label: "Total Attacks", value: total },
+        { label: "Blocked", value: blocked },
+        { label: "Block Rate", value: blockRate.toFixed(1) + "%" },
+        { label: "Expectation Match", value: matchRate.toFixed(1) + "%" },
+        { label: "Signature Verification", value: verifyPct.toFixed(1) + "%" }
+      ];
+
+      statsEl.innerHTML = cards.map(function (card) {
+        return (
+          "<div class=\"card\">" +
+          "<div class=\"card-label\">" + escapeHtml(card.label) + "</div>" +
+          "<div class=\"card-value\">" + escapeHtml(card.value) + "</div>" +
+          "</div>"
+        );
+      }).join("");
+    }
+
+    function barColor(ratio) {
+      if (ratio >= 95) return "var(--ok)";
+      if (ratio >= 80) return "var(--warn)";
+      return "var(--bad)";
+    }
+
+    function renderBars(summary) {
+      const categories = summary.categories || {};
+      const order = [
+        "prompt_injection",
+        "data_exfiltration",
+        "tool_abuse",
+        "jailbreak",
+        "policy_evasion",
+        "benign_controls"
+      ];
+
+      barsEl.innerHTML = order.map(function (name) {
+        const cat = categories[name] || { total: 0, blocked: 0 };
+        const ratio = Number(percent(cat.blocked || 0, cat.total || 0));
+        const fill = Math.max(0, Math.min(100, ratio));
+        return (
+          "<div class=\"bar-row\">" +
+          "<div>" + escapeHtml(name) + "</div>" +
+          "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" +
+          escapeHtml(fill) + "%;background:" + escapeHtml(barColor(ratio)) + "\"></div></div>" +
+          "<div>" + escapeHtml(cat.blocked || 0) + "/" + escapeHtml(cat.total || 0) +
+          " (" + escapeHtml(fill.toFixed(1)) + "%)</div>" +
+          "</div>"
+        );
+      }).join("");
+    }
+
+    function renderRows(summary) {
+      const results = Array.isArray(summary.results) ? summary.results : [];
+      rowsEl.innerHTML = results.map(function (row, idx) {
+        const ts = toIsoOrDash((row.receipt || {}).issued_at || summary.generated_at);
+        const match = row.match ? "\u2713" : "\u2717";
+        const sig = truncateSignature((row.receipt || {}).signature);
+        const cls = row.match ? "match" : "mismatch";
+        return (
+          "<tr data-index=\"" + escapeHtml(idx) + "\">" +
+          "<td>" + escapeHtml(ts) + "</td>" +
+          "<td>" + escapeHtml(row.id || "") + "</td>" +
+          "<td>" + escapeHtml(row.category || "") + "</td>" +
+          "<td>" + escapeHtml(row.name || "") + "</td>" +
+          "<td>" + escapeHtml(row.expected_decision || "") + "</td>" +
+          "<td>" + escapeHtml(row.actual_decision || "") + "</td>" +
+          "<td class=\"" + escapeHtml(cls) + "\">" + escapeHtml(match) + "</td>" +
+          "<td>" + escapeHtml(row.latency_ms != null ? row.latency_ms : "-") + "</td>" +
+          "<td>" + escapeHtml(sig) + "</td>" +
+          "</tr>"
+        );
+      }).join("");
+
+      const allRows = rowsEl.querySelectorAll("tr");
+      allRows.forEach(function (tr) {
+        tr.addEventListener("click", function () {
+          const index = Number(tr.getAttribute("data-index"));
+          selectRow(index);
+        });
+      });
+    }
+
+    function selectRow(index) {
+      const results = (state.summary && state.summary.results) || [];
+      const row = results[index];
+      if (!row) return;
+      state.selected = row;
+      const receipt = row.receipt || {};
+      receiptViewEl.textContent = JSON.stringify(receipt, null, 2);
+      copyReceiptBtnEl.disabled = false;
+      verifyBtnEl.disabled = false;
+      setVerifyStatus("Selected: " + (row.id || "(unknown)"));
+    }
+
+    async function copySelectedReceipt() {
+      if (!state.selected) return;
+      try {
+        const text = JSON.stringify(state.selected.receipt || {}, null, 2);
+        await navigator.clipboard.writeText(text);
+        setVerifyStatus("Receipt JSON copied to clipboard.");
+      } catch (_) {
+        setVerifyStatus("Clipboard copy failed in this browser context.");
+      }
+    }
+
+    function pemToDer(pem) {
+      const body = pem
+        .replace(/-----BEGIN PUBLIC KEY-----/g, "")
+        .replace(/-----END PUBLIC KEY-----/g, "")
+        .replace(/\s+/g, "");
+      const raw = atob(body);
+      const bytes = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i += 1) {
+        bytes[i] = raw.charCodeAt(i);
+      }
+      return bytes.buffer;
+    }
+
+    async function loadPublicKeyPem() {
+      try {
+        const resp = await fetch(WELL_KNOWN_PEM_URL, { cache: "no-store" });
+        if (resp.ok) {
+          return await resp.text();
+        }
+      } catch (_) {
+      }
+      if (FALLBACK_PUBLIC_KEY_PEM.trim()) {
+        return FALLBACK_PUBLIC_KEY_PEM;
+      }
+      throw new Error("No public key endpoint available and no bundled fallback key configured.");
+    }
+
+    function buildCanonicalMessage(receipt) {
+      const canonical = {};
+      VERIFY_FIELDS.forEach(function (field) {
+        if (Object.prototype.hasOwnProperty.call(receipt, field)) {
+          canonical[field] = receipt[field];
+        }
+      });
+      return new TextEncoder().encode(JSON.stringify(canonical));
+    }
+
+    async function verifyReceiptSignature(receipt) {
+      if (!receipt || typeof receipt !== "object") {
+        throw new Error("Receipt missing.");
+      }
+      const sigHex = receipt.signature;
+      if (!sigHex || typeof sigHex !== "string") {
+        return false;
+      }
+      if (sigHex === "UNSIGNED_DEV_MODE") {
+        return false;
+      }
+
+      const pem = await loadPublicKeyPem();
+      const key = await crypto.subtle.importKey(
+        "spki",
+        pemToDer(pem),
+        { name: "Ed25519" },
+        false,
+        ["verify"]
+      );
+
+      const sigBytes = new Uint8Array(sigHex.length / 2);
+      for (let i = 0; i < sigBytes.length; i += 1) {
+        sigBytes[i] = parseInt(sigHex.slice(i * 2, i * 2 + 2), 16);
+      }
+
+      const message = buildCanonicalMessage(receipt);
+      return crypto.subtle.verify({ name: "Ed25519" }, key, sigBytes, message);
+    }
+
+    async function verifySelected() {
+      if (!state.selected) return;
+      try {
+        const ok = await verifyReceiptSignature(state.selected.receipt || {});
+        setVerifyStatus(ok ? "Signature verification: VALID" : "Signature verification: INVALID");
+      } catch (err) {
+        setVerifyStatus("Signature verification failed: " + (err && err.message ? err.message : String(err)));
+      }
+    }
+
+    async function verifyAll() {
+      if (!state.summary || !Array.isArray(state.summary.results)) {
+        setVerifyStatus("Load a summary file first.");
+        return;
+      }
+
+      let checked = 0;
+      let valid = 0;
+      for (const row of state.summary.results) {
+        const key = String(row.id || "");
+        try {
+          const ok = await verifyReceiptSignature(row.receipt || {});
+          state.rowVerification.set(key, ok);
+          if ((row.receipt || {}).signature) {
+            checked += 1;
+            if (ok) valid += 1;
+          }
+        } catch (_) {
+          state.rowVerification.set(key, false);
+          if ((row.receipt || {}).signature) {
+            checked += 1;
+          }
+        }
+      }
+
+      state.verifyStats = { checked: checked, valid: valid };
+      renderStats(state.summary);
+      setVerifyStatus("Verified " + valid + " of " + checked + " signatures.");
+    }
+
+    function renderAll(summary) {
+      state.summary = summary;
+      state.selected = null;
+      state.verifyStats = { checked: 0, valid: 0 };
+      state.rowVerification = new Map();
+      copyReceiptBtnEl.disabled = true;
+      verifyBtnEl.disabled = true;
+      receiptViewEl.textContent = "No selection.";
+      renderMeta(summary);
+      renderStats(summary);
+      renderBars(summary);
+      renderRows(summary);
+      setStatus("Loaded " + ((summary.results || []).length || 0) + " rows.");
+      setVerifyStatus("");
+    }
+
+    async function loadFromText(text, label) {
+      try {
+        const parsed = JSON.parse(text);
+        renderAll(parsed);
+        setStatus("Loaded " + label + " successfully.");
+      } catch (err) {
+        setStatus("Invalid JSON: " + (err && err.message ? err.message : String(err)));
+      }
+    }
+
+    async function loadDefault() {
+      setStatus("Loading " + DEFAULT_SUMMARY_PATH + "...");
+      try {
+        const resp = await fetch(DEFAULT_SUMMARY_PATH, { cache: "no-store" });
+        if (!resp.ok) {
+          throw new Error("HTTP " + resp.status + " at " + DEFAULT_SUMMARY_PATH);
+        }
+        const text = await resp.text();
+        await loadFromText(text, DEFAULT_SUMMARY_PATH);
+      } catch (err) {
+        setStatus("Default load failed: " + (err && err.message ? err.message : String(err)));
+      }
+    }
+
+    fileInputEl.addEventListener("change", async function (event) {
+      const files = event.target.files || [];
+      if (!files.length) return;
+      const text = await files[0].text();
+      await loadFromText(text, files[0].name || "file");
+    });
+
+    ["dragenter", "dragover"].forEach(function (name) {
+      dropZoneEl.addEventListener(name, function (event) {
+        event.preventDefault();
+        dropZoneEl.classList.add("drag");
+      });
+    });
+
+    ["dragleave", "drop"].forEach(function (name) {
+      dropZoneEl.addEventListener(name, function (event) {
+        event.preventDefault();
+        dropZoneEl.classList.remove("drag");
+      });
+    });
+
+    dropZoneEl.addEventListener("drop", async function (event) {
+      const files = (event.dataTransfer && event.dataTransfer.files) || [];
+      if (!files.length) return;
+      const text = await files[0].text();
+      await loadFromText(text, files[0].name || "drop-file");
+    });
+
+    document.getElementById("loadDefaultBtn").addEventListener("click", loadDefault);
+    copyReceiptBtnEl.addEventListener("click", copySelectedReceipt);
+    verifyBtnEl.addEventListener("click", verifySelected);
+    verifyAllBtnEl.addEventListener("click", verifyAll);
+
+    loadDefault();
+  </script>
+</body>
+</html>
