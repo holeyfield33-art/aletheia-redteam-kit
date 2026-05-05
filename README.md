@@ -123,6 +123,30 @@ Combined command-center artifact:
 `components.api`, `components.website`, and `components.repo`, plus
 `gates.pass` and aggregated `gates.violations`.
 
+Time-bound gate exceptions (owner + expiry):
+
+- Provide `--gate-exceptions-file` (or `ALETHEIA_GATE_EXCEPTIONS_FILE`) to
+        allow explicitly approved temporary waivers.
+- Exception entries require: `violation`, `owner`, `expires_at`.
+- Supports exact and wildcard violation matching (for example `repo:*`).
+- Summary outputs include `gate_exceptions.applied`,
+        `gate_exceptions.ignored_expired`, and `gate_exceptions.pass_with_exceptions`.
+
+Example exceptions file:
+
+                {
+                    "exceptions": [
+                        {
+                            "id": "ex-1",
+                            "violation": "repo:high_repo_findings_over_limit",
+                            "owner": "security-team",
+                            "expires_at": "2026-06-01T00:00:00+00:00",
+                            "reason": "Temporary waiver during remediation",
+                            "modes": ["combined"]
+                        }
+                    ]
+                }
+
 Normalized top-level combined signals now include:
 
 - `risk_score`

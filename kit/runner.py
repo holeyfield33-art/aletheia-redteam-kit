@@ -26,6 +26,7 @@ import os
 import sys
 import time
 from datetime import datetime, timezone
+from fnmatch import fnmatch
 from pathlib import Path
 
 from engine.agentic import AgenticConfig, run_agentic_loop
@@ -351,6 +352,152 @@ def _compute_combined_normalized_summary(combined: dict, *, hard_error: bool = F
     }
 
 
+def _parse_exception_expiry(raw_value: str) -> datetime | None:
+    try:
+        normalized = raw_value.replace("Z", "+00:00")
+        expiry = datetime.fromisoformat(normalized)
+        if expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=timezone.utc)
+        return expiry.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _load_gate_exceptions(path: str | None) -> dict:
+    if not path:
+        return {
+            "source": None,
+            "entries": [],
+            "parse_error": None,
+        }
+
+    source = Path(path)
+    if not source.exists():
+        return {
+            "source": str(source),
+            "entries": [],
+            "parse_error": "exceptions_file_not_found",
+        }
+
+    try:
+        raw = json.loads(source.read_text(encoding="utf-8", errors="ignore"))
+    except json.JSONDecodeError:
+        return {
+            "source": str(source),
+            "entries": [],
+            "parse_error": "exceptions_file_invalid_json",
+        }
+
+    if isinstance(raw, dict):
+        items = raw.get("exceptions") or []
+    elif isinstance(raw, list):
+        items = raw
+    else:
+        items = []
+
+    entries: list[dict] = []
+    invalid_entries = 0
+    for item in items:
+        if not isinstance(item, dict):
+            invalid_entries += 1
+            continue
+
+        violation = str(item.get("violation") or "").strip()
+        owner = str(item.get("owner") or "").strip()
+        expiry_raw = str(item.get("expires_at") or "").strip()
+        if not violation or not owner or not expiry_raw:
+            invalid_entries += 1
+            continue
+
+        expiry = _parse_exception_expiry(expiry_raw)
+        if expiry is None:
+            invalid_entries += 1
+            continue
+
+        modes_raw = item.get("modes")
+        if isinstance(modes_raw, list):
+            modes = [str(mode).strip().lower() for mode in modes_raw if str(mode).strip()]
+        else:
+            modes = ["all"]
+
+        entries.append(
+            {
+                "id": str(item.get("id") or f"ex-{len(entries) + 1}"),
+                "violation": violation,
+                "owner": owner,
+                "expires_at": expiry.isoformat(),
+                "reason": str(item.get("reason") or ""),
+                "modes": modes,
+            }
+        )
+
+    return {
+        "source": str(source),
+        "entries": entries,
+        "parse_error": None,
+        "invalid_entries": invalid_entries,
+    }
+
+
+def _apply_gate_exceptions(mode: str, gates: dict, exceptions_data: dict) -> dict:
+    violations = list((gates or {}).get("violations") or [])
+    now = datetime.now(timezone.utc)
+
+    applied: list[dict] = []
+    ignored_expired: list[dict] = []
+    remaining: list[str] = []
+
+    entries = exceptions_data.get("entries") or []
+    for violation in violations:
+        matched = None
+        for entry in entries:
+            modes = entry.get("modes") or ["all"]
+            if "all" not in modes and mode not in modes:
+                continue
+
+            expiry = _parse_exception_expiry(str(entry.get("expires_at") or ""))
+            if expiry is None or expiry < now:
+                ignored_expired.append(
+                    {
+                        "id": entry.get("id"),
+                        "violation": entry.get("violation"),
+                        "owner": entry.get("owner"),
+                        "expires_at": entry.get("expires_at"),
+                    }
+                )
+                continue
+
+            pattern = str(entry.get("violation") or "").strip()
+            if pattern and fnmatch(violation, pattern):
+                matched = {
+                    "id": entry.get("id"),
+                    "violation": violation,
+                    "matched_pattern": pattern,
+                    "owner": entry.get("owner"),
+                    "expires_at": entry.get("expires_at"),
+                    "reason": entry.get("reason") or "",
+                }
+                break
+
+        if matched is not None:
+            applied.append(matched)
+        else:
+            remaining.append(violation)
+
+    gates["violations"] = remaining
+    gates["pass"] = len(remaining) == 0
+
+    return {
+        "source": exceptions_data.get("source"),
+        "parse_error": exceptions_data.get("parse_error"),
+        "invalid_entries": int(exceptions_data.get("invalid_entries", 0)),
+        "applied": applied,
+        "ignored_expired": ignored_expired,
+        "remaining_violations": remaining,
+        "pass_with_exceptions": bool(applied) and len(remaining) == 0,
+    }
+
+
 def load_custom_rules(path: str | None) -> list[CustomFindingRule]:
     """Load custom website finding rules from JSON file."""
     if not path:
@@ -564,6 +711,11 @@ def cli() -> int:
     parser.add_argument("--warning-max-exploitability", type=int, default=60, help="Maximum exploitability score for WARNING verdict")
     parser.add_argument("--repo-path", default=".", help="Repository root path for --mode repo")
     parser.add_argument("--threat-feed-file", help="Optional threat feed JSON for repo and combined modes")
+    parser.add_argument(
+        "--gate-exceptions-file",
+        default=os.environ.get("ALETHEIA_GATE_EXCEPTIONS_FILE"),
+        help="JSON file containing time-bound gate exceptions (requires owner and expires_at)",
+    )
     parser.add_argument("--max-repo-critical", type=int, default=0, help="Fail repo mode if CRITICAL findings exceed this")
     parser.add_argument("--max-repo-high", type=int, default=5, help="Fail repo mode if HIGH findings exceed this")
     parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
@@ -580,6 +732,7 @@ def cli() -> int:
     args = parser.parse_args()
 
     if args.mode == "combined":
+        gate_exceptions_data = _load_gate_exceptions(args.gate_exceptions_file)
         combined: dict = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "mode": "combined",
@@ -698,6 +851,8 @@ def cli() -> int:
             for violation in repo_gates.get("violations", []):
                 combined["gates"]["violations"].append(f"repo:{violation}")
 
+        combined["gate_exceptions"] = _apply_gate_exceptions("combined", combined["gates"], gate_exceptions_data)
+
         combined.update(_compute_combined_normalized_summary(combined, hard_error=hard_error))
 
         Path(args.output).write_text(json.dumps(combined, indent=2))
@@ -793,6 +948,7 @@ def cli() -> int:
         return PASS
 
     if args.mode == "repo":
+        gate_exceptions_data = _load_gate_exceptions(args.gate_exceptions_file)
         summary = run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
         gates = summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
 
@@ -807,6 +963,7 @@ def cli() -> int:
             gates.setdefault("violations", []).append("high_repo_findings_over_limit")
 
         summary["gates"] = gates
+        summary["gate_exceptions"] = _apply_gate_exceptions("repo", summary["gates"], gate_exceptions_data)
         Path(args.output).write_text(json.dumps(summary, indent=2))
 
         print(
