@@ -86,10 +86,12 @@ Repo summary highlights:
 Current repo checks include:
 
 - secret and key literal detection
+- high-entropy secret literal detection
 - risky workflow configuration checks
 - dependency constraint hygiene checks
 - language-aware risky code patterns (Python/JS)
 - weak crypto primitive usage checks
+- config/policy drift patterns (TLS verify disabled, wildcard CORS, JWT none)
 
 Dependency advisory enrichment:
 
@@ -120,6 +122,13 @@ Combined command-center artifact:
 `combined_summary.json` includes per-component artifacts under
 `components.api`, `components.website`, and `components.repo`, plus
 `gates.pass` and aggregated `gates.violations`.
+
+Normalized top-level combined signals now include:
+
+- `risk_score`
+- `exploitability_score`
+- `ci_verdict` and `ci_verdict_reason`
+- `normalized_signals.component_risk` and `normalized_signals.component_exploitability`
 
 Decision hardening note:
 

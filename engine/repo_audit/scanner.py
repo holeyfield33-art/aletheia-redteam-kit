@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from math import log2
 import re
 import tomllib
 import json
@@ -116,6 +117,30 @@ JS_RISK_PATTERNS: list[tuple[str, str, str, re.Pattern[str], str]] = [
     ),
 ]
 
+DRIFT_PATTERNS: list[tuple[str, str, str, re.Pattern[str], str]] = [
+    (
+        "tls_verification_disabled",
+        "TLS certificate verification disabled",
+        "HIGH",
+        re.compile(r"(verify\s*=\s*False|ssl[_-]?verify\s*[:=]\s*false|NODE_TLS_REJECT_UNAUTHORIZED\s*=\s*['\"]?0)", re.IGNORECASE),
+        "Enable TLS verification in all HTTP clients and runtime environments.",
+    ),
+    (
+        "cors_wildcard_origin",
+        "Overly permissive CORS wildcard policy",
+        "MEDIUM",
+        re.compile(r"(Access-Control-Allow-Origin[^\n]*\*|origin\s*:\s*['\"]\*['\"])", re.IGNORECASE),
+        "Restrict CORS origins to trusted allowlists for production deployments.",
+    ),
+    (
+        "jwt_none_algorithm",
+        "JWT 'none' algorithm accepted",
+        "HIGH",
+        re.compile(r"alg['\"]?\s*[:=]\s*['\"]none['\"]", re.IGNORECASE),
+        "Reject JWT tokens using the 'none' algorithm and enforce signed tokens.",
+    ),
+]
+
 WEAK_CRYPTO_PATTERNS: list[tuple[str, str, str, re.Pattern[str], str]] = [
     (
         "weak_hash_md5",
@@ -203,7 +228,46 @@ def _scan_secrets(repo_root: Path, files: list[Path]) -> list[Finding]:
                             recommendation="Move sensitive values to runtime secrets and rotate exposed credentials.",
                         )
                     )
+
+            if _contains_high_entropy_secret_literal(line):
+                findings.append(
+                    Finding(
+                        severity="HIGH",
+                        type="high_entropy_secret_literal",
+                        title="Potential high-entropy secret literal",
+                        file=rel,
+                        line=idx,
+                        evidence=line.strip()[:220],
+                        recommendation="Store generated secrets in a secrets manager and rotate exposed values.",
+                    )
+                )
     return findings
+
+
+def _shannon_entropy(value: str) -> float:
+    if not value:
+        return 0.0
+    length = len(value)
+    counts: dict[str, int] = {}
+    for char in value:
+        counts[char] = counts.get(char, 0) + 1
+    entropy = 0.0
+    for count in counts.values():
+        probability = count / length
+        entropy -= probability * log2(probability)
+    return entropy
+
+
+def _contains_high_entropy_secret_literal(line: str) -> bool:
+    if "http://" in line or "https://" in line:
+        return False
+    for candidate in re.findall(r"['\"]([A-Za-z0-9_\-+/=]{20,})['\"]", line):
+        has_alpha = any(char.isalpha() for char in candidate)
+        has_digit = any(char.isdigit() for char in candidate)
+        has_symbol = any(char in "_-+/=" for char in candidate)
+        if (has_alpha and has_digit and has_symbol) and _shannon_entropy(candidate) >= 3.6:
+            return True
+    return False
 
 
 def _scan_ci_config(repo_root: Path) -> list[Finding]:
@@ -425,6 +489,20 @@ def _scan_language_risks(repo_root: Path, files: list[Path]) -> list[Finding]:
                         )
 
             for finding_type, title, severity, pattern, recommendation in WEAK_CRYPTO_PATTERNS:
+                if pattern.search(line):
+                    findings.append(
+                        Finding(
+                            severity=severity,
+                            type=finding_type,
+                            title=title,
+                            file=rel,
+                            line=idx,
+                            evidence=stripped[:220],
+                            recommendation=recommendation,
+                        )
+                    )
+
+            for finding_type, title, severity, pattern, recommendation in DRIFT_PATTERNS:
                 if pattern.search(line):
                     findings.append(
                         Finding(

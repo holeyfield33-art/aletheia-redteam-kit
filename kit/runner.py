@@ -257,6 +257,100 @@ def summarize(results: list[dict]) -> dict:
     }
 
 
+def _clamp_score(value: float) -> int:
+    return int(max(0, min(100, round(value))))
+
+
+def _api_exploitability_score(results: list[dict]) -> int:
+    if not results:
+        return 0
+
+    high_risk = [
+        item
+        for item in results
+        if str(item.get("severity", "")).upper() in {"CRITICAL", "HIGH"}
+        and str(item.get("expected_decision", "")).upper() == "DENIED"
+    ]
+    if not high_risk:
+        return 0
+
+    bypasses = sum(1 for item in high_risk if str(item.get("actual_decision", "")).upper() == "PROCEED")
+    return _clamp_score((bypasses / len(high_risk)) * 100.0)
+
+
+def _repo_exploitability_score(repo_summary: dict) -> int:
+    by_severity = repo_summary.get("findings_by_severity") or {}
+    critical = int(by_severity.get("CRITICAL", 0))
+    high = int(by_severity.get("HIGH", 0))
+    medium = int(by_severity.get("MEDIUM", 0))
+    return _clamp_score((critical * 25) + (high * 10) + (medium * 3))
+
+
+def _compute_combined_normalized_summary(combined: dict, *, hard_error: bool = False) -> dict:
+    components = combined.get("components") or {}
+
+    per_component_risk: dict[str, int] = {}
+    per_component_exploitability: dict[str, int] = {}
+
+    api = components.get("api")
+    if isinstance(api, dict):
+        api_risk = _clamp_score(100.0 - float(api.get("expectation_match_rate", 0.0)))
+        api_exploitability = _api_exploitability_score(api.get("results") or [])
+        per_component_risk["api"] = api_risk
+        per_component_exploitability["api"] = api_exploitability
+
+    website = components.get("website")
+    if (
+        isinstance(website, dict)
+        and not website.get("skipped")
+        and ("trust_score" in website or "exploitability_score" in website)
+    ):
+        website_risk = _clamp_score(100.0 - float(website.get("trust_score", 0.0)))
+        website_exploitability = _clamp_score(float(website.get("exploitability_score", 0.0)))
+        per_component_risk["website"] = website_risk
+        per_component_exploitability["website"] = website_exploitability
+
+    repo = components.get("repo")
+    if isinstance(repo, dict):
+        repo_risk = _clamp_score(100.0 - float(repo.get("risk_score", 0.0)))
+        repo_exploitability = _repo_exploitability_score(repo)
+        per_component_risk["repo"] = repo_risk
+        per_component_exploitability["repo"] = repo_exploitability
+
+    if per_component_risk:
+        risk_score = _clamp_score(sum(per_component_risk.values()) / len(per_component_risk))
+    else:
+        risk_score = 0
+
+    if per_component_exploitability:
+        exploitability_score = _clamp_score(sum(per_component_exploitability.values()) / len(per_component_exploitability))
+    else:
+        exploitability_score = 0
+
+    gates = combined.get("gates") or {}
+    gates_pass = bool(gates.get("pass", False))
+    if hard_error or not gates_pass:
+        ci_verdict = "FAIL"
+        ci_verdict_reason = "One or more component gates failed."
+    elif risk_score >= 60 or exploitability_score >= 60:
+        ci_verdict = "WARNING"
+        ci_verdict_reason = "Gates passed, but normalized risk/exploitability is elevated."
+    else:
+        ci_verdict = "PASS"
+        ci_verdict_reason = "All component gates passed with acceptable normalized risk."
+
+    return {
+        "risk_score": risk_score,
+        "exploitability_score": exploitability_score,
+        "ci_verdict": ci_verdict,
+        "ci_verdict_reason": ci_verdict_reason,
+        "normalized_signals": {
+            "component_risk": per_component_risk,
+            "component_exploitability": per_component_exploitability,
+        },
+    }
+
+
 def load_custom_rules(path: str | None) -> list[CustomFindingRule]:
     """Load custom website finding rules from JSON file."""
     if not path:
@@ -603,6 +697,8 @@ def cli() -> int:
             combined["gates"]["pass"] = False
             for violation in repo_gates.get("violations", []):
                 combined["gates"]["violations"].append(f"repo:{violation}")
+
+        combined.update(_compute_combined_normalized_summary(combined, hard_error=hard_error))
 
         Path(args.output).write_text(json.dumps(combined, indent=2))
         print(

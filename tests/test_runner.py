@@ -478,6 +478,9 @@ def test_cli_combined_mode_writes_merged_summary(monkeypatch: pytest.MonkeyPatch
     data = json.loads(output.read_text())
     assert data["mode"] == "combined"
     assert data["gates"]["pass"] is True
+    assert data["risk_score"] == 0
+    assert data["exploitability_score"] == 0
+    assert data["ci_verdict"] == "PASS"
     assert "api" in data["components"]
     assert "website" in data["components"]
     assert "repo" in data["components"]

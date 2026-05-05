@@ -202,3 +202,46 @@ subprocess.run(cmd, shell=True)
         (f.get("type") == "python_subprocess_shell_true") and f.get("threat_context")
         for f in summary["findings"]
     )
+
+
+def test_repo_audit_detects_high_entropy_secret_literals(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "settings.py").write_text(
+        'SESSION_TOKEN = "a9Xk_12LmN-45pqR+stuVw8Y=zzA"\n'
+    )
+
+    summary = run_repo_audit(tmp_path)
+    finding_types = {f["type"] for f in summary["findings"]}
+
+    assert "high_entropy_secret_literal" in finding_types
+
+
+def test_repo_audit_detects_config_drift_patterns(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "service.py").write_text(
+        """
+import requests
+response = requests.get("https://example.test", verify=False)
+jwt_opts = {"alg": "none"}
+""".strip()
+    )
+
+    summary = run_repo_audit(tmp_path)
+    finding_types = {f["type"] for f in summary["findings"]}
+
+    assert "tls_verification_disabled" in finding_types
+    assert "jwt_none_algorithm" in finding_types
