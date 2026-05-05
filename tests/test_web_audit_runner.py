@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from kit.web_audit.config import WebAuditConfig
 from kit.web_audit import runner
 from kit.web_audit.config import AuthStep, CustomFindingRule
@@ -68,12 +70,20 @@ def test_run_website_audit_falls_back_when_browser_backend_fails(monkeypatch) ->
                 "network_error": 0,
                 "perf_timeout": 0,
                 "auth_failure": 0,
+                "prompt_injection": 0,
+                "signature_failure": 0,
+                "auth_bypass": 0,
             },
             "pass_rate": 100.0,
+            "trust_score": 100,
+            "exploitability_score": 0,
+            "verdict": "SAFE",
+            "attack_summary": {"total_tests": 0, "successful_attacks": 0, "blocked": 0},
             "required_routes": [],
             "required_routes_failed": [],
             "auth": {"configured": False, "attempted": False, "success": False, "steps_total": 0, "steps_completed": 0, "failed_step": None, "error": None},
             "gates": {"pass": True, "violations": []},
+            "active_tests": [],
             "findings": [],
         }
 
@@ -153,3 +163,111 @@ def test_http_fallback_reports_auth_unavailable() -> None:
     assert summary["auth"]["configured"] is True
     assert summary["auth"]["error"] == "auth_workflow_requires_browser_backend"
     assert summary["findings_by_type"]["auth_failure"] >= 1
+
+
+def test_finalize_summary_includes_active_test_scores(monkeypatch) -> None:
+    monkeypatch.setattr(
+        runner,
+        "_run_active_tests",
+        lambda config, auth_cookies: {
+            "active_tests": [
+                {"type": "prompt_injection", "test_name": "basic_override", "result": "succeeded", "severity": "HIGH"},
+                {"type": "signature_check", "test_name": "receipt_key", "result": "failed", "severity": "CRITICAL"},
+            ],
+            "findings": [
+                {
+                    "id": "WA_TEST123456",
+                    "severity": "CRITICAL",
+                    "type": "signature_failure",
+                    "title": "Trust chain verification failed",
+                    "page_url": "https://example.com/.well-known/aletheia-receipt-key.pem",
+                    "element_selector": None,
+                    "action": "trust_verification",
+                    "expected": "Receipt key endpoint returns a valid PEM",
+                    "observed": "Trust chain cannot be verified",
+                    "evidence": {"status_code": 503},
+                    "reproducible_steps": ["Navigate to https://example.com/.well-known/aletheia-receipt-key.pem"],
+                }
+            ],
+        },
+    )
+
+    summary = runner._finalize_summary(
+        config=WebAuditConfig(base_url="https://example.com"),
+        findings=[],
+        visited={"https://example.com"},
+        discovered={"https://example.com"},
+        interactions_tested=0,
+        skipped_actions=0,
+        auth={"configured": False, "attempted": False, "success": False, "steps_total": 0, "steps_completed": 0, "failed_step": None, "error": None},
+        auth_cookies=[],
+    )
+
+    assert summary["trust_score"] == 60
+    assert summary["exploitability_score"] == 25
+    assert summary["verdict"] == "WARNING"
+    assert summary["attack_summary"]["total_tests"] == 2
+    assert summary["findings_by_type"]["signature_failure"] == 1
+
+
+def test_finalize_summary_includes_regression_comparison(monkeypatch, tmp_path) -> None:
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(
+        json.dumps(
+            {
+                "trust_score": 80,
+                "exploitability_score": 25,
+                "findings_total": 3,
+                "verdict": "WARNING",
+                "attack_summary": {"successful_attacks": 1},
+                "active_tests": [
+                    {"type": "prompt_injection", "test_name": "basic_override", "result": "succeeded"},
+                    {"type": "signature_check", "test_name": "receipt_key", "result": "passed"},
+                ],
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "_run_active_tests",
+        lambda config, auth_cookies: {
+            "active_tests": [
+                {"type": "prompt_injection", "test_name": "basic_override", "result": "blocked", "severity": "HIGH"},
+                {"type": "signature_check", "test_name": "receipt_key", "result": "failed", "severity": "CRITICAL"},
+            ],
+            "findings": [
+                {
+                    "id": "WA_TEST999999",
+                    "severity": "CRITICAL",
+                    "type": "signature_failure",
+                    "title": "Trust chain verification failed",
+                    "page_url": "https://example.com/.well-known/aletheia-receipt-key.pem",
+                    "element_selector": None,
+                    "action": "trust_verification",
+                    "expected": "Receipt key endpoint returns a valid PEM",
+                    "observed": "Trust chain cannot be verified",
+                    "evidence": {"status_code": 503},
+                    "reproducible_steps": ["Navigate to https://example.com/.well-known/aletheia-receipt-key.pem"],
+                }
+            ],
+        },
+    )
+
+    summary = runner._finalize_summary(
+        config=WebAuditConfig(base_url="https://example.com", baseline_summary_path=str(baseline)),
+        findings=[],
+        visited={"https://example.com"},
+        discovered={"https://example.com"},
+        interactions_tested=0,
+        skipped_actions=0,
+        auth={"configured": False, "attempted": False, "success": False, "steps_total": 0, "steps_completed": 0, "failed_step": None, "error": None},
+        auth_cookies=[],
+    )
+
+    assert summary["regression"]["trust_score_delta"] == -20
+    assert summary["regression"]["exploitability_score_delta"] == -25
+    assert summary["regression"]["findings_total_delta"] == -2
+    assert summary["regression"]["successful_attacks_delta"] == -1
+    assert summary["regression"]["new_failed_active_tests"] == ["signature_check:receipt_key"]
+    assert summary["regression"]["resolved_failed_active_tests"] == ["prompt_injection:basic_override"]

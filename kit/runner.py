@@ -9,6 +9,8 @@ Usage:
     python -m kit.runner --mode website --target-url https://example.com --no-browser-fallback
     python -m kit.runner --mode website --target-url https://example.com --rules-file rules.json
     python -m kit.runner --mode website --target-url https://example.com --auth-workflow-file auth_flow.json
+    python -m kit.runner --mode website --target-url https://example.com --prompt-tests-file prompt_tests.json
+    python -m kit.runner --mode website --target-url https://example.com --protected-route /dashboard
 """
 from __future__ import annotations
 
@@ -19,9 +21,10 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
 from kit.client import AletheiaClient
 from kit.web_audit import WebAuditConfig, run_website_audit
-from kit.web_audit.config import AuthStep, CustomFindingRule
+from kit.web_audit.config import AuthBypassTarget, AuthStep, CustomFindingRule, PromptInjectionTest
 
 ATTACK_DIR = Path(__file__).parent.parent / "attacks"
 DEFAULT_OUTPUT = Path("summary.json")
@@ -213,6 +216,77 @@ def load_auth_workflow(path: str | None) -> list[AuthStep]:
     return steps
 
 
+def load_prompt_injection_tests(path: str | None) -> list[PromptInjectionTest]:
+    """Load prompt injection test payloads from JSON file."""
+    if not path:
+        return []
+
+    raw = json.loads(Path(path).read_text())
+    if not isinstance(raw, list):
+        raise ValueError("Prompt tests file must contain a JSON array of tests")
+
+    tests: list[PromptInjectionTest] = []
+    for idx, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Prompt test #{idx} must be a JSON object")
+        name = item.get("name")
+        payload = item.get("payload")
+        if not name or not payload:
+            raise ValueError(f"Prompt test #{idx} requires 'name' and 'payload'")
+        expected = item.get("expected", "blocked")
+        if expected not in {"blocked", "succeeded"}:
+            raise ValueError(f"Prompt test #{idx} has invalid expected '{expected}'")
+        severity = item.get("severity", "HIGH")
+        if severity not in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}:
+            raise ValueError(f"Prompt test #{idx} has invalid severity '{severity}'")
+        tests.append(
+            PromptInjectionTest(
+                name=str(name),
+                payload=str(payload),
+                expected=expected,
+                severity=severity,
+            )
+        )
+    return tests
+
+
+def load_protected_routes(values: list[str] | None) -> list[AuthBypassTarget]:
+    """Load protected route definitions from repeated CLI flags."""
+    if not values:
+        return []
+
+    routes: list[AuthBypassTarget] = []
+    for idx, value in enumerate(values, 1):
+        method = "GET"
+        path = value
+        if ":" in value:
+            prefix, remainder = value.split(":", 1)
+            if prefix.upper() in {"GET", "POST"}:
+                method = prefix.upper()
+                path = remainder
+        path = path.strip()
+        if not path.startswith("/"):
+            raise ValueError(f"Protected route #{idx} must start with '/'")
+        routes.append(AuthBypassTarget(path=path, method=method))
+    return routes
+
+
+def load_protected_profiles(values: list[str] | None) -> list[str]:
+    """Validate deterministic protected-route profile names from repeated CLI flags."""
+    if not values:
+        return []
+
+    profiles: list[str] = []
+    for idx, value in enumerate(values, 1):
+        profile = value.strip().lower()
+        if profile not in PROTECTED_ROUTE_PROFILES:
+            allowed = ", ".join(sorted(PROTECTED_ROUTE_PROFILES))
+            raise ValueError(f"Protected profile #{idx} must be one of: {allowed}")
+        if profile not in profiles:
+            profiles.append(profile)
+    return profiles
+
+
 def cli() -> int:
     parser = argparse.ArgumentParser(description="Aletheia red team kit")
     parser.add_argument("--mode", choices=["api", "website"], default="api", help="Run API attack catalog or website UI audit")
@@ -232,6 +306,17 @@ def cli() -> int:
     parser.add_argument("--rules-file", help="JSON file with custom website finding rules")
     parser.add_argument("--auth-workflow-file", help="JSON file with browser auth steps for authenticated workflows")
     parser.add_argument("--auth-seed-url", action="append", default=[], help="Post-auth URL to enqueue first; repeatable")
+    parser.add_argument("--prompt-tests-file", help="JSON file with prompt injection tests")
+    parser.add_argument("--protected-route", action="append", default=[], help="Protected route to probe, optionally METHOD:/path; repeatable")
+    parser.add_argument("--protected-profile", action="append", default=[], help="Protected route profile to probe; repeatable")
+    parser.add_argument("--baseline-summary", help="Prior website summary JSON to compare against for regression output")
+    parser.add_argument("--trust-critical-penalty", type=int, default=40, help="Trust score penalty per CRITICAL finding")
+    parser.add_argument("--trust-high-penalty", type=int, default=20, help="Trust score penalty per HIGH finding")
+    parser.add_argument("--exploit-success-weight", type=int, default=25, help="Exploitability score increase per successful attack")
+    parser.add_argument("--safe-min-trust", type=int, default=80, help="Minimum trust score for SAFE verdict")
+    parser.add_argument("--safe-max-exploitability", type=int, default=20, help="Maximum exploitability score for SAFE verdict")
+    parser.add_argument("--warning-min-trust", type=int, default=50, help="Minimum trust score for WARNING verdict")
+    parser.add_argument("--warning-max-exploitability", type=int, default=60, help="Maximum exploitability score for WARNING verdict")
     args = parser.parse_args()
 
     if args.mode == "website":
@@ -254,12 +339,24 @@ def cli() -> int:
                 custom_rules=load_custom_rules(args.rules_file),
                 auth_workflow=load_auth_workflow(args.auth_workflow_file),
                 auth_seed_urls=args.auth_seed_url,
+                prompt_injection_tests=load_prompt_injection_tests(args.prompt_tests_file),
+                protected_routes=load_protected_routes(args.protected_route),
+                protected_route_profiles=load_protected_profiles(args.protected_profile),
+                baseline_summary_path=args.baseline_summary,
+                trust_critical_penalty=args.trust_critical_penalty,
+                trust_high_penalty=args.trust_high_penalty,
+                exploit_success_weight=args.exploit_success_weight,
+                safe_min_trust=args.safe_min_trust,
+                safe_max_exploitability=args.safe_max_exploitability,
+                warning_min_trust=args.warning_min_trust,
+                warning_max_exploitability=args.warning_max_exploitability,
             )
         )
         Path(args.output).write_text(json.dumps(summary, indent=2))
         print(
             f"\nDone. {summary['findings_total']} findings, "
-            f"pass rate {summary['pass_rate']}%. Output: {args.output}",
+            f"trust {summary['trust_score']}, exploitability {summary['exploitability_score']}, "
+            f"verdict {summary['verdict']}. Output: {args.output}",
             file=sys.stderr,
         )
         gates = summary.get("gates", {"pass": False, "violations": ["missing_gates"]})

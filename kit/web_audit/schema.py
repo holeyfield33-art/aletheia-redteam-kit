@@ -14,6 +14,9 @@ FindingType = Literal[
     "perf_timeout",
     "custom_rule",
     "auth_failure",
+    "prompt_injection",
+    "signature_failure",
+    "auth_bypass",
 ]
 
 
@@ -26,7 +29,16 @@ class Finding:
     title: str
     page_url: str
     element_selector: str | None
-    action: Literal["visit", "click", "tab_switch", "custom_rule_check", "auth_step"]
+    action: Literal[
+        "visit",
+        "click",
+        "tab_switch",
+        "custom_rule_check",
+        "auth_step",
+        "attack_simulation",
+        "trust_verification",
+        "auth_probe",
+    ]
     expected: str
     observed: str
     evidence: dict[str, Any]

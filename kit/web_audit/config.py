@@ -32,6 +32,24 @@ class CustomFindingRule:
 
 
 @dataclass(slots=True)
+class PromptInjectionTest:
+    """Configured adversarial prompt injection check."""
+
+    name: str
+    payload: str
+    expected: Literal["blocked", "succeeded"] = "blocked"
+    severity: Literal["CRITICAL", "HIGH", "MEDIUM", "LOW"] = "HIGH"
+
+
+@dataclass(slots=True)
+class AuthBypassTarget:
+    """Protected route target used for unauthenticated access checks."""
+
+    path: str
+    method: Literal["GET", "POST"] = "GET"
+
+
+@dataclass(slots=True)
 class WebAuditConfig:
     """Configuration for website audit runs."""
 
@@ -49,3 +67,14 @@ class WebAuditConfig:
     custom_rules: list[CustomFindingRule] | None = None
     auth_workflow: list[AuthStep] | None = None
     auth_seed_urls: list[str] | None = None
+    prompt_injection_tests: list[PromptInjectionTest] | None = None
+    protected_routes: list[AuthBypassTarget] | None = None
+    protected_route_profiles: list[str] | None = None
+    baseline_summary_path: str | None = None
+    trust_critical_penalty: int = 40
+    trust_high_penalty: int = 20
+    exploit_success_weight: int = 25
+    safe_min_trust: int = 80
+    safe_max_exploitability: int = 20
+    warning_min_trust: int = 50
+    warning_max_exploitability: int = 60

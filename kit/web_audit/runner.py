@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from collections import Counter, deque
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 import re
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
+
+from engine.scoring import compute_scores
+from engine.tests.auth_bypass import run_auth_bypass_tests
+from engine.tests.prompt_injection import default_prompt_injection_tests, run_prompt_injection_tests
+from engine.tests.signature_check import run_signature_check
 
 from .config import AuthStep, CustomFindingRule, WebAuditConfig
 from .schema import Finding
@@ -49,6 +56,7 @@ def _run_playwright_audit(config: WebAuditConfig) -> dict[str, Any]:
         "failed_step": None,
         "error": None,
     }
+    auth_cookies: list[dict[str, Any]] = []
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=config.headless)
@@ -64,6 +72,8 @@ def _run_playwright_audit(config: WebAuditConfig) -> dict[str, Any]:
                 default_timeout_ms=int(config.timeout_sec * 1000),
             )
             auth_summary.update(auth_result)
+            if auth_result["success"]:
+                auth_cookies = context.cookies()
             if not auth_result["success"]:
                 findings.append(
                     Finding(
@@ -308,6 +318,7 @@ def _run_playwright_audit(config: WebAuditConfig) -> dict[str, Any]:
         interactions_tested=interactions_tested,
         skipped_actions=skipped_actions,
         auth=auth_summary,
+        auth_cookies=auth_cookies,
     )
     summary["audit_backend"] = "playwright"
     return summary
@@ -434,6 +445,7 @@ def _run_http_fallback(config: WebAuditConfig) -> dict[str, Any]:
         interactions_tested=0,
         skipped_actions=0,
         auth=auth_summary,
+        auth_cookies=[],
     )
 
 
@@ -635,7 +647,11 @@ def _finalize_summary(
     interactions_tested: int,
     skipped_actions: int,
     auth: dict[str, Any] | None,
+    auth_cookies: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    active_test_results = _run_active_tests(config, auth_cookies=auth_cookies)
+    findings = [*findings, *active_test_results["findings"]]
+    active_tests = active_test_results["active_tests"]
     severity_counts = Counter(f["severity"] for f in findings)
     type_counts = Counter(f["type"] for f in findings)
     checks_total = max(1, len(visited) + interactions_tested)
@@ -652,6 +668,18 @@ def _finalize_summary(
         max_critical=config.max_critical,
         max_high=config.max_high,
         min_pass_rate=config.min_pass_rate,
+    )
+    scores = compute_scores(findings=findings, active_tests=active_tests, config=config)
+    regression = _build_regression_summary(
+        baseline_summary_path=config.baseline_summary_path,
+        current_summary={
+            "findings_total": len(findings),
+            "trust_score": scores["trust_score"],
+            "exploitability_score": scores["exploitability_score"],
+            "verdict": scores["verdict"],
+            "attack_summary": scores["attack_summary"],
+            "active_tests": active_tests,
+        },
     )
 
     return {
@@ -678,6 +706,9 @@ def _finalize_summary(
             "network_error": type_counts.get("network_error", 0),
             "perf_timeout": type_counts.get("perf_timeout", 0),
             "auth_failure": type_counts.get("auth_failure", 0),
+            "prompt_injection": type_counts.get("prompt_injection", 0),
+            "signature_failure": type_counts.get("signature_failure", 0),
+            "auth_bypass": type_counts.get("auth_bypass", 0),
             **{
                 kind: count
                 for kind, count in type_counts.items()
@@ -690,16 +721,50 @@ def _finalize_summary(
                     "network_error",
                     "perf_timeout",
                     "auth_failure",
+                    "prompt_injection",
+                    "signature_failure",
+                    "auth_bypass",
                 }
             },
         },
         "pass_rate": pass_rate,
+        **scores,
         "required_routes": required_routes,
         "required_routes_failed": required_routes_failed,
         "auth": auth,
         "gates": gates,
+        "regression": regression,
+        "active_tests": active_tests,
         "findings": findings,
     }
+
+
+def _run_active_tests(config: WebAuditConfig, *, auth_cookies: list[dict[str, Any]]) -> dict[str, Any]:
+    active_tests: list[dict[str, Any]] = []
+    findings: list[dict[str, Any]] = []
+
+    prompt_results = run_prompt_injection_tests(
+        target_url=config.base_url,
+        tests=config.prompt_injection_tests or default_prompt_injection_tests(),
+    )
+    active_tests.extend(prompt_results["active_tests"])
+    findings.extend(prompt_results["findings"])
+
+    signature_results = run_signature_check(base_url=config.base_url, timeout_sec=config.timeout_sec)
+    active_tests.extend(signature_results["active_tests"])
+    findings.extend(signature_results["findings"])
+
+    auth_results = run_auth_bypass_tests(
+        base_url=config.base_url,
+        timeout_sec=config.timeout_sec,
+        protected_routes=config.protected_routes,
+        protected_route_profiles=config.protected_route_profiles,
+        auth_cookies=auth_cookies,
+    )
+    active_tests.extend(auth_results["active_tests"])
+    findings.extend(auth_results["findings"])
+
+    return {"active_tests": active_tests, "findings": findings}
 
 
 def _is_internal_url(base_url: str, candidate: str) -> bool:
@@ -712,6 +777,59 @@ def _is_internal_url(base_url: str, candidate: str) -> bool:
 
 def _required_route_hit(required: str, visited: set[str]) -> bool:
     return any(required in url for url in visited)
+
+
+def _build_regression_summary(
+    *,
+    baseline_summary_path: str | None,
+    current_summary: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not baseline_summary_path:
+        return None
+
+    try:
+        baseline = json.loads(Path(baseline_summary_path).read_text())
+    except Exception as exc:
+        return {
+            "baseline_summary_path": baseline_summary_path,
+            "error": f"unable_to_load_baseline: {exc}",
+        }
+
+    baseline_failed = _failed_active_test_keys(baseline.get("active_tests", []))
+    current_failed = _failed_active_test_keys(current_summary.get("active_tests", []))
+    baseline_attack_summary = baseline.get("attack_summary", {})
+    current_attack_summary = current_summary.get("attack_summary", {})
+
+    return {
+        "baseline_summary_path": baseline_summary_path,
+        "trust_score_delta": current_summary.get("trust_score", 0) - int(baseline.get("trust_score", 0) or 0),
+        "exploitability_score_delta": current_summary.get("exploitability_score", 0)
+        - int(baseline.get("exploitability_score", 0) or 0),
+        "findings_total_delta": current_summary.get("findings_total", 0) - int(baseline.get("findings_total", 0) or 0),
+        "successful_attacks_delta": int(current_attack_summary.get("successful_attacks", 0) or 0)
+        - int(baseline_attack_summary.get("successful_attacks", 0) or 0),
+        "verdict_changed": current_summary.get("verdict") != baseline.get("verdict"),
+        "previous_verdict": baseline.get("verdict"),
+        "current_verdict": current_summary.get("verdict"),
+        "new_failed_active_tests": sorted(current_failed - baseline_failed),
+        "resolved_failed_active_tests": sorted(baseline_failed - current_failed),
+        "improved": (
+            current_summary.get("trust_score", 0) >= int(baseline.get("trust_score", 0) or 0)
+            and current_summary.get("exploitability_score", 0) <= int(baseline.get("exploitability_score", 0) or 0)
+            and int(current_attack_summary.get("successful_attacks", 0) or 0)
+            <= int(baseline_attack_summary.get("successful_attacks", 0) or 0)
+        ),
+    }
+
+
+def _failed_active_test_keys(active_tests: list[dict[str, Any]]) -> set[str]:
+    failed_results = {"failed", "succeeded", "bypassed", "error"}
+    keys: set[str] = set()
+    for test in active_tests:
+        if test.get("result") not in failed_results:
+            continue
+        keys.add(f"{test.get('type', 'unknown')}:{test.get('test_name', 'unnamed')}")
+    return keys
 
 
 def _is_safe_button_action(label: str) -> bool:
