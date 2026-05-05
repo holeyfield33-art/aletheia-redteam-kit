@@ -189,3 +189,91 @@ def test_raises_clear_error_on_non_json_response(monkeypatch: pytest.MonkeyPatch
     with AletheiaClient(api_key="k") as client:
         with pytest.raises(RuntimeError, match="Expected JSON audit response"):
             client.audit("x", "a", "o")
+
+
+def test_audit_conversation_runs_all_turns(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, str]] = []
+
+    class FakeHttpxClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def post(self, path: str, json: dict[str, str]):
+            calls.append(json)
+            idx = len(calls)
+            return type(
+                "Resp",
+                (),
+                {
+                    "status_code": 200,
+                    "headers": {"content-type": "application/json"},
+                    "content": (
+                        '{"request_id":"req-%d","decision":"PROCEED","reason":"ok","receipt":{}}' % idx
+                    ).encode("utf-8"),
+                    "json": lambda self: {
+                        "request_id": f"req-{idx}",
+                        "decision": "PROCEED",
+                        "reason": "ok",
+                        "receipt": {},
+                    },
+                },
+            )()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("kit.client.httpx.Client", FakeHttpxClient)
+
+    with AletheiaClient(api_key="k") as client:
+        results = client.audit_conversation(
+            ["Turn one request", "Turn two request"],
+            action="chat",
+            origin="test-suite",
+            include_context=True,
+        )
+
+    assert len(results) == 2
+    assert calls[0]["payload"] == "Turn one request"
+    assert "Conversation context from earlier turns" in calls[1]["payload"]
+    assert "Turn 1: decision=PROCEED" in calls[1]["payload"]
+
+
+def test_audit_conversation_without_context_uses_raw_turns(monkeypatch: pytest.MonkeyPatch) -> None:
+    payloads: list[str] = []
+
+    class FakeHttpxClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def post(self, path: str, json: dict[str, str]):
+            payloads.append(json["payload"])
+            return type(
+                "Resp",
+                (),
+                {
+                    "status_code": 200,
+                    "headers": {"content-type": "application/json"},
+                    "content": b'{"request_id":"req-1","decision":"DENIED","reason":"policy","receipt":{}}',
+                    "json": lambda self: {
+                        "request_id": "req-1",
+                        "decision": "DENIED",
+                        "reason": "policy",
+                        "receipt": {},
+                    },
+                },
+            )()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("kit.client.httpx.Client", FakeHttpxClient)
+
+    with AletheiaClient(api_key="k") as client:
+        client.audit_conversation(
+            ["a", "b"],
+            action="chat",
+            origin="test-suite",
+            include_context=False,
+        )
+
+    assert payloads == ["a", "b"]

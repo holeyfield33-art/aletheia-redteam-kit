@@ -20,13 +20,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from engine.agentic import AgenticConfig, run_agentic_loop
 from engine.gap_analysis import build_gap_report
 from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
+from kit.api_analysis import build_api_regression_summary, extract_multi_turn_steps
+from kit.catalog import load_attacks as load_attacks_from_catalog
 from kit.client import AletheiaClient
 from kit.exit_codes import FAIL_ERROR, FAIL_THRESHOLD, PASS
 from kit.web_audit import WebAuditConfig, run_website_audit
@@ -77,18 +81,15 @@ def infer_custom_technique(attack: dict) -> str:
 
 
 def load_attacks(category: str | None = None) -> list[dict]:
-    """Load attacks from JSON catalog. category=None loads all."""
-    files = [ATTACK_DIR / f"{category}.json"] if category else sorted(ATTACK_DIR.glob("*.json"))
-    attacks: list[dict] = []
-    for path in files:
-        if not path.exists():
-            raise FileNotFoundError(f"Attack catalog not found: {path}")
-        attacks.extend(json.loads(path.read_text()))
-    return attacks
+    """Load attacks from catalog provider. category=None loads all."""
+    return load_attacks_from_catalog(category)
 
 
 def run_attack(client: AletheiaClient, attack: dict) -> dict:
     """Execute one attack, return a result record."""
+    if str(attack.get("category", "")).strip().lower() == "multi_turn":
+        return run_multi_turn_attack(client, attack)
+
     started = time.time()
     try:
         technique = attack.get("technique") or infer_custom_technique(attack)
@@ -128,6 +129,67 @@ def run_attack(client: AletheiaClient, attack: dict) -> dict:
             "latency_ms": None,
             "receipt": None,
             "reason": None,
+            "error": str(exc),
+        }
+
+
+def run_multi_turn_attack(client: AletheiaClient, attack: dict) -> dict:
+    """Execute a multi-turn attack using conversation-aware client execution."""
+    started = time.time()
+    technique = attack.get("technique") or infer_custom_technique(attack)
+    turns = extract_multi_turn_steps(attack)
+
+    try:
+        turn_results = client.audit_conversation(
+            turns,
+            action=attack.get("action", "chat"),
+            origin=attack.get("origin", "redteam-kit"),
+            include_context=True,
+        )
+        latency_ms = (time.time() - started) * 1000
+        last = turn_results[-1]
+        trace = [
+            {
+                "turn": idx,
+                "decision": result.decision,
+                "request_id": result.request_id,
+                "reason": result.reason,
+            }
+            for idx, result in enumerate(turn_results, 1)
+        ]
+        return {
+            "id": attack["id"],
+            "name": attack["name"],
+            "category": attack["category"],
+            "technique": technique,
+            "severity": attack.get("severity", "MEDIUM"),
+            "expected_decision": attack["expected_decision"],
+            "actual_decision": last.decision,
+            "match": last.decision == attack["expected_decision"],
+            "request_id": last.request_id,
+            "latency_ms": round(latency_ms, 1),
+            "receipt": last.receipt,
+            "reason": last.reason,
+            "turn_count": len(turns),
+            "turn_trace": trace,
+            "error": None,
+        }
+    except Exception as exc:
+        return {
+            "id": attack["id"],
+            "name": attack["name"],
+            "category": attack["category"],
+            "technique": technique,
+            "severity": attack.get("severity", "MEDIUM"),
+            "expected_decision": attack["expected_decision"],
+            "actual_decision": "ERROR",
+            "match": False,
+            "request_id": None,
+            "latency_ms": None,
+            "receipt": None,
+            "reason": None,
+            "turn_count": len(turns),
+            "turn_trace": [],
             "error": str(exc),
         }
 
@@ -339,15 +401,29 @@ def load_protected_profiles(values: list[str] | None) -> list[str]:
 
 def cli() -> int:
     parser = argparse.ArgumentParser(description="Aletheia red team kit")
-    parser.add_argument("--mode", choices=["api", "website"], default="api", help="Run API attack catalog or website UI audit")
+    parser.add_argument("--mode", choices=["api", "website", "agentic"], default="api", help="Run API catalog, autonomous agentic loop, or website UI audit")
     parser.add_argument("--category", help="Run only one category (filename without .json)")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output path for summary JSON")
     parser.add_argument("--base-url", help="Override ALETHEIA_BASE_URL")
+    default_min_expectation = float(os.environ.get("ALETHEIA_MIN_EXPECTATION_MATCH_RATE", "0.0"))
+    raw_max_drop = os.environ.get("ALETHEIA_MAX_HIGH_RISK_BLOCK_DROP")
+    default_max_drop = float(raw_max_drop) if raw_max_drop is not None else None
     parser.add_argument(
         "--min-expectation-match-rate",
         type=float,
-        default=0.0,
+        default=default_min_expectation,
         help="Fail API mode if expectation match rate falls below this percent",
+    )
+    parser.add_argument(
+        "--api-baseline-summary",
+        default=os.environ.get("ALETHEIA_API_BASELINE_SUMMARY"),
+        help="Prior API summary JSON used to compute regression deltas",
+    )
+    parser.add_argument(
+        "--max-high-risk-block-drop",
+        type=float,
+        default=default_max_drop,
+        help="Fail API mode if high-risk category block rate drops more than this percent vs baseline",
     )
     parser.add_argument("--target-url", help="Website URL to audit in --mode website")
     parser.add_argument("--max-pages", type=int, default=100, help="Maximum pages to visit in website mode")
@@ -373,6 +449,17 @@ def cli() -> int:
     parser.add_argument("--safe-max-exploitability", type=int, default=20, help="Maximum exploitability score for SAFE verdict")
     parser.add_argument("--warning-min-trust", type=int, default=50, help="Minimum trust score for WARNING verdict")
     parser.add_argument("--warning-max-exploitability", type=int, default=60, help="Maximum exploitability score for WARNING verdict")
+    parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
+    parser.add_argument("--agentic-iterations", type=int, default=4, help="Maximum iterations for agentic mode")
+    parser.add_argument("--agentic-seed-size", type=int, default=10, help="Number of seed attacks to initialize agentic mode")
+    parser.add_argument("--agentic-variants", type=int, default=6, help="Maximum candidates evaluated per agentic iteration")
+    parser.add_argument(
+        "--mutation-strategy",
+        action="append",
+        default=[],
+        help="Mutation strategy for agentic mode; repeatable (objective_suffix, safe_reframe, step_escalation, base64_wrap, roleplay)",
+    )
+    parser.add_argument("--agentic-no-early-stop", action="store_true", help="Do not stop agentic mode after first bypass")
     args = parser.parse_args()
 
     if args.mode == "website":
@@ -420,6 +507,42 @@ def cli() -> int:
             print(f"Gate failures: {', '.join(gates.get('violations', []))}", file=sys.stderr)
         return PASS if gates.get("pass", False) else FAIL_THRESHOLD
 
+    if args.mode == "agentic":
+        attacks = load_attacks(args.category)
+        print(f"Loaded {len(attacks)} attacks for agentic optimization", file=sys.stderr)
+
+        with AletheiaClient(base_url=args.base_url) as client:
+            agentic = run_agentic_loop(
+                client=client,
+                attacks=attacks,
+                run_attack_fn=run_attack,
+                config=AgenticConfig(
+                    objective=args.objective,
+                    iterations=args.agentic_iterations,
+                    seed_size=args.agentic_seed_size,
+                    variants_per_round=args.agentic_variants,
+                    stop_on_first_bypass=not args.agentic_no_early_stop,
+                    mutation_strategies=args.mutation_strategy,
+                ),
+            )
+            output = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "engine_url": client.base_url,
+                "mode": "agentic",
+                "agentic": agentic,
+            }
+
+        Path(args.output).write_text(json.dumps(output, indent=2))
+        best_result = agentic.get("best_result") or {}
+        print(
+            f"\nDone. Agentic iterations: {agentic['iterations_executed']}/{agentic['iterations_requested']}, "
+            f"best decision: {best_result.get('actual_decision', 'N/A')}. Output: {args.output}",
+            file=sys.stderr,
+        )
+        if agentic.get("execution_errors", 0) > 0:
+            return FAIL_ERROR
+        return PASS
+
     attacks = load_attacks(args.category)
     print(f"Loaded {len(attacks)} attacks", file=sys.stderr)
 
@@ -436,10 +559,20 @@ def cli() -> int:
             results.append(result)
 
     summary = summarize(results)
+    api_regression: dict | None = None
+    if args.api_baseline_summary:
+        baseline_path = Path(args.api_baseline_summary)
+        if baseline_path.exists():
+            baseline_raw = json.loads(baseline_path.read_text())
+            api_regression = build_api_regression_summary(summary, baseline_raw)
+        else:
+            print(f"API baseline summary not found: {baseline_path}", file=sys.stderr)
+
     output = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "engine_url": client.base_url,
         **summary,
+        "regression": api_regression,
         "gap_report": build_gap_report(results),
         "results": results,
     }
@@ -459,6 +592,15 @@ def cli() -> int:
             file=sys.stderr,
         )
         return FAIL_THRESHOLD
+    if args.max_high_risk_block_drop is not None and api_regression is not None:
+        drop = float(api_regression.get("high_risk_block_rate_drop", 0.0))
+        if drop > args.max_high_risk_block_drop:
+            print(
+                "API regression gate failure: high-risk block-rate drop "
+                f"{drop} > {args.max_high_risk_block_drop}",
+                file=sys.stderr,
+            )
+            return FAIL_THRESHOLD
     return PASS
 
 

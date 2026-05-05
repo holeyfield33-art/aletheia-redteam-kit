@@ -335,6 +335,16 @@
     </div>
 
     <div class="bars">
+      <h2>API Regression (High-Risk)</h2>
+      <div id="regressionApi"></div>
+    </div>
+
+    <div class="bars">
+      <h2>Mutation Strategy Analytics</h2>
+      <div id="mutationAnalytics"></div>
+    </div>
+
+    <div class="bars">
       <h2>Technique Gap Analysis</h2>
       <div id="gapBars"></div>
     </div>
@@ -413,6 +423,8 @@
     const tableTitleEl = document.getElementById("tableTitle");
     const tableHeadRowEl = document.getElementById("tableHeadRow");
     const trendEl = document.getElementById("trend");
+    const regressionApiEl = document.getElementById("regressionApi");
+    const mutationAnalyticsEl = document.getElementById("mutationAnalytics");
     const gapBarsEl = document.getElementById("gapBars");
 
     function escapeHtml(value) {
@@ -728,6 +740,71 @@
       }).join("");
     }
 
+    function renderApiRegression(summary) {
+      if (!isApiSummary(summary)) {
+        regressionApiEl.innerHTML = '<div class="empty-note">Regression panel is available for API summaries.</div>';
+        return;
+      }
+
+      const regression = summary.regression;
+      if (!regression || typeof regression !== "object") {
+        regressionApiEl.innerHTML = '<div class="empty-note">No API regression block found. Run with --api-baseline-summary to populate.</div>';
+        return;
+      }
+
+      const rows = [
+        ["Baseline high-risk BLOCK rate", String(regression.baseline_high_risk_block_rate ?? "n/a") + "%"],
+        ["Current high-risk BLOCK rate", String(regression.current_high_risk_block_rate ?? "n/a") + "%"],
+        ["High-risk BLOCK-rate drop", String(regression.high_risk_block_rate_drop ?? "n/a") + "%"],
+        ["Regressed", regression.regressed ? "yes" : "no"]
+      ];
+
+      regressionApiEl.innerHTML = rows.map(function (row) {
+        return (
+          '<div class="bar-row">' +
+          '<div>' + escapeHtml(row[0]) + '</div>' +
+          '<div>' + escapeHtml(row[1]) + '</div>' +
+          '<div></div>' +
+          '</div>'
+        );
+      }).join("");
+    }
+
+    function renderMutationAnalytics(summary) {
+      if (!isApiSummary(summary)) {
+        mutationAnalyticsEl.innerHTML = '<div class="empty-note">Mutation analytics are available for API agentic summaries.</div>';
+        return;
+      }
+
+      const analytics = (summary.agentic && summary.agentic.mutation_analytics)
+        || summary.mutation_analytics
+        || null;
+      if (!analytics || typeof analytics !== "object") {
+        mutationAnalyticsEl.innerHTML = '<div class="empty-note">No mutation analytics present in this summary.</div>';
+        return;
+      }
+
+      const entries = Object.entries(analytics).sort(function (a, b) {
+        return Number((b[1] || {}).bypass_rate || 0) - Number((a[1] || {}).bypass_rate || 0);
+      });
+
+      mutationAnalyticsEl.innerHTML = entries.map(function (entry) {
+        const name = entry[0];
+        const stats = entry[1] || {};
+        const attempts = Number(stats.attempts || 0);
+        const bypasses = Number(stats.bypasses || 0);
+        const rate = Number(stats.bypass_rate || 0);
+        return (
+          '<div class="bar-row">' +
+          '<div>' + escapeHtml(name) + '</div>' +
+          '<div class="bar-track"><div class="bar-fill" style="width:' +
+          escapeHtml(Math.max(0, Math.min(100, rate))) + '%;background:' + escapeHtml(barColor(100 - rate)) + '"></div></div>' +
+          '<div>' + escapeHtml(bypasses) + '/' + escapeHtml(attempts) + ' (' + escapeHtml(rate.toFixed(1)) + '%)</div>' +
+          '</div>'
+        );
+      }).join("");
+    }
+
     function selectRow(index) {
       const rows = isWebsiteSummary(state.summary)
         ? ((state.summary && state.summary.findings) || [])
@@ -886,6 +963,8 @@
       renderStats(summary);
       renderBars(summary);
       renderTrend(state.summaries);
+      renderApiRegression(summary);
+      renderMutationAnalytics(summary);
       renderGapReport(summary);
       renderRows(summary);
       if (isWebsiteSummary(summary)) {

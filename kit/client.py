@@ -98,6 +98,36 @@ class AletheiaClient:
             raw=body,
         )
 
+    def audit_conversation(
+        self,
+        turns: list[str],
+        *,
+        action: str,
+        origin: str,
+        include_context: bool = True,
+    ) -> list[AuditResult]:
+        """Audit a multi-turn conversation by carrying forward prior turn outcomes."""
+        results: list[AuditResult] = []
+        context_lines: list[str] = []
+
+        for index, turn in enumerate(turns, 1):
+            payload = turn
+            if include_context and context_lines:
+                context_blob = "\n".join(context_lines)
+                payload = (
+                    "Conversation context from earlier turns:\n"
+                    f"{context_blob}\n\n"
+                    f"Current user turn ({index}/{len(turns)}):\n{turn}"
+                )
+
+            result = self.audit(payload=payload, action=action, origin=origin)
+            results.append(result)
+            context_lines.append(
+                f"Turn {index}: decision={result.decision}; reason={result.reason or 'none'}"
+            )
+
+        return results
+
     def close(self) -> None:
         self._client.close()
 
