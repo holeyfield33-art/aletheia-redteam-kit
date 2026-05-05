@@ -289,6 +289,80 @@
       font-size: 0.85rem;
     }
 
+    .command-controls {
+      display: grid;
+      gap: 0.65rem;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      align-items: end;
+    }
+
+    .command-controls label {
+      display: grid;
+      gap: 0.32rem;
+      color: var(--silver);
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .command-controls select,
+    .command-controls input[type="text"] {
+      border: 1px solid #4f3b3e;
+      border-radius: 10px;
+      background: #150f10;
+      color: #efe6e8;
+      padding: 0.45rem 0.55rem;
+      font: inherit;
+      min-height: 2.1rem;
+    }
+
+    .toggle-row {
+      display: flex !important;
+      align-items: center;
+      gap: 0.5rem;
+      text-transform: none !important;
+      letter-spacing: 0 !important;
+      font-size: 0.88rem !important;
+      color: #f2e8ea !important;
+      margin-bottom: 0.1rem;
+    }
+
+    .mission-item {
+      border: 1px solid #4a373b;
+      border-radius: 12px;
+      padding: 0.65rem;
+      background: #181112;
+      display: grid;
+      gap: 0.35rem;
+      margin-bottom: 0.55rem;
+    }
+
+    .mission-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .mission-tag {
+      border-radius: 999px;
+      padding: 0.16rem 0.52rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border: 1px solid #6c4e53;
+      color: #ffe3e8;
+      background: #3f262b;
+    }
+
+    .quick-actions {
+      margin-top: 0.7rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
     @media (max-width: 780px) {
       .controls {
         grid-template-columns: 1fr;
@@ -322,6 +396,42 @@
       </div>
     </div>
 
+    <div class="bars">
+      <h2>Command Filters</h2>
+      <div class="command-controls">
+        <label>
+          Category
+          <select id="categoryFilter">
+            <option value="all">all</option>
+          </select>
+        </label>
+        <label>
+          Decision
+          <select id="decisionFilter">
+            <option value="all">all</option>
+            <option value="DENIED">DENIED</option>
+            <option value="PROCEED">PROCEED</option>
+            <option value="UNKNOWN">UNKNOWN</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+        </label>
+        <label>
+          Search
+          <input id="searchBox" type="text" placeholder="id, name, payload term">
+        </label>
+        <label class="toggle-row">
+          <input id="mismatchOnly" type="checkbox">
+          <span>Mismatches only</span>
+        </label>
+        <button id="resetFiltersBtn" type="button">Reset Filters</button>
+      </div>
+      <div class="quick-actions">
+        <button id="focusWeakBtn" type="button">Focus Weakest Category</button>
+        <button id="showAnomalyBtn" type="button">Show Empty-200 Anomalies</button>
+        <button id="exportFilteredBtn" type="button">Export Filtered JSON</button>
+      </div>
+    </div>
+
     <div class="stats" id="stats"></div>
 
     <div class="bars">
@@ -342,6 +452,11 @@
     <div class="bars">
       <h2>Mutation Strategy Analytics</h2>
       <div id="mutationAnalytics"></div>
+    </div>
+
+    <div class="bars">
+      <h2>Mission Priority Board</h2>
+      <div id="missionBoard"></div>
     </div>
 
     <div class="bars">
@@ -403,7 +518,13 @@
       selected: null,
       summaries: [],
       verifyStats: { checked: 0, valid: 0 },
-      rowVerification: new Map()
+      rowVerification: new Map(),
+      filters: {
+        category: "all",
+        decision: "all",
+        mismatchOnly: false,
+        search: "",
+      },
     };
 
     const metaEl = document.getElementById("meta");
@@ -426,6 +547,15 @@
     const regressionApiEl = document.getElementById("regressionApi");
     const mutationAnalyticsEl = document.getElementById("mutationAnalytics");
     const gapBarsEl = document.getElementById("gapBars");
+    const missionBoardEl = document.getElementById("missionBoard");
+    const categoryFilterEl = document.getElementById("categoryFilter");
+    const decisionFilterEl = document.getElementById("decisionFilter");
+    const searchBoxEl = document.getElementById("searchBox");
+    const mismatchOnlyEl = document.getElementById("mismatchOnly");
+    const resetFiltersBtnEl = document.getElementById("resetFiltersBtn");
+    const focusWeakBtnEl = document.getElementById("focusWeakBtn");
+    const showAnomalyBtnEl = document.getElementById("showAnomalyBtn");
+    const exportFilteredBtnEl = document.getElementById("exportFilteredBtn");
 
     function escapeHtml(value) {
       return String(value)
@@ -638,7 +768,11 @@
       tableTitleEl.textContent = "Receipt Table";
       setTableHeader(["Timestamp", "ID", "Category", "Name", "Expected", "Actual", "Match", "Latency ms", "Signature"]);
       const results = Array.isArray(summary.results) ? summary.results : [];
-      rowsEl.innerHTML = results.map(function (row, idx) {
+      const filtered = getFilteredRows(results);
+
+      rowsEl.innerHTML = filtered.map(function (entry) {
+        const row = entry.row;
+        const idx = entry.idx;
         const ts = toIsoOrDash((row.receipt || {}).issued_at || summary.generated_at);
         const match = row.match ? "\u2713" : "\u2717";
         const sig = truncateSignature((row.receipt || {}).signature);
@@ -658,6 +792,13 @@
         );
       }).join("");
 
+      const mismatchCount = filtered.filter(function (entry) { return !entry.row.match; }).length;
+      setStatus(
+        "Showing " + filtered.length + " of " + results.length +
+        " rows | mismatches in view: " + mismatchCount +
+        " | empty-200 anomalies: " + Number(summary.empty_200_anomalies || 0)
+      );
+
       const allRows = rowsEl.querySelectorAll("tr");
       allRows.forEach(function (tr) {
         tr.addEventListener("click", function () {
@@ -665,6 +806,128 @@
           selectRow(index);
         });
       });
+    }
+
+    function getFilteredRows(results) {
+      return results
+        .map(function (row, idx) { return { row: row, idx: idx }; })
+        .filter(function (entry) {
+          const row = entry.row;
+          if (state.filters.category !== "all" && String(row.category || "") !== state.filters.category) {
+            return false;
+          }
+          if (state.filters.decision !== "all" && String(row.actual_decision || "") !== state.filters.decision) {
+            return false;
+          }
+          if (state.filters.mismatchOnly && !!row.match) {
+            return false;
+          }
+          if (state.filters.search) {
+            const hay = [row.id, row.name, row.category, row.reason, row.error]
+              .map(function (v) { return String(v || "").toLowerCase(); })
+              .join(" ");
+            if (!hay.includes(state.filters.search)) {
+              return false;
+            }
+          }
+          return true;
+        });
+    }
+
+    function findWeakestCategory(summary) {
+      const categories = Object.entries(summary.categories || {});
+      if (!categories.length) {
+        return null;
+      }
+      const ranked = categories
+        .map(function (entry) {
+          const name = entry[0];
+          const row = entry[1] || {};
+          const total = Number(row.total || 0);
+          const matches = Number(row.matches || 0);
+          if (!total) return null;
+          return { name: name, rate: 100 * matches / total };
+        })
+        .filter(Boolean)
+        .sort(function (a, b) { return a.rate - b.rate; });
+      return ranked.length ? ranked[0].name : null;
+    }
+
+    function exportFilteredRows() {
+      if (!isApiSummary(state.summary)) {
+        setStatus("Export is available for API summaries only.");
+        return;
+      }
+      const results = Array.isArray(state.summary.results) ? state.summary.results : [];
+      const filtered = getFilteredRows(results).map(function (entry) { return entry.row; });
+      const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "filtered_results.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setStatus("Exported " + filtered.length + " filtered rows to filtered_results.json.");
+    }
+
+    function populateCategoryFilter(summary) {
+      if (!isApiSummary(summary)) {
+        categoryFilterEl.innerHTML = '<option value="all">all</option>';
+        return;
+      }
+      const categories = Object.keys(summary.categories || {}).sort();
+      categoryFilterEl.innerHTML = ['<option value="all">all</option>']
+        .concat(categories.map(function (name) {
+          return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
+        }))
+        .join("");
+      categoryFilterEl.value = state.filters.category;
+    }
+
+    function renderMissionBoard(summary) {
+      if (!isApiSummary(summary)) {
+        missionBoardEl.innerHTML = '<div class="empty-note">Mission board is available for API summaries.</div>';
+        return;
+      }
+
+      const categories = summary.categories || {};
+      const priorities = Object.entries(categories)
+        .map(function (entry) {
+          const name = entry[0];
+          const row = entry[1] || {};
+          const total = Number(row.total || 0);
+          const matches = Number(row.matches || 0);
+          const blocked = Number(row.blocked || 0);
+          const unknown = Number(row.unknown || 0);
+          const matchRate = total ? (100 * matches / total) : 0;
+          const blockRate = total ? (100 * blocked / total) : 0;
+          const score = (100 - matchRate) + (unknown * 6);
+          return { name: name, total: total, matchRate: matchRate, blockRate: blockRate, unknown: unknown, score: score };
+        })
+        .filter(function (row) { return row.total > 0; })
+        .sort(function (a, b) { return b.score - a.score; })
+        .slice(0, 5);
+
+      if (!priorities.length) {
+        missionBoardEl.innerHTML = '<div class="empty-note">No category telemetry found in this summary.</div>';
+        return;
+      }
+
+      missionBoardEl.innerHTML = priorities.map(function (row, idx) {
+        const priority = idx === 0 ? "critical" : (idx < 3 ? "high" : "watch");
+        return (
+          '<div class="mission-item">' +
+          '<div class="mission-top">' +
+          '<strong>' + escapeHtml(row.name) + '</strong>' +
+          '<span class="mission-tag">' + escapeHtml(priority) + '</span>' +
+          '</div>' +
+          '<div class="muted">Match rate: ' + escapeHtml(row.matchRate.toFixed(1)) + '% | Block rate: ' + escapeHtml(row.blockRate.toFixed(1)) + '% | Unknown: ' + escapeHtml(row.unknown) + '</div>' +
+          '<div class="muted">Operator action: increase targeted test pressure and analyze top mismatch prompts in this category.</div>' +
+          '</div>'
+        );
+      }).join('');
     }
 
     function renderTrend(summaries) {
@@ -956,9 +1219,20 @@
         : (isApiSummary(summary) ? [summary] : []);
       state.verifyStats = { checked: 0, valid: 0 };
       state.rowVerification = new Map();
+      state.filters = {
+        category: "all",
+        decision: "all",
+        mismatchOnly: false,
+        search: "",
+      };
+      categoryFilterEl.value = "all";
+      decisionFilterEl.value = "all";
+      mismatchOnlyEl.checked = false;
+      searchBoxEl.value = "";
       copyReceiptBtnEl.disabled = true;
       verifyBtnEl.disabled = true;
       receiptViewEl.textContent = "No selection.";
+      populateCategoryFilter(summary);
       renderMeta(summary);
       renderStats(summary);
       renderBars(summary);
@@ -966,11 +1240,10 @@
       renderApiRegression(summary);
       renderMutationAnalytics(summary);
       renderGapReport(summary);
+      renderMissionBoard(summary);
       renderRows(summary);
       if (isWebsiteSummary(summary)) {
         setStatus("Loaded " + ((summary.findings || []).length || 0) + " findings.");
-      } else {
-        setStatus("Loaded " + ((summary.results || []).length || 0) + " rows.");
       }
       setVerifyStatus("");
     }
@@ -1108,6 +1381,58 @@
     copyReceiptBtnEl.addEventListener("click", copySelectedReceipt);
     verifyBtnEl.addEventListener("click", verifySelected);
     verifyAllBtnEl.addEventListener("click", verifyAll);
+    focusWeakBtnEl.addEventListener("click", function () {
+      if (!isApiSummary(state.summary)) {
+        setStatus("Weak-category focus is available for API summaries only.");
+        return;
+      }
+      const weakest = findWeakestCategory(state.summary);
+      if (!weakest) {
+        setStatus("No category data available for weak-category focus.");
+        return;
+      }
+      state.filters.category = weakest;
+      state.filters.mismatchOnly = true;
+      categoryFilterEl.value = weakest;
+      mismatchOnlyEl.checked = true;
+      if (state.summary) renderRows(state.summary);
+    });
+    showAnomalyBtnEl.addEventListener("click", function () {
+      if (!isApiSummary(state.summary)) {
+        setStatus("Anomaly focus is available for API summaries only.");
+        return;
+      }
+      state.filters.search = "empty json response body from server (status 200)";
+      state.filters.decision = "UNKNOWN";
+      searchBoxEl.value = state.filters.search;
+      decisionFilterEl.value = "UNKNOWN";
+      if (state.summary) renderRows(state.summary);
+    });
+    exportFilteredBtnEl.addEventListener("click", exportFilteredRows);
+    categoryFilterEl.addEventListener("change", function () {
+      state.filters.category = categoryFilterEl.value;
+      if (state.summary) renderRows(state.summary);
+    });
+    decisionFilterEl.addEventListener("change", function () {
+      state.filters.decision = decisionFilterEl.value;
+      if (state.summary) renderRows(state.summary);
+    });
+    mismatchOnlyEl.addEventListener("change", function () {
+      state.filters.mismatchOnly = mismatchOnlyEl.checked;
+      if (state.summary) renderRows(state.summary);
+    });
+    searchBoxEl.addEventListener("input", function () {
+      state.filters.search = String(searchBoxEl.value || "").trim().toLowerCase();
+      if (state.summary) renderRows(state.summary);
+    });
+    resetFiltersBtnEl.addEventListener("click", function () {
+      state.filters = { category: "all", decision: "all", mismatchOnly: false, search: "" };
+      categoryFilterEl.value = "all";
+      decisionFilterEl.value = "all";
+      mismatchOnlyEl.checked = false;
+      searchBoxEl.value = "";
+      if (state.summary) renderRows(state.summary);
+    });
 
     loadDefault();
   </script>

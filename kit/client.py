@@ -76,13 +76,21 @@ class AletheiaClient:
             )
 
         if not resp.content.strip():
-            decision = "DENIED" if resp.status_code == 403 else "PROCEED"
+            # Empty 200 responses are treated as UNKNOWN to avoid false-positive "PROCEED" decisions.
+            decision = "DENIED" if resp.status_code == 403 else "UNKNOWN"
             return AuditResult(
                 request_id="",
                 decision=decision,
-                reason=f"Empty JSON response body from server (status {resp.status_code})",
+                reason=(
+                    f"Empty JSON response body from server (status {resp.status_code}); "
+                    f"treated as {decision}"
+                ),
                 receipt={},
-                raw={"status_code": resp.status_code, "empty_body": True},
+                raw={
+                    "status_code": resp.status_code,
+                    "empty_body": True,
+                    "empty_body_anomaly": resp.status_code == 200,
+                },
             )
 
         body = resp.json()

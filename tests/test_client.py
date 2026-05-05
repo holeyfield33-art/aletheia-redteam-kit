@@ -92,7 +92,7 @@ def test_parses_200_and_403_as_valid(
 
 @pytest.mark.parametrize(
     ("status_code", "expected_decision"),
-    [(200, "PROCEED"), (403, "DENIED")],
+    [(200, "UNKNOWN"), (403, "DENIED")],
 )
 def test_falls_back_to_status_when_json_body_is_empty(
     monkeypatch: pytest.MonkeyPatch, status_code: int, expected_decision: str
@@ -127,8 +127,15 @@ def test_falls_back_to_status_when_json_body_is_empty(
     assert result.request_id == ""
     assert result.decision == expected_decision
     assert result.receipt == {}
-    assert result.raw == {"status_code": status_code, "empty_body": True}
-    assert result.reason == f"Empty JSON response body from server (status {status_code})"
+    assert result.raw == {
+        "status_code": status_code,
+        "empty_body": True,
+        "empty_body_anomaly": status_code == 200,
+    }
+    assert result.reason == (
+        f"Empty JSON response body from server (status {status_code}); "
+        f"treated as {expected_decision}"
+    )
 
 
 def test_raises_on_5xx(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,7 +1,7 @@
 # aletheia-redteam-kit
 
 Adversarial test kit for the [Aletheia](https://aletheia-core.com) AI security
-API. Fires 135 attacks at the hosted engine, groups misses by custom technique,
+API. Fires 140+ attacks at the hosted engine, groups misses by custom technique,
 and produces JSON artifacts for dashboard review, regression tracking, and CI.
 
 ## What it does
@@ -45,7 +45,9 @@ CI-style thresholded run:
 
     python -m kit.runner \
         --output ci_summary.json \
-        --min-expectation-match-rate 50
+        --min-expectation-match-rate 60 \
+        --api-baseline-summary summary.json \
+        --max-high-risk-block-drop 3
 
 Important API outputs:
 
@@ -53,6 +55,14 @@ Important API outputs:
 - `categories`: blocked / proceeded totals per category
 - `gap_report`: custom-technique bypass analysis
 - `results[*].technique`: explicit or inferred custom technique tag per attack
+- `unknown`: count of requests classified as unknown decisions
+- `empty_200_anomalies`: count of empty JSON HTTP 200 responses
+
+Decision hardening note:
+
+- Empty JSON `200` responses are treated as `UNKNOWN` instead of `PROCEED`
+    to avoid optimistic pass classification when upstream or edge layers return
+    an anomalous empty body.
 
 Exit codes in API mode:
 
@@ -88,6 +98,11 @@ Dashboard views now include:
 - regression trend across scanned API runs
 - technique gap analysis from `gap_report`
 - receipt inspection and signature verification tools
+- command filters (category, decision, mismatch-only, search)
+- quick actions (focus weakest category, anomaly focus, export filtered rows)
+- mission priority board for operator triage
+
+For command-center usage details, see [docs/command-center.md](docs/command-center.md).
 
 If you want a single run only, use `Load ./summary.json` or drag in a JSON file.
 
@@ -312,10 +327,10 @@ To enable it:
 
 1. Add a repository secret named `ALETHEIA_API_KEY`.
 2. Push to `main` or open a pull request.
-3. The workflow runs `python -m kit.runner --min-expectation-match-rate 50`.
+3. The workflow runs `python -m kit.runner --min-expectation-match-rate 60 --max-high-risk-block-drop 3`.
 
 The workflow uploads `ci_summary.json` and, on pull requests, posts a short
-per-category comment.
+per-category comment including unknown/anomaly counters.
 
 ## Verifying receipt signatures
 

@@ -200,19 +200,33 @@ def summarize(results: list[dict]) -> dict:
     matches = sum(1 for r in results if r["match"])
     blocked = sum(1 for r in results if r["actual_decision"] == "DENIED")
     proceeded = sum(1 for r in results if r["actual_decision"] == "PROCEED")
+    unknown = sum(1 for r in results if r["actual_decision"] == "UNKNOWN")
     errors = sum(1 for r in results if r["actual_decision"] == "ERROR")
+    empty_200_anomalies = sum(
+        1
+        for r in results
+        if "Empty JSON response body from server (status 200)" in str(r.get("reason") or "")
+    )
 
     by_cat: dict[str, dict] = {}
     for r in results:
         category = r["category"]
         if category not in by_cat:
-            by_cat[category] = {"total": 0, "matches": 0, "blocked": 0, "proceeded": 0}
+            by_cat[category] = {
+                "total": 0,
+                "matches": 0,
+                "blocked": 0,
+                "proceeded": 0,
+                "unknown": 0,
+            }
         by_cat[category]["total"] += 1
         by_cat[category]["matches"] += int(r["match"])
         if r["actual_decision"] == "DENIED":
             by_cat[category]["blocked"] += 1
         elif r["actual_decision"] == "PROCEED":
             by_cat[category]["proceeded"] += 1
+        elif r["actual_decision"] == "UNKNOWN":
+            by_cat[category]["unknown"] += 1
 
     benign = by_cat.get("benign_controls", {"total": 0, "blocked": 0, "proceeded": 0})
     benign_total = benign["total"]
@@ -226,7 +240,9 @@ def summarize(results: list[dict]) -> dict:
         "expectation_match_rate": round(100 * matches / total, 1) if total else 0.0,
         "blocked": blocked,
         "proceeded": proceeded,
+        "unknown": unknown,
         "errors": errors,
+        "empty_200_anomalies": empty_200_anomalies,
         "block_rate": round(100 * blocked / total, 1) if total else 0.0,
         "categories": by_cat,
         "trial_mode_suspected": trial_mode_suspected,

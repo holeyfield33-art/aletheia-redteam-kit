@@ -9,8 +9,8 @@ jobs:
   api-redteam:
     runs-on: ubuntu-latest
     env:
-      ALETHEIA_MIN_EXPECTATION_MATCH: "50"
-      ALETHEIA_MAX_HIGH_RISK_BLOCK_DROP: "5"
+      ALETHEIA_MIN_EXPECTATION_MATCH: "60"
+      ALETHEIA_MAX_HIGH_RISK_BLOCK_DROP: "3"
     permissions:
       contents: read
       pull-requests: write
@@ -76,7 +76,7 @@ jobs:
           from pathlib import Path
 
           data = json.loads(Path("ci_summary.json").read_text())
-            regression = data.get("regression") or {}
+          regression = data.get("regression") or {}
           cats = data.get("categories", {})
           lines = [
               "## Red-Team API Report",
@@ -84,6 +84,8 @@ jobs:
               f"- Expectation match: {data.get('expectation_match_rate', 0)}%",
               f"- Block rate: {data.get('block_rate', 0)}%",
               f"- Blocked: {data.get('blocked', 0)}/{data.get('attacks_total', 0)}",
+              f"- Unknown decisions: {data.get('unknown', 0)}",
+              f"- Empty-200 anomalies: {data.get('empty_200_anomalies', 0)}",
               f"- High-risk block rate (baseline/current): {regression.get('baseline_high_risk_block_rate', 'n/a')}% / {regression.get('current_high_risk_block_rate', 'n/a')}%",
               f"- High-risk block-rate drop: {regression.get('high_risk_block_rate_drop', 'n/a')}%",
               "",
