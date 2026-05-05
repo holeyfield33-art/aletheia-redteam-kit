@@ -444,7 +444,7 @@ def test_cli_combined_mode_writes_merged_summary(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path: {
+        lambda path, threat_feed_path=None: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),

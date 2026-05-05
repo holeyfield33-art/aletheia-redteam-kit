@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import tomllib
 import json
+from collections import defaultdict
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,34 @@ WEAK_CRYPTO_PATTERNS: list[tuple[str, str, str, re.Pattern[str], str]] = [
         re.compile(r"(hashlib\.sha1\s*\(|createHash\s*\(\s*['\"]sha1['\"])"),
         "Use a stronger algorithm such as SHA-256 or better as appropriate.",
     ),
+]
+
+DEFAULT_THREAT_FEED: list[dict[str, str]] = [
+    {
+        "finding_type": "python_subprocess_shell_true",
+        "threat": "Command injection",
+        "reference": "https://owasp.org/www-community/attacks/Command_Injection",
+    },
+    {
+        "finding_type": "python_dynamic_exec_untrusted",
+        "threat": "Arbitrary code execution",
+        "reference": "https://owasp.org/www-community/attacks/Code_Injection",
+    },
+    {
+        "finding_type": "javascript_eval",
+        "threat": "Code injection",
+        "reference": "https://owasp.org/www-community/attacks/Code_Injection",
+    },
+    {
+        "finding_type": "dependency_vulnerability",
+        "threat": "Known vulnerable dependency",
+        "reference": "https://owasp.org/www-project-top-ten/",
+    },
+    {
+        "finding_type": "private_key_block",
+        "threat": "Credential/key compromise",
+        "reference": "https://owasp.org/www-project-secrets-management/",
+    },
 ]
 
 
@@ -424,7 +453,73 @@ def _score(findings: list[Finding]) -> tuple[int, dict[str, int], dict[str, int]
     return risk_score, by_severity, by_type
 
 
-def run_repo_audit(repo_path: str | Path = ".") -> dict:
+def _load_threat_feed(repo_root: Path, threat_feed_path: str | None) -> tuple[dict[str, list[dict[str, str]]], list[Finding], str]:
+    findings: list[Finding] = []
+    source = "built_in"
+
+    if threat_feed_path:
+        path = Path(threat_feed_path)
+        if not path.is_absolute():
+            path = repo_root / path
+    else:
+        path = repo_root / "threat_feed.json"
+
+    feed_records: list[dict[str, str]] = DEFAULT_THREAT_FEED
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+            if isinstance(raw, list):
+                source = str(path.relative_to(repo_root)) if path.is_relative_to(repo_root) else str(path)
+                feed_records = [item for item in raw if isinstance(item, dict)]
+            else:
+                findings.append(
+                    Finding(
+                        severity="MEDIUM",
+                        type="invalid_threat_feed",
+                        title="Invalid threat feed format",
+                        file=str(path.relative_to(repo_root)) if path.is_relative_to(repo_root) else str(path),
+                        line=None,
+                        evidence="threat feed must be a JSON array",
+                        recommendation="Format threat_feed.json as a JSON array of mapping objects.",
+                    )
+                )
+        except json.JSONDecodeError:
+            findings.append(
+                Finding(
+                    severity="MEDIUM",
+                    type="invalid_threat_feed",
+                    title="Threat feed parse failure",
+                    file=str(path.relative_to(repo_root)) if path.is_relative_to(repo_root) else str(path),
+                    line=None,
+                    evidence="invalid JSON",
+                    recommendation="Fix JSON syntax in threat_feed.json.",
+                )
+            )
+
+    index: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for item in feed_records:
+        finding_type = str(item.get("finding_type") or "").strip()
+        if not finding_type:
+            continue
+        index[finding_type].append(
+            {
+                "threat": str(item.get("threat") or "unknown"),
+                "reference": str(item.get("reference") or ""),
+            }
+        )
+
+    return dict(index), findings, source
+
+
+def _serialize_finding(finding: Finding, threat_index: dict[str, list[dict[str, str]]]) -> dict:
+    data = finding.as_dict()
+    contexts = threat_index.get(finding.type) or []
+    if contexts:
+        data["threat_context"] = contexts
+    return data
+
+
+def run_repo_audit(repo_path: str | Path = ".", threat_feed_path: str | None = None) -> dict:
     """Run static repository checks and return summary dictionary."""
     root = Path(repo_path).resolve()
     files = _iter_source_files(root)
@@ -435,6 +530,8 @@ def run_repo_audit(repo_path: str | Path = ".") -> dict:
     findings.extend(_scan_dependency_hygiene(root))
     findings.extend(_scan_dependency_advisories(root))
     findings.extend(_scan_language_risks(root, files))
+    threat_index, threat_feed_findings, threat_feed_source = _load_threat_feed(root, threat_feed_path)
+    findings.extend(threat_feed_findings)
 
     # Deduplicate same type/file/line/evidence to reduce noise.
     deduped: dict[tuple[str, str, int | None, str], Finding] = {}
@@ -444,6 +541,13 @@ def run_repo_audit(repo_path: str | Path = ".") -> dict:
     unique_findings = list(deduped.values())
 
     risk_score, by_severity, by_type = _score(unique_findings)
+
+    threat_match_total = 0
+    threat_match_by_type: dict[str, int] = {}
+    for finding in unique_findings:
+        if finding.type in threat_index:
+            threat_match_total += 1
+            threat_match_by_type[finding.type] = threat_match_by_type.get(finding.type, 0) + 1
 
     gates = {
         "pass": by_severity.get("CRITICAL", 0) == 0 and by_severity.get("HIGH", 0) <= 5,
@@ -463,6 +567,14 @@ def run_repo_audit(repo_path: str | Path = ".") -> dict:
         "findings_by_severity": by_severity,
         "findings_by_type": by_type,
         "risk_score": risk_score,
+        "threat_feed": {
+            "source": threat_feed_source,
+            "matches_total": threat_match_total,
+            "matches_by_type": threat_match_by_type,
+        },
         "gates": gates,
-        "findings": [finding.as_dict() for finding in sorted(unique_findings, key=lambda item: (item.severity, item.file, item.line or 0))],
+        "findings": [
+            _serialize_finding(finding, threat_index)
+            for finding in sorted(unique_findings, key=lambda item: (item.severity, item.file, item.line or 0))
+        ],
     }

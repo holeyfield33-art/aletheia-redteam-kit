@@ -13,10 +13,11 @@ Combined artifacts (`mode = combined`) can be loaded directly and switched betwe
 1. Run one or more API scans with `python -m kit.runner`.
 2. Run repository scan with `python -m kit.runner --mode repo --repo-path . --output repo_summary.json`.
 3. Optionally run unified sweep with `python -m kit.runner --mode combined --target-url https://example.com --repo-path . --output combined_summary.json`.
-4. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
-5. Triage weak categories using the Mission Priority Board.
-6. Filter to actionable rows using Command Filters and Quick Actions.
-7. Export filtered rows to hand off incidents or create follow-up attack expansions.
+4. Optionally attach a threat feed with `--threat-feed-file threat_feed.json` to enrich repo findings.
+5. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
+6. Triage weak categories using the Mission Priority Board.
+7. Filter to actionable rows using Command Filters and Quick Actions.
+8. Export filtered rows to hand off incidents or create follow-up attack expansions.
 
 ## Command Filters
 

@@ -16,6 +16,7 @@ jobs:
       ALETHEIA_WEBSITE_MAX_CRITICAL: "0"
       ALETHEIA_WEBSITE_MAX_HIGH: "5"
       ALETHEIA_WEBSITE_MIN_PASS_RATE: "80"
+      ALETHEIA_THREAT_FEED_FILE: "threat_feed.json"
     permissions:
       contents: read
       pull-requests: write
@@ -62,6 +63,7 @@ jobs:
             --mode combined \
             --target-url "${ALETHEIA_TARGET_URL}" \
             --repo-path . \
+            --threat-feed-file "${ALETHEIA_THREAT_FEED_FILE}" \
             --output ci_summary.json \
             --min-expectation-match-rate "${ALETHEIA_MIN_EXPECTATION_MATCH}" \
             --api-baseline-summary baseline_summary.json \

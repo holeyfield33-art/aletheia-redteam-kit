@@ -99,6 +99,17 @@ Dependency advisory enrichment:
 
             pip-audit -f json -o pip-audit-report.json
 
+Threat-feed enrichment:
+
+- Optional mapping file `threat_feed.json` can attach threat intelligence context
+    to matching finding types.
+- Override location with CLI flag:
+
+            python -m kit.runner --mode repo --repo-path . --threat-feed-file threat_feed.json
+
+- Summary includes `threat_feed.source`, `threat_feed.matches_total`, and
+    `threat_feed.matches_by_type`.
+
 Combined command-center artifact:
 
         python -m kit.runner --mode combined \

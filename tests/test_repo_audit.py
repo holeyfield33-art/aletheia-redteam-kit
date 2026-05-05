@@ -165,3 +165,40 @@ dependencies = ["httpx>=0.27"]
 
     assert "dependency_vulnerability" in finding_types
     assert any("PYSEC-TEST-1" in (f.get("title") or "") for f in summary["findings"])
+
+
+def test_repo_audit_applies_threat_feed_context(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "risky.py").write_text(
+        """
+import subprocess
+cmd = input("cmd>")
+subprocess.run(cmd, shell=True)
+""".strip()
+    )
+    (tmp_path / "threat_feed.json").write_text(
+        json.dumps(
+            [
+                {
+                    "finding_type": "python_subprocess_shell_true",
+                    "threat": "Command injection",
+                    "reference": "https://example.test/command-injection",
+                }
+            ]
+        )
+    )
+
+    summary = run_repo_audit(tmp_path)
+    assert summary["threat_feed"]["matches_total"] >= 1
+    assert summary["threat_feed"]["matches_by_type"]["python_subprocess_shell_true"] >= 1
+    assert any(
+        (f.get("type") == "python_subprocess_shell_true") and f.get("threat_context")
+        for f in summary["findings"]
+    )

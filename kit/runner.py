@@ -469,6 +469,7 @@ def cli() -> int:
     parser.add_argument("--warning-min-trust", type=int, default=50, help="Minimum trust score for WARNING verdict")
     parser.add_argument("--warning-max-exploitability", type=int, default=60, help="Maximum exploitability score for WARNING verdict")
     parser.add_argument("--repo-path", default=".", help="Repository root path for --mode repo")
+    parser.add_argument("--threat-feed-file", help="Optional threat feed JSON for repo and combined modes")
     parser.add_argument("--max-repo-critical", type=int, default=0, help="Fail repo mode if CRITICAL findings exceed this")
     parser.add_argument("--max-repo-high", type=int, default=5, help="Fail repo mode if HIGH findings exceed this")
     parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
@@ -586,7 +587,7 @@ def cli() -> int:
             }
 
         # Repo component
-        repo_summary = run_repo_audit(args.repo_path)
+        repo_summary = run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
         repo_gates = repo_summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
         critical = int((repo_summary.get("findings_by_severity") or {}).get("CRITICAL", 0))
         high = int((repo_summary.get("findings_by_severity") or {}).get("HIGH", 0))
@@ -696,7 +697,7 @@ def cli() -> int:
         return PASS
 
     if args.mode == "repo":
-        summary = run_repo_audit(args.repo_path)
+        summary = run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
         gates = summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
 
         critical = int((summary.get("findings_by_severity") or {}).get("CRITICAL", 0))
