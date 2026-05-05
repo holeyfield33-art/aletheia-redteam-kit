@@ -4,7 +4,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from kit.runner import run_attack, summarize
+from kit import runner
+from kit.runner import load_auth_workflow, run_attack, summarize
 
 
 @dataclass
@@ -88,3 +89,132 @@ def test_micro_catalog_category_totals_add_up() -> None:
     assert summary["categories"]["prompt_injection"]["total"] == 2
     assert summary["categories"]["benign_controls"]["proceeded"] == 1
     assert summary["errors"] == 1
+
+
+def test_cli_website_mode_requires_target_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["kit.runner", "--mode", "website"])
+    with pytest.raises(SystemExit):
+        runner.cli()
+
+
+def test_cli_website_mode_writes_summary(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "website_summary.json"
+
+    fake_summary = {
+        "generated_at": "2026-05-05T00:00:00+00:00",
+        "target_url": "https://example.com",
+        "crawl_stats": {"pages_discovered": 1, "pages_visited": 1, "interactions_tested": 1, "skipped_actions": 0},
+        "findings_total": 0,
+        "findings_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+        "findings_by_type": {
+            "route_error": 0,
+            "dead_click": 0,
+            "tab_failure": 0,
+            "js_error": 0,
+            "network_error": 0,
+            "perf_timeout": 0,
+            "auth_failure": 0,
+        },
+        "pass_rate": 100.0,
+        "required_routes": [],
+        "required_routes_failed": [],
+        "auth": {"configured": False, "attempted": False, "success": False, "steps_total": 0, "steps_completed": 0, "failed_step": None, "error": None},
+        "gates": {"pass": True, "violations": []},
+        "findings": [],
+    }
+
+    monkeypatch.setattr(runner, "run_website_audit", lambda config: fake_summary)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "website",
+            "--target-url",
+            "https://example.com",
+            "--output",
+            str(output),
+            "--max-high",
+            "5",
+        ],
+    )
+
+    rc = runner.cli()
+    assert rc == 0
+    assert output.exists()
+
+
+def test_cli_website_mode_loads_rules_file(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "website_summary.json"
+    rules_file = tmp_path / "rules.json"
+    rules_file.write_text(
+        '[{"name":"Leaked marker","pattern":"debug-token","severity":"HIGH","target":"body"}]'
+    )
+
+    captured = {}
+
+    def _fake_run(config):
+        captured["rules"] = config.custom_rules
+        return {
+            "generated_at": "2026-05-05T00:00:00+00:00",
+            "target_url": "https://example.com",
+            "crawl_stats": {"pages_discovered": 1, "pages_visited": 1, "interactions_tested": 0, "skipped_actions": 0},
+            "findings_total": 0,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+            "findings_by_type": {
+                "route_error": 0,
+                "dead_click": 0,
+                "tab_failure": 0,
+                "js_error": 0,
+                "network_error": 0,
+                "perf_timeout": 0,
+                "auth_failure": 0,
+            },
+            "pass_rate": 100.0,
+            "required_routes": [],
+            "required_routes_failed": [],
+            "auth": {"configured": False, "attempted": False, "success": False, "steps_total": 0, "steps_completed": 0, "failed_step": None, "error": None},
+            "gates": {"pass": True, "violations": []},
+            "findings": [],
+        }
+
+    monkeypatch.setattr(runner, "run_website_audit", _fake_run)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "website",
+            "--target-url",
+            "https://example.com",
+            "--output",
+            str(output),
+            "--rules-file",
+            str(rules_file),
+        ],
+    )
+
+    rc = runner.cli()
+    assert rc == 0
+    assert captured["rules"] is not None
+    assert len(captured["rules"]) == 1
+    assert captured["rules"][0].name == "Leaked marker"
+
+
+def test_load_auth_workflow_parses_steps(tmp_path) -> None:
+    auth_file = tmp_path / "auth_flow.json"
+    auth_file.write_text(
+        """[
+  {"action": "goto", "url": "/login"},
+  {"action": "fill", "selector": "input[name='email']", "value": "user@example.com"},
+  {"action": "click", "selector": "button[type='submit']"},
+  {"action": "wait_for_url", "url": "/dashboard", "timeout_ms": 8000}
+]"""
+    )
+
+    steps = load_auth_workflow(str(auth_file))
+    assert len(steps) == 4
+    assert steps[0].action == "goto"
+    assert steps[1].selector == "input[name='email']"
+    assert steps[2].action == "click"
+    assert steps[3].timeout_ms == 8000

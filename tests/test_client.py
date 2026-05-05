@@ -36,7 +36,10 @@ def test_sends_api_key_header(monkeypatch: pytest.MonkeyPatch) -> None:
     with AletheiaClient(api_key="abc123"):
         pass
 
-    assert captured["headers"] == {"X-API-Key": "abc123"}
+    assert captured["headers"] == {
+        "X-API-Key": "abc123",
+        "Accept-Encoding": "identity",
+    }
 
 
 @pytest.mark.parametrize("status_code", [200, 403])
@@ -47,6 +50,7 @@ def test_parses_200_and_403_as_valid(
         def __init__(self, status: int) -> None:
             self.status_code = status
             self.headers = {"content-type": "application/json"}
+            self.content = b'{"request_id":"req-1","decision":"DENIED","reason":"policy","receipt":{"sig":"abc"}}'
 
         def json(self) -> dict[str, object]:
             return {
@@ -84,6 +88,47 @@ def test_parses_200_and_403_as_valid(
     assert result.decision == "DENIED"
     assert result.reason == "policy"
     assert result.receipt == {"sig": "abc"}
+
+
+@pytest.mark.parametrize(
+    ("status_code", "expected_decision"),
+    [(200, "PROCEED"), (403, "DENIED")],
+)
+def test_falls_back_to_status_when_json_body_is_empty(
+    monkeypatch: pytest.MonkeyPatch, status_code: int, expected_decision: str
+) -> None:
+    class FakeResponse:
+        def __init__(self, status: int) -> None:
+            self.status_code = status
+            self.headers = {"content-type": "application/json"}
+            self.content = b""
+
+        def json(self) -> dict[str, object]:
+            raise AssertionError("json() should not be called for empty JSON bodies")
+
+        def raise_for_status(self) -> None:
+            raise AssertionError("raise_for_status should not be called for 200/403")
+
+    class FakeHttpxClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def post(self, path: str, json: dict[str, str]) -> FakeResponse:
+            return FakeResponse(status_code)
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("kit.client.httpx.Client", FakeHttpxClient)
+
+    with AletheiaClient(api_key="k") as client:
+        result = client.audit("x", "a", "o")
+
+    assert result.request_id == ""
+    assert result.decision == expected_decision
+    assert result.receipt == {}
+    assert result.raw == {"status_code": status_code, "empty_body": True}
+    assert result.reason == f"Empty JSON response body from server (status {status_code})"
 
 
 def test_raises_on_5xx(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -307,10 +307,11 @@
     </div>
 
     <div class="controls">
-      <div class="drop-zone" id="dropZone">Drop a summary.json file here, or use the picker.</div>
+      <div class="drop-zone" id="dropZone">Drop summary.json or website_summary.json here, or use the picker.</div>
       <div class="button-row">
         <input id="fileInput" type="file" accept="application/json,.json">
         <button id="loadDefaultBtn" type="button">Load ./summary.json</button>
+        <button id="loadWebsiteBtn" type="button">Load ./website_summary.json</button>
         <button id="verifyAllBtn" type="button">Verify All Signatures</button>
       </div>
     </div>
@@ -318,26 +319,16 @@
     <div class="stats" id="stats"></div>
 
     <div class="bars">
-      <h2>Per-Category Blocking Ratio</h2>
+      <h2 id="barsTitle">Per-Category Blocking Ratio</h2>
       <div id="bars"></div>
     </div>
 
     <div class="table-wrap">
-      <h2>Receipt Table</h2>
+      <h2 id="tableTitle">Results Table</h2>
       <div class="scroll">
         <table>
           <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>ID</th>
-              <th>Category</th>
-              <th>Name</th>
-              <th>Expected</th>
-              <th>Actual</th>
-              <th>Match</th>
-              <th>Latency ms</th>
-              <th>Signature</th>
-            </tr>
+            <tr id="tableHeadRow"></tr>
           </thead>
           <tbody id="rows"></tbody>
         </table>
@@ -346,8 +337,8 @@
     </div>
 
     <div class="detail" id="detail">
-      <h2>Receipt Detail</h2>
-      <p class="muted">Click any row to inspect the full receipt JSON.</p>
+      <h2>Result Detail</h2>
+      <p class="muted">Click any row to inspect the full JSON payload.</p>
       <div class="detail-top">
         <button id="copyReceiptBtn" type="button" disabled>Copy Receipt JSON</button>
         <button id="verifyBtn" type="button" disabled>Verify Signature</button>
@@ -359,6 +350,7 @@
 
   <script>
     const DEFAULT_SUMMARY_PATH = "./summary.json";
+    const DEFAULT_WEBSITE_SUMMARY_PATH = "./website_summary.json";
     const WELL_KNOWN_PEM_URL = "https://aletheia-core.com/.well-known/aletheia-receipt-key.pem";
     const FALLBACK_PUBLIC_KEY_PEM = "";
     const VERIFY_FIELDS = [
@@ -390,6 +382,9 @@
     const copyReceiptBtnEl = document.getElementById("copyReceiptBtn");
     const verifyBtnEl = document.getElementById("verifyBtn");
     const verifyAllBtnEl = document.getElementById("verifyAllBtn");
+    const barsTitleEl = document.getElementById("barsTitle");
+    const tableTitleEl = document.getElementById("tableTitle");
+    const tableHeadRowEl = document.getElementById("tableHeadRow");
 
     function escapeHtml(value) {
       return String(value)
@@ -428,7 +423,29 @@
       verifyStatusEl.innerHTML = escapeHtml(message);
     }
 
+    function isWebsiteSummary(summary) {
+      return Array.isArray(summary.findings) && !Array.isArray(summary.results);
+    }
+
+    function setTableHeader(labels) {
+      tableHeadRowEl.innerHTML = labels.map(function (label) {
+        return "<th>" + escapeHtml(label) + "</th>";
+      }).join("");
+    }
+
     function renderMeta(summary) {
+      if (isWebsiteSummary(summary)) {
+        const generatedWebsite = toIsoOrDash(summary.generated_at);
+        const targetUrl = summary.target_url || "(unknown)";
+        const crawl = summary.crawl_stats || {};
+        metaEl.innerHTML = [
+          "<div><b>Generated:</b> " + escapeHtml(generatedWebsite) + "</div>",
+          "<div><b>Target URL:</b> " + escapeHtml(targetUrl) + "</div>",
+          "<div><b>Visited pages:</b> " + escapeHtml(crawl.pages_visited || 0) + "</div>"
+        ].join("");
+        return;
+      }
+
       const generated = toIsoOrDash(summary.generated_at);
       const engineUrl = summary.engine_url || "(unknown)";
       const attacksTotal = summary.attacks_total || (summary.results || []).length || 0;
@@ -440,6 +457,28 @@
     }
 
     function renderStats(summary) {
+      if (isWebsiteSummary(summary)) {
+        const sev = summary.findings_by_severity || {};
+        const crawl = summary.crawl_stats || {};
+        const cards = [
+          { label: "Findings", value: Number(summary.findings_total || 0) },
+          { label: "Critical", value: Number(sev.CRITICAL || 0) },
+          { label: "High", value: Number(sev.HIGH || 0) },
+          { label: "Pass Rate", value: Number(summary.pass_rate || 0).toFixed(1) + "%" },
+          { label: "Visited Pages", value: Number(crawl.pages_visited || 0) }
+        ];
+
+        statsEl.innerHTML = cards.map(function (card) {
+          return (
+            "<div class=\"card\">" +
+            "<div class=\"card-label\">" + escapeHtml(card.label) + "</div>" +
+            "<div class=\"card-value\">" + escapeHtml(card.value) + "</div>" +
+            "</div>"
+          );
+        }).join("");
+        return;
+      }
+
       const total = Number(summary.attacks_total || 0);
       const blocked = Number(summary.blocked || 0);
       const blockRate = Number(summary.block_rate || 0);
@@ -473,6 +512,28 @@
     }
 
     function renderBars(summary) {
+      if (isWebsiteSummary(summary)) {
+        const byType = summary.findings_by_type || {};
+        const total = Number(summary.findings_total || 0);
+        const keys = Object.keys(byType);
+        barsTitleEl.textContent = "Findings by Type";
+        barsEl.innerHTML = keys.map(function (name) {
+          const count = Number(byType[name] || 0);
+          const ratio = Number(percent(count, total));
+          const fill = Math.max(0, Math.min(100, ratio));
+          return (
+            "<div class=\"bar-row\">" +
+            "<div>" + escapeHtml(name) + "</div>" +
+            "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" +
+            escapeHtml(fill) + "%;background:" + escapeHtml(barColor(100 - ratio)) + "\"></div></div>" +
+            "<div>" + escapeHtml(count) + "</div>" +
+            "</div>"
+          );
+        }).join("");
+        return;
+      }
+
+      barsTitleEl.textContent = "Per-Category Blocking Ratio";
       const categories = summary.categories || {};
       const order = [
         "prompt_injection",
@@ -500,6 +561,37 @@
     }
 
     function renderRows(summary) {
+      if (isWebsiteSummary(summary)) {
+        tableTitleEl.textContent = "Website Findings";
+        setTableHeader(["ID", "Severity", "Type", "Page", "Action", "Expected", "Observed"]);
+        const findings = Array.isArray(summary.findings) ? summary.findings : [];
+        rowsEl.innerHTML = findings.map(function (row, idx) {
+          const cls = row.severity === "CRITICAL" || row.severity === "HIGH" ? "mismatch" : "match";
+          return (
+            "<tr data-index=\"" + escapeHtml(idx) + "\">" +
+            "<td>" + escapeHtml(row.id || "") + "</td>" +
+            "<td class=\"" + escapeHtml(cls) + "\">" + escapeHtml(row.severity || "") + "</td>" +
+            "<td>" + escapeHtml(row.type || "") + "</td>" +
+            "<td>" + escapeHtml(row.page_url || "") + "</td>" +
+            "<td>" + escapeHtml(row.action || "") + "</td>" +
+            "<td>" + escapeHtml(row.expected || "") + "</td>" +
+            "<td>" + escapeHtml(row.observed || "") + "</td>" +
+            "</tr>"
+          );
+        }).join("");
+
+        const findingRows = rowsEl.querySelectorAll("tr");
+        findingRows.forEach(function (tr) {
+          tr.addEventListener("click", function () {
+            const index = Number(tr.getAttribute("data-index"));
+            selectRow(index);
+          });
+        });
+        return;
+      }
+
+      tableTitleEl.textContent = "Receipt Table";
+      setTableHeader(["Timestamp", "ID", "Category", "Name", "Expected", "Actual", "Match", "Latency ms", "Signature"]);
       const results = Array.isArray(summary.results) ? summary.results : [];
       rowsEl.innerHTML = results.map(function (row, idx) {
         const ts = toIsoOrDash((row.receipt || {}).issued_at || summary.generated_at);
@@ -531,15 +623,24 @@
     }
 
     function selectRow(index) {
-      const results = (state.summary && state.summary.results) || [];
-      const row = results[index];
+      const rows = isWebsiteSummary(state.summary)
+        ? ((state.summary && state.summary.findings) || [])
+        : ((state.summary && state.summary.results) || []);
+      const row = rows[index];
       if (!row) return;
       state.selected = row;
-      const receipt = row.receipt || {};
-      receiptViewEl.textContent = JSON.stringify(receipt, null, 2);
-      copyReceiptBtnEl.disabled = false;
-      verifyBtnEl.disabled = false;
-      setVerifyStatus("Selected: " + (row.id || "(unknown)"));
+      if (isWebsiteSummary(state.summary)) {
+        receiptViewEl.textContent = JSON.stringify(row, null, 2);
+        copyReceiptBtnEl.disabled = false;
+        verifyBtnEl.disabled = true;
+        setVerifyStatus("Selected finding: " + (row.id || "(unknown)"));
+      } else {
+        const receipt = row.receipt || {};
+        receiptViewEl.textContent = JSON.stringify(receipt, null, 2);
+        copyReceiptBtnEl.disabled = false;
+        verifyBtnEl.disabled = false;
+        setVerifyStatus("Selected: " + (row.id || "(unknown)"));
+      }
     }
 
     async function copySelectedReceipt() {
@@ -631,6 +732,10 @@
     }
 
     async function verifyAll() {
+      if (isWebsiteSummary(state.summary)) {
+        setVerifyStatus("Signature verification is only available for API receipt summaries.");
+        return;
+      }
       if (!state.summary || !Array.isArray(state.summary.results)) {
         setVerifyStatus("Load a summary file first.");
         return;
@@ -672,7 +777,11 @@
       renderStats(summary);
       renderBars(summary);
       renderRows(summary);
-      setStatus("Loaded " + ((summary.results || []).length || 0) + " rows.");
+      if (isWebsiteSummary(summary)) {
+        setStatus("Loaded " + ((summary.findings || []).length || 0) + " findings.");
+      } else {
+        setStatus("Loaded " + ((summary.results || []).length || 0) + " rows.");
+      }
       setVerifyStatus("");
     }
 
@@ -697,6 +806,20 @@
         await loadFromText(text, DEFAULT_SUMMARY_PATH);
       } catch (err) {
         setStatus("Default load failed: " + (err && err.message ? err.message : String(err)));
+      }
+    }
+
+    async function loadWebsiteDefault() {
+      setStatus("Loading " + DEFAULT_WEBSITE_SUMMARY_PATH + "...");
+      try {
+        const resp = await fetch(DEFAULT_WEBSITE_SUMMARY_PATH, { cache: "no-store" });
+        if (!resp.ok) {
+          throw new Error("HTTP " + resp.status + " at " + DEFAULT_WEBSITE_SUMMARY_PATH);
+        }
+        const text = await resp.text();
+        await loadFromText(text, DEFAULT_WEBSITE_SUMMARY_PATH);
+      } catch (err) {
+        setStatus("Website summary load failed: " + (err && err.message ? err.message : String(err)));
       }
     }
 
@@ -729,6 +852,7 @@
     });
 
     document.getElementById("loadDefaultBtn").addEventListener("click", loadDefault);
+    document.getElementById("loadWebsiteBtn").addEventListener("click", loadWebsiteDefault);
     copyReceiptBtnEl.addEventListener("click", copySelectedReceipt);
     verifyBtnEl.addEventListener("click", verifySelected);
     verifyAllBtnEl.addEventListener("click", verifyAll);

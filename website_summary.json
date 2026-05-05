@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-05-05T05:54:56.704189+00:00",
+  "target_url": "https://aletheia-core.com",
+  "crawl_stats": {
+    "pages_discovered": 35,
+    "pages_visited": 10,
+    "interactions_tested": 0,
+    "skipped_actions": 0
+  },
+  "findings_total": 1,
+  "findings_by_severity": {
+    "CRITICAL": 0,
+    "HIGH": 1,
+    "MEDIUM": 0,
+    "LOW": 0
+  },
+  "findings_by_type": {
+    "route_error": 1,
+    "dead_click": 0,
+    "tab_failure": 0,
+    "js_error": 0,
+    "network_error": 0,
+    "perf_timeout": 0
+  },
+  "pass_rate": 90.0,
+  "required_routes": [
+    "/",
+    "/pricing"
+  ],
+  "required_routes_failed": [
+    "/pricing"
+  ],
+  "gates": {
+    "pass": false,
+    "violations": [
+      "required_routes_failed"
+    ]
+  },
+  "findings": [
+    {
+      "id": "WA_1FBCE38EEF",
+      "severity": "HIGH",
+      "type": "route_error",
+      "title": "Route returned error status (HTTP fallback)",
+      "page_url": "https://aletheia-core.com/favicon.ico",
+      "element_selector": null,
+      "action": "visit",
+      "expected": "HTTP < 400",
+      "observed": "HTTP 404",
+      "evidence": {
+        "status_code": 404
+      },
+      "reproducible_steps": [
+        "Navigate to https://aletheia-core.com/favicon.ico"
+      ]
+    }
+  ],
+  "audit_backend": "http_fallback",
+  "backend_warning": "Playwright backend unavailable; fallback used: BrowserType.launch: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /home/codespace/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-CHVJ0V --remote-debugging-pipe --no-startup-window\n<launched> pid=39534\n[pid=39534][err] /home/codespace/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell: error while loading shared libraries: libatk-1.0.so.0: cannot open shared object file: No such file or directory\nCall log:\n  - <launching> /home/codespace/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,BoundaryEventDispatchTracksNodeRemoval,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,Translate,AutoDeElevate,RenderDocument,OptimizationHints --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --enable-automation --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=/tmp/playwright_chromiumdev_profile-CHVJ0V --remote-debugging-pipe --no-startup-window\n  - <launched> pid=39534\n  - [pid=39534][err] /home/codespace/.cache/ms-playwright/chromium_headless_shell-1217/chrome-headless-shell-linux64/chrome-headless-shell: error while loading shared libraries: libatk-1.0.so.0: cannot open shared object file: No such file or directory\n  - [pid=39534] <gracefully close start>\n  - [pid=39534] <kill>\n  - [pid=39534] <will force kill>\n  - [pid=39534] exception while trying to kill process: Error: kill ESRCH\n  - [pid=39534] <process did exit: exitCode=127, signal=null>\n  - [pid=39534] starting temporary directories cleanup\n  - [pid=39534] finished temporary directories cleanup\n  - [pid=39534] <gracefully close end>\n"
+}

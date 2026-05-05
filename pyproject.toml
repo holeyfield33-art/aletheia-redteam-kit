@@ -8,6 +8,7 @@ dependencies = ["httpx>=0.27"]
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 verify = ["cryptography>=42.0"]
+web = ["playwright>=1.53"]
 
 [project.scripts]
 aletheia-redteam = "kit.runner:cli"

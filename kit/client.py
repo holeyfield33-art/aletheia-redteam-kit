@@ -50,7 +50,10 @@ class AletheiaClient:
         ).rstrip("/")
         self._client = httpx.Client(
             base_url=self.base_url,
-            headers={"X-API-Key": self.api_key},
+            headers={
+                "X-API-Key": self.api_key,
+                "Accept-Encoding": "identity",
+            },
             timeout=timeout,
         )
 
@@ -70,6 +73,16 @@ class AletheiaClient:
             raise RuntimeError(
                 f"Expected JSON audit response but got {content_type or 'unknown content type'} "
                 f"(status {resp.status_code}): {snippet}"
+            )
+
+        if not resp.content.strip():
+            decision = "DENIED" if resp.status_code == 403 else "PROCEED"
+            return AuditResult(
+                request_id="",
+                decision=decision,
+                reason=f"Empty JSON response body from server (status {resp.status_code})",
+                receipt={},
+                raw={"status_code": resp.status_code, "empty_body": True},
             )
 
         body = resp.json()
