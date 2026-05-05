@@ -1,26 +1,29 @@
 # Command Center Dashboard
 
-This project dashboard is designed as an operator command center for API and website security runs.
+This project dashboard is designed as an operator command center for API, website, repo, and combined security runs.
 
 ## Launch
 
 Open `dashboard/index.html` in your browser.
 
-Note: current dashboard panels are optimized for API and website summaries. Repo-audit summaries (`mode = repo`) are generated for CI and artifact review in this phase and will be promoted into first-class dashboard panels in the next phase.
+Combined artifacts (`mode = combined`) can be loaded directly and switched between API/website/repo components using the Component filter.
 
 ## Primary Operator Workflow
 
 1. Run one or more API scans with `python -m kit.runner`.
 2. Run repository scan with `python -m kit.runner --mode repo --repo-path . --output repo_summary.json`.
-3. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
-4. Triage weak categories using the Mission Priority Board.
-5. Filter to actionable rows using Command Filters and Quick Actions.
-6. Export filtered rows to hand off incidents or create follow-up attack expansions.
+3. Optionally run unified sweep with `python -m kit.runner --mode combined --target-url https://example.com --repo-path . --output combined_summary.json`.
+4. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
+5. Triage weak categories using the Mission Priority Board.
+6. Filter to actionable rows using Command Filters and Quick Actions.
+7. Export filtered rows to hand off incidents or create follow-up attack expansions.
 
 ## Command Filters
 
 - Category filter: scope rows to one attack family.
-- Decision filter: focus on `DENIED`, `PROCEED`, `UNKNOWN`, or `ERROR`.
+- Decision filter: adapts by summary type.
+API: `DENIED`, `PROCEED`, `UNKNOWN`, `ERROR`.
+Website/repo: severity (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`).
 - Mismatches only: show policy misses only.
 - Search: free text over id, name, category, reason, and error fields.
 
@@ -34,6 +37,11 @@ Note: current dashboard panels are optimized for API and website summaries. Repo
   - Sets decision filter to `UNKNOWN`.
 - Export Filtered JSON:
   - Downloads currently filtered rows as `filtered_results.json`.
+- Show Repo Critical+High:
+  - Enables mismatch-only view for repository findings.
+  - Fast focus for exploitable hotspot triage.
+- Export Repo Hotspots:
+  - Downloads repo `CRITICAL`/`HIGH` findings as `repo_hotspots.json`.
 
 ## Mission Priority Board
 

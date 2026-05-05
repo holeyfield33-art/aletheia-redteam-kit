@@ -41,6 +41,59 @@ dependencies = ["httpx>=0.27"]
     assert summary["gates"]["pass"] is False
 
 
+def test_repo_audit_detects_python_runtime_execution_risks(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "risky.py").write_text(
+        """
+import subprocess
+cmd = input("cmd>")
+eval(input("expr>"))
+subprocess.run(cmd, shell=True)
+""".strip()
+    )
+
+    summary = run_repo_audit(tmp_path)
+    finding_types = {f["type"] for f in summary["findings"]}
+
+    assert "python_dynamic_exec_untrusted" in finding_types
+    assert "python_subprocess_shell_true" in finding_types
+    assert summary["findings_by_severity"]["HIGH"] >= 2
+
+
+def test_repo_audit_detects_javascript_and_weak_crypto_patterns(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "server.js").write_text(
+        """
+const crypto = require('crypto');
+const { exec } = require('child_process');
+function run(req) {
+  exec(req.query.cmd);
+  return crypto.createHash('sha1').update('x').digest('hex');
+}
+""".strip()
+    )
+
+    summary = run_repo_audit(tmp_path)
+    finding_types = {f["type"] for f in summary["findings"]}
+
+    assert "javascript_child_process_exec_untrusted" in finding_types
+    assert "weak_hash_sha1" in finding_types
+
+
 def test_cli_repo_mode_writes_summary(monkeypatch, tmp_path) -> None:
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()
@@ -76,3 +129,39 @@ dependencies = ["httpx>=0.27"]
     data = json.loads(output.read_text())
     assert data["mode"] == "repo"
     assert data["repo_root"]
+
+
+def test_repo_audit_enriches_dependency_advisories_from_pip_audit(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "pip-audit-report.json").write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "name": "urllib3",
+                        "version": "1.26.4",
+                        "vulns": [
+                            {
+                                "id": "PYSEC-TEST-1",
+                                "description": "Example advisory",
+                                "fix_versions": ["1.26.5"],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+
+    summary = run_repo_audit(tmp_path)
+    finding_types = {f["type"] for f in summary["findings"]}
+
+    assert "dependency_vulnerability" in finding_types
+    assert any("PYSEC-TEST-1" in (f.get("title") or "") for f in summary["findings"])

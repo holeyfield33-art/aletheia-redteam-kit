@@ -6,11 +6,16 @@ on:
   pull_request:
 
 jobs:
-  api-redteam:
+  command-center-combined:
     runs-on: ubuntu-latest
     env:
       ALETHEIA_MIN_EXPECTATION_MATCH: "60"
       ALETHEIA_MAX_HIGH_RISK_BLOCK_DROP: "3"
+      ALETHEIA_MAX_REPO_CRITICAL: "0"
+      ALETHEIA_MAX_REPO_HIGH: "5"
+      ALETHEIA_WEBSITE_MAX_CRITICAL: "0"
+      ALETHEIA_WEBSITE_MAX_HIGH: "5"
+      ALETHEIA_WEBSITE_MIN_PASS_RATE: "80"
     permissions:
       contents: read
       pull-requests: write
@@ -37,7 +42,7 @@ jobs:
         env:
           ALETHEIA_API_KEY: ${{ secrets.ALETHEIA_API_KEY }}
 
-      - name: Run API red-team suite
+      - name: Run Combined Command-Center Sweep
         run: |
           git fetch origin main --depth=1
           if git show origin/main:summary.json > baseline_summary.json 2>/dev/null; then
@@ -47,19 +52,34 @@ jobs:
             echo "No baseline summary found on origin/main"
           fi
 
+          if command -v pip-audit >/dev/null 2>&1; then
+            pip-audit -f json -o pip-audit-report.json || true
+          else
+            echo "pip-audit not installed; skipping dependency advisory enrichment"
+          fi
+
           python -m kit.runner \
+            --mode combined \
+            --target-url "${ALETHEIA_TARGET_URL}" \
+            --repo-path . \
             --output ci_summary.json \
             --min-expectation-match-rate "${ALETHEIA_MIN_EXPECTATION_MATCH}" \
             --api-baseline-summary baseline_summary.json \
-            --max-high-risk-block-drop "${ALETHEIA_MAX_HIGH_RISK_BLOCK_DROP}"
+            --max-high-risk-block-drop "${ALETHEIA_MAX_HIGH_RISK_BLOCK_DROP}" \
+            --max-repo-critical "${ALETHEIA_MAX_REPO_CRITICAL}" \
+            --max-repo-high "${ALETHEIA_MAX_REPO_HIGH}" \
+            --max-critical "${ALETHEIA_WEBSITE_MAX_CRITICAL}" \
+            --max-high "${ALETHEIA_WEBSITE_MAX_HIGH}" \
+            --min-pass-rate "${ALETHEIA_WEBSITE_MIN_PASS_RATE}"
         env:
           ALETHEIA_API_KEY: ${{ secrets.ALETHEIA_API_KEY }}
+          ALETHEIA_TARGET_URL: ${{ vars.ALETHEIA_TARGET_URL }}
 
       - name: Upload summary artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-summary
+          name: command-center-summary
           path: ci_summary.json
 
       - name: Comment PR summary
@@ -76,18 +96,39 @@ jobs:
           from pathlib import Path
 
           data = json.loads(Path("ci_summary.json").read_text())
-          regression = data.get("regression") or {}
-          cats = data.get("categories", {})
+            gates = data.get("gates") or {}
+            components = data.get("components") or {}
+            api = components.get("api") or {}
+            repo = components.get("repo") or {}
+            website = components.get("website") or {}
+            regression = api.get("regression") or {}
+            cats = api.get("categories", {})
+            repo_sev = repo.get("findings_by_severity") or {}
+            website_sev = website.get("findings_by_severity") or {}
           lines = [
-              "## Red-Team API Report",
+              "## Command-Center Combined Report",
               "",
-              f"- Expectation match: {data.get('expectation_match_rate', 0)}%",
-              f"- Block rate: {data.get('block_rate', 0)}%",
-              f"- Blocked: {data.get('blocked', 0)}/{data.get('attacks_total', 0)}",
-              f"- Unknown decisions: {data.get('unknown', 0)}",
-              f"- Empty-200 anomalies: {data.get('empty_200_anomalies', 0)}",
+              f"- Overall gate: {'PASS' if gates.get('pass') else 'FAIL'}",
+              f"- Violations: {', '.join(gates.get('violations', [])) or 'none'}",
+              "",
+              "### API",
+              f"- Expectation match: {api.get('expectation_match_rate', 0)}%",
+              f"- Block rate: {api.get('block_rate', 0)}%",
+              f"- Blocked: {api.get('blocked', 0)}/{api.get('attacks_total', 0)}",
+              f"- Unknown decisions: {api.get('unknown', 0)}",
+              f"- Empty-200 anomalies: {api.get('empty_200_anomalies', 0)}",
               f"- High-risk block rate (baseline/current): {regression.get('baseline_high_risk_block_rate', 'n/a')}% / {regression.get('current_high_risk_block_rate', 'n/a')}%",
               f"- High-risk block-rate drop: {regression.get('high_risk_block_rate_drop', 'n/a')}%",
+              "",
+              "### Repo",
+              f"- Risk score: {repo.get('risk_score', 'n/a')}",
+              f"- Findings total: {repo.get('findings_total', 0)}",
+              f"- Critical/High: {repo_sev.get('CRITICAL', 0)}/{repo_sev.get('HIGH', 0)}",
+              "",
+              "### Website",
+              f"- Findings total: {website.get('findings_total', 0)}",
+              f"- Pass rate: {website.get('pass_rate', 'n/a')}%",
+              f"- Critical/High: {website_sev.get('CRITICAL', 0)}/{website_sev.get('HIGH', 0)}",
               "",
               "| Category | Blocked | Total |",
               "|---|---:|---:|",

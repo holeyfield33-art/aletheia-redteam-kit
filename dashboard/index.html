@@ -386,7 +386,7 @@
     </div>
 
     <div class="controls">
-      <div class="drop-zone" id="dropZone">Drop an API summary or website summary JSON here, or use Auto-scan ./runs for API history.</div>
+      <div class="drop-zone" id="dropZone">Drop an API, website, or repo summary JSON here, or use Auto-scan ./runs for API history.</div>
       <div class="button-row">
         <input id="fileInput" type="file" accept="application/json,.json">
         <button id="loadDefaultBtn" type="button">Load ./summary.json</button>
@@ -399,6 +399,15 @@
     <div class="bars">
       <h2>Command Filters</h2>
       <div class="command-controls">
+        <label>
+          Component
+          <select id="componentFilter">
+            <option value="auto">auto</option>
+            <option value="api">api</option>
+            <option value="website">website</option>
+            <option value="repo">repo</option>
+          </select>
+        </label>
         <label>
           Category
           <select id="categoryFilter">
@@ -429,6 +438,8 @@
         <button id="focusWeakBtn" type="button">Focus Weakest Category</button>
         <button id="showAnomalyBtn" type="button">Show Empty-200 Anomalies</button>
         <button id="exportFilteredBtn" type="button">Export Filtered JSON</button>
+        <button id="repoHotBtn" type="button">Show Repo Critical+High</button>
+        <button id="exportRepoHotBtn" type="button">Export Repo Hotspots</button>
       </div>
     </div>
 
@@ -515,11 +526,13 @@
 
     const state = {
       summary: null,
+      combinedSummary: null,
       selected: null,
       summaries: [],
       verifyStats: { checked: 0, valid: 0 },
       rowVerification: new Map(),
       filters: {
+        component: "auto",
         category: "all",
         decision: "all",
         mismatchOnly: false,
@@ -548,6 +561,7 @@
     const mutationAnalyticsEl = document.getElementById("mutationAnalytics");
     const gapBarsEl = document.getElementById("gapBars");
     const missionBoardEl = document.getElementById("missionBoard");
+    const componentFilterEl = document.getElementById("componentFilter");
     const categoryFilterEl = document.getElementById("categoryFilter");
     const decisionFilterEl = document.getElementById("decisionFilter");
     const searchBoxEl = document.getElementById("searchBox");
@@ -556,6 +570,8 @@
     const focusWeakBtnEl = document.getElementById("focusWeakBtn");
     const showAnomalyBtnEl = document.getElementById("showAnomalyBtn");
     const exportFilteredBtnEl = document.getElementById("exportFilteredBtn");
+    const repoHotBtnEl = document.getElementById("repoHotBtn");
+    const exportRepoHotBtnEl = document.getElementById("exportRepoHotBtn");
 
     function escapeHtml(value) {
       return String(value)
@@ -598,6 +614,29 @@
       return Array.isArray(summary.findings) && !Array.isArray(summary.results);
     }
 
+    function isRepoSummary(summary) {
+      return summary && summary.mode === "repo" && Array.isArray(summary.findings);
+    }
+
+    function isCombinedSummary(summary) {
+      return summary && summary.mode === "combined" && summary.components && typeof summary.components === "object";
+    }
+
+    function resolveCombinedComponent(summary) {
+      if (!isCombinedSummary(summary)) {
+        return summary;
+      }
+      const components = summary.components || {};
+      const preferred = state.filters.component;
+      if (preferred !== "auto" && components[preferred]) {
+        return components[preferred];
+      }
+      if (components.api && isApiSummary(components.api)) return components.api;
+      if (components.repo && isRepoSummary(components.repo)) return components.repo;
+      if (components.website && isWebsiteSummary(components.website)) return components.website;
+      return components.api || components.repo || components.website || summary;
+    }
+
     function isApiSummary(summary) {
       return Array.isArray(summary && summary.results);
     }
@@ -608,7 +647,68 @@
       }).join("");
     }
 
+    function populateDecisionFilter(summary) {
+      if (isRepoSummary(summary)) {
+        decisionFilterEl.innerHTML = [
+          '<option value="all">all</option>',
+          '<option value="CRITICAL">CRITICAL</option>',
+          '<option value="HIGH">HIGH</option>',
+          '<option value="MEDIUM">MEDIUM</option>',
+          '<option value="LOW">LOW</option>'
+        ].join("");
+        decisionFilterEl.value = state.filters.decision;
+        return;
+      }
+
+      if (isWebsiteSummary(summary)) {
+        decisionFilterEl.innerHTML = [
+          '<option value="all">all</option>',
+          '<option value="CRITICAL">CRITICAL</option>',
+          '<option value="HIGH">HIGH</option>',
+          '<option value="MEDIUM">MEDIUM</option>',
+          '<option value="LOW">LOW</option>'
+        ].join("");
+        decisionFilterEl.value = state.filters.decision;
+        return;
+      }
+
+      decisionFilterEl.innerHTML = [
+        '<option value="all">all</option>',
+        '<option value="DENIED">DENIED</option>',
+        '<option value="PROCEED">PROCEED</option>',
+        '<option value="UNKNOWN">UNKNOWN</option>',
+        '<option value="ERROR">ERROR</option>'
+      ].join("");
+      decisionFilterEl.value = state.filters.decision;
+    }
+
     function renderMeta(summary) {
+      if (state.combinedSummary) {
+        const combined = state.combinedSummary;
+        const generatedCombined = toIsoOrDash(combined.generated_at);
+        const gate = ((combined.gates || {}).pass ? "PASS" : "FAIL");
+        const violations = ((combined.gates || {}).violations || []).length;
+        const components = Object.keys(combined.components || {}).join(", ") || "(none)";
+        metaEl.innerHTML = [
+          "<div><b>Generated:</b> " + escapeHtml(generatedCombined) + "</div>",
+          "<div><b>Combined Gate:</b> " + escapeHtml(gate) + " (violations: " + escapeHtml(violations) + ")</div>",
+          "<div><b>Components:</b> " + escapeHtml(components) + "</div>"
+        ].join("");
+        return;
+      }
+
+      if (isRepoSummary(summary)) {
+        const generatedRepo = toIsoOrDash(summary.generated_at);
+        const repoRoot = summary.repo_root || "(unknown)";
+        const filesScanned = Number(summary.files_scanned || 0);
+        metaEl.innerHTML = [
+          "<div><b>Generated:</b> " + escapeHtml(generatedRepo) + "</div>",
+          "<div><b>Repo root:</b> " + escapeHtml(repoRoot) + "</div>",
+          "<div><b>Files scanned:</b> " + escapeHtml(filesScanned) + "</div>"
+        ].join("");
+        return;
+      }
+
       if (isWebsiteSummary(summary)) {
         const generatedWebsite = toIsoOrDash(summary.generated_at);
         const targetUrl = summary.target_url || "(unknown)";
@@ -632,6 +732,29 @@
     }
 
     function renderStats(summary) {
+      if (isRepoSummary(summary)) {
+        const sev = summary.findings_by_severity || {};
+        const findingsTotal = Number(summary.findings_total || 0);
+        const riskScore = Number(summary.risk_score || 0);
+        const cards = [
+          { label: "Risk Score", value: riskScore },
+          { label: "Findings", value: findingsTotal },
+          { label: "Critical", value: Number(sev.CRITICAL || 0) },
+          { label: "High", value: Number(sev.HIGH || 0) },
+          { label: "Files Scanned", value: Number(summary.files_scanned || 0) }
+        ];
+
+        statsEl.innerHTML = cards.map(function (card) {
+          return (
+            "<div class=\"card\">" +
+            "<div class=\"card-label\">" + escapeHtml(card.label) + "</div>" +
+            "<div class=\"card-value\">" + escapeHtml(card.value) + "</div>" +
+            "</div>"
+          );
+        }).join("");
+        return;
+      }
+
       if (isWebsiteSummary(summary)) {
         const sev = summary.findings_by_severity || {};
         const crawl = summary.crawl_stats || {};
@@ -687,6 +810,27 @@
     }
 
     function renderBars(summary) {
+      if (isRepoSummary(summary)) {
+        barsTitleEl.textContent = "Repo Findings by Severity";
+        const sev = summary.findings_by_severity || {};
+        const total = Number(summary.findings_total || 0);
+        const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+        barsEl.innerHTML = order.map(function (name) {
+          const count = Number(sev[name] || 0);
+          const ratio = Number(percent(count, total));
+          const fill = Math.max(0, Math.min(100, ratio));
+          return (
+            "<div class=\"bar-row\">" +
+            "<div>" + escapeHtml(name) + "</div>" +
+            "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" +
+            escapeHtml(fill) + "%;background:" + escapeHtml(barColor(100 - ratio)) + "\"></div></div>" +
+            "<div>" + escapeHtml(count) + " (" + escapeHtml(fill.toFixed(1)) + "%)</div>" +
+            "</div>"
+          );
+        }).join("");
+        return;
+      }
+
       if (isWebsiteSummary(summary)) {
         const byType = summary.findings_by_type || {};
         const total = Number(summary.findings_total || 0);
@@ -736,6 +880,40 @@
     }
 
     function renderRows(summary) {
+      if (isRepoSummary(summary)) {
+        tableTitleEl.textContent = "Repository Findings";
+        setTableHeader(["Severity", "Type", "File", "Line", "Title", "Evidence"]);
+        const findings = Array.isArray(summary.findings) ? summary.findings : [];
+        const filtered = getFilteredRows(findings);
+
+        rowsEl.innerHTML = filtered.map(function (entry) {
+          const row = entry.row;
+          const idx = entry.idx;
+          const cls = row.severity === "CRITICAL" || row.severity === "HIGH" ? "mismatch" : "match";
+          return (
+            "<tr data-index=\"" + escapeHtml(idx) + "\">" +
+            "<td class=\"" + escapeHtml(cls) + "\">" + escapeHtml(row.severity || "") + "</td>" +
+            "<td>" + escapeHtml(row.type || "") + "</td>" +
+            "<td>" + escapeHtml(row.file || "") + "</td>" +
+            "<td>" + escapeHtml(row.line != null ? row.line : "-") + "</td>" +
+            "<td>" + escapeHtml(row.title || "") + "</td>" +
+            "<td>" + escapeHtml(row.evidence || "") + "</td>" +
+            "</tr>"
+          );
+        }).join("");
+
+        setStatus("Showing " + filtered.length + " of " + findings.length + " findings.");
+
+        const findingRows = rowsEl.querySelectorAll("tr");
+        findingRows.forEach(function (tr) {
+          tr.addEventListener("click", function () {
+            const index = Number(tr.getAttribute("data-index"));
+            selectRow(index);
+          });
+        });
+        return;
+      }
+
       if (isWebsiteSummary(summary)) {
         tableTitleEl.textContent = "Website Findings";
         setTableHeader(["ID", "Severity", "Type", "Page", "Action", "Expected", "Observed"]);
@@ -813,17 +991,30 @@
         .map(function (row, idx) { return { row: row, idx: idx }; })
         .filter(function (entry) {
           const row = entry.row;
-          if (state.filters.category !== "all" && String(row.category || "") !== state.filters.category) {
+          const rowCategory = String(row.category || row.type || "");
+          if (state.filters.category !== "all" && rowCategory !== state.filters.category) {
             return false;
           }
-          if (state.filters.decision !== "all" && String(row.actual_decision || "") !== state.filters.decision) {
+          const decision = String(row.actual_decision || row.severity || "");
+          if (state.filters.decision !== "all" && decision !== state.filters.decision) {
             return false;
           }
-          if (state.filters.mismatchOnly && !!row.match) {
+          const isMismatch = (typeof row.match === "boolean") ? !row.match : (row.severity === "CRITICAL" || row.severity === "HIGH");
+          if (state.filters.mismatchOnly && !isMismatch) {
             return false;
           }
           if (state.filters.search) {
-            const hay = [row.id, row.name, row.category, row.reason, row.error]
+            const hay = [
+              row.id,
+              row.name,
+              row.category,
+              row.type,
+              row.title,
+              row.file,
+              row.reason,
+              row.error,
+              row.evidence,
+            ]
               .map(function (v) { return String(v || "").toLowerCase(); })
               .join(" ");
             if (!hay.includes(state.filters.search)) {
@@ -872,7 +1063,39 @@
       setStatus("Exported " + filtered.length + " filtered rows to filtered_results.json.");
     }
 
+    function exportRepoHotspots() {
+      if (!isRepoSummary(state.summary)) {
+        setStatus("Repo hotspot export is available for repo summaries only.");
+        return;
+      }
+      const findings = Array.isArray(state.summary.findings) ? state.summary.findings : [];
+      const hotspots = findings.filter(function (row) {
+        return row.severity === "CRITICAL" || row.severity === "HIGH";
+      });
+      const blob = new Blob([JSON.stringify(hotspots, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "repo_hotspots.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setStatus("Exported " + hotspots.length + " repo hotspots to repo_hotspots.json.");
+    }
+
     function populateCategoryFilter(summary) {
+      if (isRepoSummary(summary)) {
+        const types = Object.keys(summary.findings_by_type || {}).sort();
+        categoryFilterEl.innerHTML = ['<option value="all">all</option>']
+          .concat(types.map(function (name) {
+            return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
+          }))
+          .join("");
+        categoryFilterEl.value = state.filters.category;
+        return;
+      }
+
       if (!isApiSummary(summary)) {
         categoryFilterEl.innerHTML = '<option value="all">all</option>';
         return;
@@ -887,6 +1110,35 @@
     }
 
     function renderMissionBoard(summary) {
+      if (isRepoSummary(summary)) {
+        const byType = summary.findings_by_type || {};
+        const topTypes = Object.entries(byType)
+          .sort(function (a, b) { return Number(b[1] || 0) - Number(a[1] || 0); })
+          .slice(0, 5);
+
+        if (!topTypes.length) {
+          missionBoardEl.innerHTML = '<div class="empty-note">No repo findings in this summary.</div>';
+          return;
+        }
+
+        missionBoardEl.innerHTML = topTypes.map(function (entry, idx) {
+          const name = entry[0];
+          const count = Number(entry[1] || 0);
+          const priority = idx === 0 ? "critical" : (idx < 3 ? "high" : "watch");
+          return (
+            '<div class="mission-item">' +
+            '<div class="mission-top">' +
+            '<strong>' + escapeHtml(name) + '</strong>' +
+            '<span class="mission-tag">' + escapeHtml(priority) + '</span>' +
+            '</div>' +
+            '<div class="muted">Open findings: ' + escapeHtml(count) + '</div>' +
+            '<div class="muted">Operator action: patch this risk pattern and rerun repo mode with strict gates.</div>' +
+            '</div>'
+          );
+        }).join('');
+        return;
+      }
+
       if (!isApiSummary(summary)) {
         missionBoardEl.innerHTML = '<div class="empty-note">Mission board is available for API summaries.</div>';
         return;
@@ -1069,17 +1321,17 @@
     }
 
     function selectRow(index) {
-      const rows = isWebsiteSummary(state.summary)
+      const rows = (isWebsiteSummary(state.summary) || isRepoSummary(state.summary))
         ? ((state.summary && state.summary.findings) || [])
         : ((state.summary && state.summary.results) || []);
       const row = rows[index];
       if (!row) return;
       state.selected = row;
-      if (isWebsiteSummary(state.summary)) {
+      if (isWebsiteSummary(state.summary) || isRepoSummary(state.summary)) {
         receiptViewEl.textContent = JSON.stringify(row, null, 2);
         copyReceiptBtnEl.disabled = false;
         verifyBtnEl.disabled = true;
-        setVerifyStatus("Selected finding: " + (row.id || "(unknown)"));
+        setVerifyStatus("Selected finding: " + (row.id || row.type || "(unknown)"));
       } else {
         const receipt = row.receipt || {};
         receiptViewEl.textContent = JSON.stringify(receipt, null, 2);
@@ -1212,19 +1464,22 @@
     }
 
     function renderAll(summary, options) {
-      state.summary = summary;
+      state.combinedSummary = isCombinedSummary(summary) ? summary : null;
+      state.summary = resolveCombinedComponent(summary);
       state.selected = null;
       state.summaries = (options && Array.isArray(options.summaries) && options.summaries.length)
         ? options.summaries
-        : (isApiSummary(summary) ? [summary] : []);
+        : (isApiSummary(state.summary) ? [state.summary] : []);
       state.verifyStats = { checked: 0, valid: 0 };
       state.rowVerification = new Map();
       state.filters = {
+        component: state.filters.component || "auto",
         category: "all",
         decision: "all",
         mismatchOnly: false,
         search: "",
       };
+      componentFilterEl.value = state.filters.component;
       categoryFilterEl.value = "all";
       decisionFilterEl.value = "all";
       mismatchOnlyEl.checked = false;
@@ -1232,18 +1487,28 @@
       copyReceiptBtnEl.disabled = true;
       verifyBtnEl.disabled = true;
       receiptViewEl.textContent = "No selection.";
-      populateCategoryFilter(summary);
-      renderMeta(summary);
-      renderStats(summary);
-      renderBars(summary);
+      populateCategoryFilter(state.summary);
+      populateDecisionFilter(state.summary);
+      renderMeta(state.summary);
+      renderStats(state.summary);
+      renderBars(state.summary);
       renderTrend(state.summaries);
-      renderApiRegression(summary);
-      renderMutationAnalytics(summary);
-      renderGapReport(summary);
-      renderMissionBoard(summary);
-      renderRows(summary);
-      if (isWebsiteSummary(summary)) {
-        setStatus("Loaded " + ((summary.findings || []).length || 0) + " findings.");
+      renderApiRegression(state.summary);
+      renderMutationAnalytics(state.summary);
+      renderGapReport(state.summary);
+      renderMissionBoard(state.summary);
+      renderRows(state.summary);
+      if (isWebsiteSummary(state.summary)) {
+        setStatus("Loaded " + ((state.summary.findings || []).length || 0) + " findings.");
+      } else if (isRepoSummary(state.summary)) {
+        setStatus("Loaded " + ((state.summary.findings || []).length || 0) + " repository findings.");
+      }
+      if (state.combinedSummary) {
+        const component = state.filters.component === "auto" ? "auto" : state.filters.component;
+        setStatus(
+          "Loaded combined summary; rendering component=" + component +
+          ". Overall gate: " + (((state.combinedSummary.gates || {}).pass) ? "PASS" : "FAIL")
+        );
       }
       setVerifyStatus("");
     }
@@ -1409,6 +1674,45 @@
       if (state.summary) renderRows(state.summary);
     });
     exportFilteredBtnEl.addEventListener("click", exportFilteredRows);
+    repoHotBtnEl.addEventListener("click", function () {
+      if (!isRepoSummary(state.summary)) {
+        setStatus("Repo severity focus is available for repo summaries only.");
+        return;
+      }
+      state.filters.decision = "all";
+      decisionFilterEl.value = "all";
+      state.filters.mismatchOnly = true;
+      mismatchOnlyEl.checked = true;
+      if (state.summary) renderRows(state.summary);
+      setStatus("Repo focus applied: HIGH+CRITICAL findings (via mismatch and severity filters). Use decision to switch levels.");
+    });
+    exportRepoHotBtnEl.addEventListener("click", exportRepoHotspots);
+    componentFilterEl.addEventListener("change", function () {
+      state.filters.component = componentFilterEl.value;
+      if (state.combinedSummary) {
+        const display = resolveCombinedComponent(state.combinedSummary);
+        state.summary = display;
+        state.selected = null;
+        state.filters.category = "all";
+        state.filters.decision = "all";
+        state.filters.mismatchOnly = false;
+        state.filters.search = "";
+        categoryFilterEl.value = "all";
+        mismatchOnlyEl.checked = false;
+        searchBoxEl.value = "";
+        populateCategoryFilter(display);
+        populateDecisionFilter(display);
+        renderMeta(display);
+        renderStats(display);
+        renderBars(display);
+        renderApiRegression(display);
+        renderMutationAnalytics(display);
+        renderGapReport(display);
+        renderMissionBoard(display);
+        renderRows(display);
+        setVerifyStatus("");
+      }
+    });
     categoryFilterEl.addEventListener("change", function () {
       state.filters.category = categoryFilterEl.value;
       if (state.summary) renderRows(state.summary);

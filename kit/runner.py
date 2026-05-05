@@ -4,6 +4,7 @@ Run the full attack catalog against the Aletheia API.
 Usage:
     python -m kit.runner                         # full API catalog
     python -m kit.runner --category prompt_injection
+    python -m kit.runner --mode combined --target-url https://example.com
     python -m kit.runner --output results.json   # default: summary.json
     python -m kit.runner --min-expectation-match-rate 50
     python -m kit.runner --mode repo --repo-path .
@@ -419,7 +420,7 @@ def load_protected_profiles(values: list[str] | None) -> list[str]:
 
 def cli() -> int:
     parser = argparse.ArgumentParser(description="Aletheia red team kit")
-    parser.add_argument("--mode", choices=["api", "website", "agentic", "repo"], default="api", help="Run API catalog, autonomous agentic loop, website UI audit, or static repository audit")
+    parser.add_argument("--mode", choices=["api", "website", "agentic", "repo", "combined"], default="api", help="Run API catalog, autonomous agentic loop, website UI audit, static repository audit, or combined command-center sweep")
     parser.add_argument("--category", help="Run only one category (filename without .json)")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output path for summary JSON")
     parser.add_argument("--base-url", help="Override ALETHEIA_BASE_URL")
@@ -482,6 +483,136 @@ def cli() -> int:
     )
     parser.add_argument("--agentic-no-early-stop", action="store_true", help="Do not stop agentic mode after first bypass")
     args = parser.parse_args()
+
+    if args.mode == "combined":
+        combined: dict = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "mode": "combined",
+            "components": {},
+            "gates": {"pass": True, "violations": []},
+        }
+        hard_error = False
+
+        # API component
+        attacks = load_attacks(args.category)
+        print(f"Loaded {len(attacks)} attacks for combined API component", file=sys.stderr)
+        with AletheiaClient(base_url=args.base_url) as client:
+            results = []
+            for i, attack in enumerate(attacks, 1):
+                result = run_attack(client, attack)
+                status = "OK" if result["match"] else "NO"
+                print(
+                    f"[api {i}/{len(attacks)}] {status} {attack['id']:<12} "
+                    f"{attack['category']:<20} {result['actual_decision']}",
+                    file=sys.stderr,
+                )
+                results.append(result)
+
+            api_summary = summarize(results)
+            api_regression: dict | None = None
+            if args.api_baseline_summary:
+                baseline_path = Path(args.api_baseline_summary)
+                if baseline_path.exists():
+                    baseline_raw = json.loads(baseline_path.read_text())
+                    api_regression = build_api_regression_summary(api_summary, baseline_raw)
+                else:
+                    print(f"API baseline summary not found: {baseline_path}", file=sys.stderr)
+
+            api_component = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "mode": "api",
+                "engine_url": client.base_url,
+                **api_summary,
+                "regression": api_regression,
+                "gap_report": build_gap_report(results),
+                "results": results,
+            }
+            combined["components"]["api"] = api_component
+
+        if api_summary["errors"] > 0:
+            hard_error = True
+            combined["gates"]["pass"] = False
+            combined["gates"]["violations"].append("api:errors_present")
+        if api_summary["expectation_match_rate"] < args.min_expectation_match_rate:
+            combined["gates"]["pass"] = False
+            combined["gates"]["violations"].append("api:expectation_match_rate_below_threshold")
+        if args.max_high_risk_block_drop is not None and api_component.get("regression") is not None:
+            drop = float((api_component.get("regression") or {}).get("high_risk_block_rate_drop", 0.0))
+            if drop > args.max_high_risk_block_drop:
+                combined["gates"]["pass"] = False
+                combined["gates"]["violations"].append("api:high_risk_block_rate_drop_over_limit")
+
+        # Website component (optional when --target-url is omitted)
+        if args.target_url:
+            website_summary = run_website_audit(
+                WebAuditConfig(
+                    base_url=args.target_url,
+                    output=args.output,
+                    max_pages=args.max_pages,
+                    max_depth=args.max_depth,
+                    timeout_sec=args.timeout_sec,
+                    headless=not args.headed,
+                    required_routes=args.required_route,
+                    max_critical=args.max_critical,
+                    max_high=args.max_high,
+                    min_pass_rate=args.min_pass_rate,
+                    allow_http_fallback=not args.no_browser_fallback,
+                    custom_rules=load_custom_rules(args.rules_file),
+                    auth_workflow=load_auth_workflow(args.auth_workflow_file),
+                    auth_seed_urls=args.auth_seed_url,
+                    prompt_injection_tests=load_prompt_injection_tests(args.prompt_tests_file),
+                    protected_routes=load_protected_routes(args.protected_route),
+                    protected_route_profiles=load_protected_profiles(args.protected_profile),
+                    baseline_summary_path=args.baseline_summary,
+                    trust_critical_penalty=args.trust_critical_penalty,
+                    trust_high_penalty=args.trust_high_penalty,
+                    exploit_success_weight=args.exploit_success_weight,
+                    safe_min_trust=args.safe_min_trust,
+                    safe_max_exploitability=args.safe_max_exploitability,
+                    warning_min_trust=args.warning_min_trust,
+                    warning_max_exploitability=args.warning_max_exploitability,
+                )
+            )
+            combined["components"]["website"] = website_summary
+            if not (website_summary.get("gates") or {}).get("pass", False):
+                combined["gates"]["pass"] = False
+                for violation in (website_summary.get("gates") or {}).get("violations", []):
+                    combined["gates"]["violations"].append(f"website:{violation}")
+        else:
+            combined["components"]["website"] = {
+                "mode": "website",
+                "skipped": True,
+                "reason": "target_url_not_provided",
+            }
+
+        # Repo component
+        repo_summary = run_repo_audit(args.repo_path)
+        repo_gates = repo_summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
+        critical = int((repo_summary.get("findings_by_severity") or {}).get("CRITICAL", 0))
+        high = int((repo_summary.get("findings_by_severity") or {}).get("HIGH", 0))
+        if critical > args.max_repo_critical:
+            repo_gates["pass"] = False
+            repo_gates.setdefault("violations", []).append("critical_repo_findings_over_limit")
+        if high > args.max_repo_high:
+            repo_gates["pass"] = False
+            repo_gates.setdefault("violations", []).append("high_repo_findings_over_limit")
+        repo_summary["gates"] = repo_gates
+        combined["components"]["repo"] = repo_summary
+        if not repo_gates.get("pass", False):
+            combined["gates"]["pass"] = False
+            for violation in repo_gates.get("violations", []):
+                combined["gates"]["violations"].append(f"repo:{violation}")
+
+        Path(args.output).write_text(json.dumps(combined, indent=2))
+        print(
+            "\nDone. Combined sweep complete. "
+            f"Overall gate: {'PASS' if combined['gates']['pass'] else 'FAIL'}. "
+            f"Output: {args.output}",
+            file=sys.stderr,
+        )
+        if hard_error:
+            return FAIL_ERROR
+        return PASS if combined["gates"]["pass"] else FAIL_THRESHOLD
 
     if args.mode == "website":
         if not args.target_url:

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 import tomllib
+import json
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,85 @@ SECRET_PATTERNS: list[tuple[str, str, re.Pattern[str]]] = [
 ALLOWED_TEXT_SUFFIXES = {
     ".py", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".env", ".sh", ".js", ".ts", ".tsx", ".jsx", ".html", ".css",
 }
+
+PY_RISK_PATTERNS: list[tuple[str, str, str, re.Pattern[str], str]] = [
+    (
+        "python_dynamic_exec_untrusted",
+        "Dynamic code execution with untrusted input",
+        "HIGH",
+        re.compile(r"\b(eval|exec)\s*\(\s*(input\(|request\.)"),
+        "Avoid executing user-controlled strings. Replace with strict parsing/dispatch logic.",
+    ),
+    (
+        "python_subprocess_shell_true",
+        "Subprocess execution with shell=True",
+        "HIGH",
+        re.compile(r"subprocess\.(run|Popen|call|check_output)\([^\n]*shell\s*=\s*True"),
+        "Use shell=False and pass command arguments as a list.",
+    ),
+    (
+        "python_pickle_loads",
+        "Deserialization via pickle.loads",
+        "HIGH",
+        re.compile(r"\bpickle\.loads\s*\("),
+        "Do not deserialize untrusted pickle payloads.",
+    ),
+    (
+        "python_yaml_unsafe_load",
+        "Potential unsafe yaml.load usage",
+        "HIGH",
+        re.compile(r"\byaml\.load\s*\([^\n]*(Loader\s*=\s*yaml\.SafeLoader)?"),
+        "Use yaml.safe_load for untrusted data.",
+    ),
+    (
+        "python_flask_debug_true",
+        "Flask app running with debug=True",
+        "MEDIUM",
+        re.compile(r"\.run\([^\n]*debug\s*=\s*True"),
+        "Disable debug mode in production deployments.",
+    ),
+]
+
+JS_RISK_PATTERNS: list[tuple[str, str, str, re.Pattern[str], str]] = [
+    (
+        "javascript_eval",
+        "JavaScript eval usage",
+        "HIGH",
+        re.compile(r"\beval\s*\("),
+        "Remove eval and use safe parsing/dispatch mechanisms.",
+    ),
+    (
+        "javascript_function_constructor",
+        "Function constructor usage",
+        "HIGH",
+        re.compile(r"new\s+Function\s*\("),
+        "Avoid runtime code generation from strings.",
+    ),
+    (
+        "javascript_child_process_exec_untrusted",
+        "Command execution with potentially untrusted request data",
+        "HIGH",
+        re.compile(r"\bexec\s*\([^\n]*(req\.|request\.)"),
+        "Do not pass request data into command execution.",
+    ),
+]
+
+WEAK_CRYPTO_PATTERNS: list[tuple[str, str, str, re.Pattern[str], str]] = [
+    (
+        "weak_hash_md5",
+        "Weak hash algorithm usage (MD5)",
+        "MEDIUM",
+        re.compile(r"(hashlib\.md5\s*\(|createHash\s*\(\s*['\"]md5['\"])"),
+        "Use a stronger algorithm such as SHA-256 or better as appropriate.",
+    ),
+    (
+        "weak_hash_sha1",
+        "Weak hash algorithm usage (SHA1)",
+        "MEDIUM",
+        re.compile(r"(hashlib\.sha1\s*\(|createHash\s*\(\s*['\"]sha1['\"])"),
+        "Use a stronger algorithm such as SHA-256 or better as appropriate.",
+    ),
+]
 
 
 def _is_probably_text(path: Path) -> bool:
@@ -146,8 +226,8 @@ def _scan_ci_config(repo_root: Path) -> list[Finding]:
 
 def _scan_dependency_hygiene(repo_root: Path) -> list[Finding]:
     findings: list[Finding] = []
-    pyproject = repo_root / "pyproject.toml"
-    if not pyproject.exists():
+    deps = _load_declared_dependencies(repo_root)
+    if deps is None:
         findings.append(
             Finding(
                 severity="MEDIUM",
@@ -160,12 +240,6 @@ def _scan_dependency_hygiene(repo_root: Path) -> list[Finding]:
             )
         )
         return findings
-
-    data = tomllib.loads(pyproject.read_text(encoding="utf-8", errors="ignore"))
-    deps = list(((data.get("project") or {}).get("dependencies") or []))
-    optional = ((data.get("project") or {}).get("optional-dependencies") or {})
-    for _, values in optional.items():
-        deps.extend(values or [])
 
     for dep in deps:
         dep_text = str(dep)
@@ -181,6 +255,159 @@ def _scan_dependency_hygiene(repo_root: Path) -> list[Finding]:
                     recommendation="Add explicit dependency version constraints for reproducibility.",
                 )
             )
+
+    return findings
+
+
+def _load_declared_dependencies(repo_root: Path) -> list[str] | None:
+    pyproject = repo_root / "pyproject.toml"
+    if not pyproject.exists():
+        return None
+
+    data = tomllib.loads(pyproject.read_text(encoding="utf-8", errors="ignore"))
+    deps = list(((data.get("project") or {}).get("dependencies") or []))
+    optional = ((data.get("project") or {}).get("optional-dependencies") or {})
+    for _, values in optional.items():
+        deps.extend(values or [])
+    return [str(dep) for dep in deps]
+
+
+def _scan_dependency_advisories(repo_root: Path) -> list[Finding]:
+    findings: list[Finding] = []
+    report_path = repo_root / "pip-audit-report.json"
+    if not report_path.exists():
+        return findings
+
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8", errors="ignore"))
+    except json.JSONDecodeError:
+        findings.append(
+            Finding(
+                severity="MEDIUM",
+                type="invalid_pip_audit_report",
+                title="Invalid pip-audit report format",
+                file=str(report_path.relative_to(repo_root)),
+                line=None,
+                evidence="Could not parse pip-audit-report.json as JSON",
+                recommendation="Regenerate report using 'pip-audit -f json -o pip-audit-report.json'.",
+            )
+        )
+        return findings
+
+    dependencies = []
+    if isinstance(report, dict):
+        dependencies = report.get("dependencies") or []
+    if not isinstance(dependencies, list):
+        return findings
+
+    report_rel = str(report_path.relative_to(repo_root))
+    for dep in dependencies:
+        if not isinstance(dep, dict):
+            continue
+        name = str(dep.get("name") or "unknown")
+        version = str(dep.get("version") or "unknown")
+        vulns = dep.get("vulns") or []
+        if not isinstance(vulns, list):
+            continue
+        for vuln in vulns:
+            if not isinstance(vuln, dict):
+                continue
+            vuln_id = str(vuln.get("id") or vuln.get("alias") or "unknown-advisory")
+            description = str(vuln.get("description") or "Dependency vulnerability detected")
+            fix_versions = vuln.get("fix_versions") or []
+            fix_hint = ", ".join(str(item) for item in fix_versions[:3]) if isinstance(fix_versions, list) and fix_versions else "latest secure version"
+            findings.append(
+                Finding(
+                    severity="HIGH",
+                    type="dependency_vulnerability",
+                    title=f"Dependency advisory: {vuln_id}",
+                    file=report_rel,
+                    line=None,
+                    evidence=f"{name}=={version}: {description[:160]}",
+                    recommendation=f"Upgrade {name} to a patched version ({fix_hint}) and rerun dependency audit.",
+                )
+            )
+
+    return findings
+
+
+def _scan_language_risks(repo_root: Path, files: list[Path]) -> list[Finding]:
+    findings: list[Finding] = []
+
+    for path in files:
+        suffix = path.suffix.lower()
+        if suffix not in {".py", ".js", ".ts", ".tsx", ".jsx"}:
+            continue
+
+        rel = str(path.relative_to(repo_root))
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+
+        for idx, line in enumerate(text.splitlines(), 1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or stripped.startswith("//"):
+                continue
+
+            if suffix == ".py":
+                for finding_type, title, severity, pattern, recommendation in PY_RISK_PATTERNS:
+                    if finding_type == "python_yaml_unsafe_load":
+                        if "yaml.load(" in line and "SafeLoader" not in line:
+                            findings.append(
+                                Finding(
+                                    severity=severity,
+                                    type=finding_type,
+                                    title=title,
+                                    file=rel,
+                                    line=idx,
+                                    evidence=stripped[:220],
+                                    recommendation=recommendation,
+                                )
+                            )
+                        continue
+
+                    if pattern.search(line):
+                        findings.append(
+                            Finding(
+                                severity=severity,
+                                type=finding_type,
+                                title=title,
+                                file=rel,
+                                line=idx,
+                                evidence=stripped[:220],
+                                recommendation=recommendation,
+                            )
+                        )
+
+            if suffix in {".js", ".ts", ".tsx", ".jsx"}:
+                for finding_type, title, severity, pattern, recommendation in JS_RISK_PATTERNS:
+                    if pattern.search(line):
+                        findings.append(
+                            Finding(
+                                severity=severity,
+                                type=finding_type,
+                                title=title,
+                                file=rel,
+                                line=idx,
+                                evidence=stripped[:220],
+                                recommendation=recommendation,
+                            )
+                        )
+
+            for finding_type, title, severity, pattern, recommendation in WEAK_CRYPTO_PATTERNS:
+                if pattern.search(line):
+                    findings.append(
+                        Finding(
+                            severity=severity,
+                            type=finding_type,
+                            title=title,
+                            file=rel,
+                            line=idx,
+                            evidence=stripped[:220],
+                            recommendation=recommendation,
+                        )
+                    )
 
     return findings
 
@@ -206,6 +433,8 @@ def run_repo_audit(repo_path: str | Path = ".") -> dict:
     findings.extend(_scan_secrets(root, files))
     findings.extend(_scan_ci_config(root))
     findings.extend(_scan_dependency_hygiene(root))
+    findings.extend(_scan_dependency_advisories(root))
+    findings.extend(_scan_language_risks(root, files))
 
     # Deduplicate same type/file/line/evidence to reduce noise.
     deduped: dict[tuple[str, str, int | None, str], Finding] = {}

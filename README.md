@@ -13,10 +13,13 @@ and produces JSON artifacts for dashboard review, regression tracking, and CI.
 3. Records the receipt payload the engine returns for every decision.
 4. Writes `summary.json` with full results, per-category stats, technique-level
     gap analysis, and raw per-attack rows.
-5. Renders a static dashboard (`dashboard/index.html`) that reads API and
-    website summary JSON files, including auto-scan from `runs/`.
+5. Renders a static dashboard (`dashboard/index.html`) that reads API,
+    website, repo, and combined summary JSON files, including auto-scan from
+    `runs/`.
 6. Can run a website audit mode that crawls routes, probes UI actions, runs
     active adversarial checks, and writes `website_summary.json` findings.
+7. Can run a combined command-center sweep that merges API, website, and repo
+    scans into one unified artifact for CI gating.
 
 Receipts also appear in your Aletheia dashboard at
 [app.aletheia-core.com](https://app.aletheia-core.com) automatically - every
@@ -85,6 +88,27 @@ Current repo checks include:
 - secret and key literal detection
 - risky workflow configuration checks
 - dependency constraint hygiene checks
+- language-aware risky code patterns (Python/JS)
+- weak crypto primitive usage checks
+
+Dependency advisory enrichment:
+
+- If `pip-audit-report.json` exists in repo root, findings are enriched with
+    dependency vulnerability advisories.
+- Generate it with:
+
+            pip-audit -f json -o pip-audit-report.json
+
+Combined command-center artifact:
+
+        python -m kit.runner --mode combined \
+                --target-url https://example.com \
+                --repo-path . \
+                --output combined_summary.json
+
+`combined_summary.json` includes per-component artifacts under
+`components.api`, `components.website`, and `components.repo`, plus
+`gates.pass` and aggregated `gates.violations`.
 
 Decision hardening note:
 
@@ -128,6 +152,8 @@ Dashboard views now include:
 - receipt inspection and signature verification tools
 - command filters (category, decision, mismatch-only, search)
 - quick actions (focus weakest category, anomaly focus, export filtered rows)
+- repo drill-down quick actions (critical/high focus and hotspot export)
+- combined artifact component switching (api / website / repo)
 - mission priority board for operator triage
 
 For command-center usage details, see [docs/command-center.md](docs/command-center.md).
