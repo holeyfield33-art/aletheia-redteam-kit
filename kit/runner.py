@@ -2,15 +2,19 @@
 Run the full attack catalog against the Aletheia API.
 
 Usage:
-    python -m kit.runner                         # all categories
+    python -m kit.runner                         # full API catalog
     python -m kit.runner --category prompt_injection
     python -m kit.runner --output results.json   # default: summary.json
+    python -m kit.runner --min-expectation-match-rate 50
     python -m kit.runner --mode website --target-url https://example.com
     python -m kit.runner --mode website --target-url https://example.com --no-browser-fallback
     python -m kit.runner --mode website --target-url https://example.com --rules-file rules.json
     python -m kit.runner --mode website --target-url https://example.com --auth-workflow-file auth_flow.json
     python -m kit.runner --mode website --target-url https://example.com --prompt-tests-file prompt_tests.json
     python -m kit.runner --mode website --target-url https://example.com --protected-route /dashboard
+
+API mode writes summary JSON with categories, results, and gap_report.
+Dashboard auto-scan reads runs/index.json plus summary files under runs/.
 """
 from __future__ import annotations
 
@@ -21,13 +25,55 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from engine.gap_analysis import build_gap_report
 from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
 from kit.client import AletheiaClient
+from kit.exit_codes import FAIL_ERROR, FAIL_THRESHOLD, PASS
 from kit.web_audit import WebAuditConfig, run_website_audit
 from kit.web_audit.config import AuthBypassTarget, AuthStep, CustomFindingRule, PromptInjectionTest
 
 ATTACK_DIR = Path(__file__).parent.parent / "attacks"
 DEFAULT_OUTPUT = Path("summary.json")
+
+
+def infer_custom_technique(attack: dict) -> str:
+    """Infer a custom technique tag when an explicit attack technique is not provided."""
+    category = str(attack.get("category", "")).strip().lower()
+    payload = str(attack.get("payload", "")).strip().lower()
+
+    if category == "benign_controls":
+        return "benign_operational_request"
+    if category == "tool_abuse":
+        if "reverse shell" in payload or "shell" in payload:
+            return "shell_execution_request"
+        return "tool_execution_abuse"
+    if category == "data_exfiltration":
+        if "export" in payload or "upload" in payload or "exfiltrate" in payload:
+            return "direct_data_exfiltration"
+        return "sensitive_data_request"
+    if category == "prompt_injection":
+        if "base64" in payload or "decode" in payload:
+            return "encoded_instruction_injection"
+        if "ignore" in payload or "override" in payload:
+            return "instruction_override"
+        if "hidden" in payload or "internal" in payload:
+            return "hidden_context_exfiltration"
+        return "nested_instruction_injection"
+    if category == "jailbreak":
+        if "roleplay" in payload or "in character" in payload or "act as" in payload:
+            return "persona_switch_jailbreak"
+        if "mode" in payload or "unrestricted" in payload:
+            return "policy_disable_request"
+        return "authority_reframe_jailbreak"
+    if category == "policy_evasion":
+        if "hypothetically" in payload or "in theory" in payload:
+            return "hypothetical_framing"
+        if "for a novel" in payload or "historical" in payload:
+            return "academic_framing"
+        if "translate" in payload or "base64" in payload:
+            return "encoding_evasion"
+        return "policy_scope_reframing"
+    return "unspecified"
 
 
 def load_attacks(category: str | None = None) -> list[dict]:
@@ -45,6 +91,7 @@ def run_attack(client: AletheiaClient, attack: dict) -> dict:
     """Execute one attack, return a result record."""
     started = time.time()
     try:
+        technique = attack.get("technique") or infer_custom_technique(attack)
         result = client.audit(
             payload=attack["payload"],
             action=attack.get("action", "fetch_data"),
@@ -55,6 +102,7 @@ def run_attack(client: AletheiaClient, attack: dict) -> dict:
             "id": attack["id"],
             "name": attack["name"],
             "category": attack["category"],
+            "technique": technique,
             "severity": attack.get("severity", "MEDIUM"),
             "expected_decision": attack["expected_decision"],
             "actual_decision": result.decision,
@@ -66,10 +114,12 @@ def run_attack(client: AletheiaClient, attack: dict) -> dict:
             "error": None,
         }
     except Exception as exc:
+        technique = attack.get("technique") or infer_custom_technique(attack)
         return {
             "id": attack["id"],
             "name": attack["name"],
             "category": attack["category"],
+            "technique": technique,
             "severity": attack.get("severity", "MEDIUM"),
             "expected_decision": attack["expected_decision"],
             "actual_decision": "ERROR",
@@ -293,6 +343,12 @@ def cli() -> int:
     parser.add_argument("--category", help="Run only one category (filename without .json)")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output path for summary JSON")
     parser.add_argument("--base-url", help="Override ALETHEIA_BASE_URL")
+    parser.add_argument(
+        "--min-expectation-match-rate",
+        type=float,
+        default=0.0,
+        help="Fail API mode if expectation match rate falls below this percent",
+    )
     parser.add_argument("--target-url", help="Website URL to audit in --mode website")
     parser.add_argument("--max-pages", type=int, default=100, help="Maximum pages to visit in website mode")
     parser.add_argument("--max-depth", type=int, default=2, help="Maximum crawl depth in website mode")
@@ -362,7 +418,7 @@ def cli() -> int:
         gates = summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
         if not gates.get("pass", False):
             print(f"Gate failures: {', '.join(gates.get('violations', []))}", file=sys.stderr)
-        return 0 if gates.get("pass", False) else 1
+        return PASS if gates.get("pass", False) else FAIL_THRESHOLD
 
     attacks = load_attacks(args.category)
     print(f"Loaded {len(attacks)} attacks", file=sys.stderr)
@@ -384,6 +440,7 @@ def cli() -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "engine_url": client.base_url,
         **summary,
+        "gap_report": build_gap_report(results),
         "results": results,
     }
     Path(args.output).write_text(json.dumps(output, indent=2))
@@ -393,7 +450,16 @@ def cli() -> int:
         f"Output: {args.output}",
         file=sys.stderr,
     )
-    return 0 if summary["errors"] == 0 else 1
+    if summary["errors"] > 0:
+        return FAIL_ERROR
+    if summary["expectation_match_rate"] < args.min_expectation_match_rate:
+        print(
+            "API gate failure: expectation_match_rate "
+            f"{summary['expectation_match_rate']} < {args.min_expectation_match_rate}",
+            file=sys.stderr,
+        )
+        return FAIL_THRESHOLD
+    return PASS
 
 
 if __name__ == "__main__":

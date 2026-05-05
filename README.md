@@ -1,18 +1,20 @@
 # aletheia-redteam-kit
 
 Adversarial test kit for the [Aletheia](https://aletheia-core.com) AI security
-API. Fires ~100 attacks at the hosted engine and produces a cryptographically
-signed receipt for every decision.
+API. Fires 135 attacks at the hosted engine, groups misses by custom technique,
+and produces JSON artifacts for dashboard review, regression tracking, and CI.
 
 ## What it does
 
 1. Loads ~100 adversarial payloads from `attacks/*.json`
-   (prompt injection, data exfiltration, tool abuse, jailbreak, policy evasion,
-   plus 10 benign controls).
+    (prompt injection, data exfiltration, tool abuse, jailbreak, policy evasion,
+    plus benign controls).
 2. Sends each payload to `https://api.aletheia-core.com/v1/audit`.
-3. Records the signed receipt the engine returns for every decision.
-4. Writes `summary.json` with full results, per-category stats, and signatures.
-5. Renders a static dashboard (`dashboard/index.html`) that reads the JSON.
+3. Records the receipt payload the engine returns for every decision.
+4. Writes `summary.json` with full results, per-category stats, technique-level
+    gap analysis, and raw per-attack rows.
+5. Renders a static dashboard (`dashboard/index.html`) that reads API and
+    website summary JSON files, including auto-scan from `runs/`.
 6. Can run a website audit mode that crawls routes, probes UI actions, runs
     active adversarial checks, and writes `website_summary.json` findings.
 
@@ -20,7 +22,7 @@ Receipts also appear in your Aletheia dashboard at
 [app.aletheia-core.com](https://app.aletheia-core.com) automatically - every
 API call is logged on the engine side under your tenant.
 
-## Setup (60 seconds)
+## Setup
 
     git clone https://github.com/holeyfield33-art/aletheia-redteam-kit
     cd aletheia-redteam-kit
@@ -28,9 +30,66 @@ API call is logged on the engine side under your tenant.
     cp .env.example .env
     # edit .env, paste your API key from https://app.aletheia-core.com/keys
     export $(cat .env | xargs)
-    python -m kit.runner
+
+## API red-team quick start
+
+Full catalog run:
+
+    python -m kit.runner --output summary.json
+
+Single category run:
+
+    python -m kit.runner --category prompt_injection --output prompt_only.json
+
+CI-style thresholded run:
+
+    python -m kit.runner \
+        --output ci_summary.json \
+        --min-expectation-match-rate 50
+
+Important API outputs:
+
+- `summary.json`: full run artifact
+- `categories`: blocked / proceeded totals per category
+- `gap_report`: custom-technique bypass analysis
+- `results[*].technique`: explicit or inferred custom technique tag per attack
+
+Exit codes in API mode:
+
+- `0`: run completed and matched the configured threshold
+- `1`: run completed but failed a gate or threshold
+- `2`: run had one or more request/runtime errors
+
+Current custom technique taxonomy examples:
+
+- `persona_switch_jailbreak`
+- `authority_reframe_jailbreak`
+- `policy_scope_reframing`
+- `hypothetical_framing`
+- `academic_framing`
+- `nested_instruction_injection`
+- `encoded_instruction_injection`
+- `direct_data_exfiltration`
+
+## Dashboard
 
 Open `dashboard/index.html` in a browser.
+
+Recommended workflow:
+
+1. Run one or more API red-team jobs that produce `summary*.json` files.
+2. Copy the runs you want to compare into `runs/`.
+3. Add those file names to `runs/index.json`.
+4. In the dashboard, click `Auto-scan ./runs`.
+
+Dashboard views now include:
+
+- per-category blocking ratio
+- regression trend across scanned API runs
+- technique gap analysis from `gap_report`
+- receipt inspection and signature verification tools
+
+If you want a single run only, use `Load ./summary.json` or drag in a JSON file.
 
 ## Running against a self-hosted Aletheia
 
@@ -56,6 +115,20 @@ Run website mode:
 Or use the dedicated wrapper:
 
     python audit.py --target https://example.com
+
+Recommended website run with explicit gates:
+
+    python -m kit.runner --mode website \
+        --target-url https://example.com \
+        --required-route / \
+        --required-route /pricing \
+        --max-pages 25 \
+        --max-depth 1 \
+        --timeout-sec 5 \
+        --max-critical 0 \
+        --max-high 5 \
+        --min-pass-rate 80 \
+        --output website_summary.json
 
 This writes `website_summary.json` (or `--output`) with route and interaction
 findings, severity totals, required-route checks, active attack results,
@@ -230,6 +303,19 @@ delta, and lists of newly failed or resolved active tests between runs.
 
 - `receipt_key`: the public signing key endpoint is reachable and returns PEM
 - `receipt_signature`: a live API receipt verifies against that key
+
+## GitHub Actions CI
+
+The repository includes a workflow at `.github/workflows/redteam.yml`.
+
+To enable it:
+
+1. Add a repository secret named `ALETHEIA_API_KEY`.
+2. Push to `main` or open a pull request.
+3. The workflow runs `python -m kit.runner --min-expectation-match-rate 50`.
+
+The workflow uploads `ci_summary.json` and, on pull requests, posts a short
+per-category comment.
 
 ## Verifying receipt signatures
 

@@ -1,0 +1,82 @@
+name: redteam
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api-redteam:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Ensure API key is present
+        run: |
+          if [ -z "${ALETHEIA_API_KEY}" ]; then
+            echo "Missing ALETHEIA_API_KEY secret"
+            exit 2
+          fi
+        env:
+          ALETHEIA_API_KEY: ${{ secrets.ALETHEIA_API_KEY }}
+
+      - name: Run API red-team suite
+        run: |
+          python -m kit.runner \
+            --output ci_summary.json \
+            --min-expectation-match-rate 50
+        env:
+          ALETHEIA_API_KEY: ${{ secrets.ALETHEIA_API_KEY }}
+
+      - name: Upload summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-summary
+          path: ci_summary.json
+
+      - name: Comment PR summary
+        if: github.event_name == 'pull_request' && always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f ci_summary.json ]; then
+            echo "ci_summary.json missing; skipping PR comment"
+            exit 0
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("ci_summary.json").read_text())
+          cats = data.get("categories", {})
+          lines = [
+              "## Red-Team API Report",
+              "",
+              f"- Expectation match: {data.get('expectation_match_rate', 0)}%",
+              f"- Block rate: {data.get('block_rate', 0)}%",
+              f"- Blocked: {data.get('blocked', 0)}/{data.get('attacks_total', 0)}",
+              "",
+              "| Category | Blocked | Total |",
+              "|---|---:|---:|",
+          ]
+          for name in sorted(cats):
+              row = cats[name]
+              lines.append(f"| {name} | {row.get('blocked', 0)} | {row.get('total', 0)} |")
+          Path("pr_comment.md").write_text("\n".join(lines) + "\n")
+          PY
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file pr_comment.md
