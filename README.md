@@ -58,6 +58,34 @@ Important API outputs:
 - `unknown`: count of requests classified as unknown decisions
 - `empty_200_anomalies`: count of empty JSON HTTP 200 responses
 
+## Repository audit mode (Phase 5B)
+
+Run static repository risk scanning:
+
+    python -m kit.runner --mode repo --repo-path . --output repo_summary.json
+
+Tune repo gate thresholds:
+
+    python -m kit.runner --mode repo \
+        --repo-path . \
+        --max-repo-critical 0 \
+        --max-repo-high 5 \
+        --output repo_summary.json
+
+Repo summary highlights:
+
+- `findings_total`
+- `findings_by_severity`
+- `findings_by_type`
+- `risk_score`
+- `gates.pass` and `gates.violations`
+
+Current repo checks include:
+
+- secret and key literal detection
+- risky workflow configuration checks
+- dependency constraint hygiene checks
+
 Decision hardening note:
 
 - Empty JSON `200` responses are treated as `UNKNOWN` instead of `PROCEED`

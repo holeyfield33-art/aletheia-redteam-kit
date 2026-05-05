@@ -6,13 +6,16 @@ This project dashboard is designed as an operator command center for API and web
 
 Open `dashboard/index.html` in your browser.
 
+Note: current dashboard panels are optimized for API and website summaries. Repo-audit summaries (`mode = repo`) are generated for CI and artifact review in this phase and will be promoted into first-class dashboard panels in the next phase.
+
 ## Primary Operator Workflow
 
 1. Run one or more API scans with `python -m kit.runner`.
-2. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
-3. Triage weak categories using the Mission Priority Board.
-4. Filter to actionable rows using Command Filters and Quick Actions.
-5. Export filtered rows to hand off incidents or create follow-up attack expansions.
+2. Run repository scan with `python -m kit.runner --mode repo --repo-path . --output repo_summary.json`.
+3. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
+4. Triage weak categories using the Mission Priority Board.
+5. Filter to actionable rows using Command Filters and Quick Actions.
+6. Export filtered rows to hand off incidents or create follow-up attack expansions.
 
 ## Command Filters
 
