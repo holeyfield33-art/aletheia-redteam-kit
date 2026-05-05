@@ -738,3 +738,113 @@ def test_cli_repo_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatch, t
     assert data["gates"]["pass"] is True
     assert data["gate_exceptions"]["pass_with_exceptions"] is True
     assert len(data["gate_exceptions"]["applied"]) == 1
+
+
+def test_cli_repo_mode_baseline_approve_writes_state(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "repo_summary.json"
+    baseline_state = tmp_path / "baseline_state.json"
+
+    monkeypatch.setattr(
+        runner,
+        "run_repo_audit",
+        lambda path, threat_feed_path=None: {
+            "generated_at": "2026-05-05T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": str(path),
+            "files_scanned": 1,
+            "findings_total": 0,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+            "findings_by_type": {},
+            "risk_score": 100,
+            "gates": {"pass": True, "violations": []},
+            "findings": [],
+        },
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "repo",
+            "--repo-path",
+            str(tmp_path),
+            "--baseline-state-file",
+            str(baseline_state),
+            "--baseline-action",
+            "approve",
+            "--baseline-owner",
+            "security-team",
+            "--baseline-reason",
+            "Golden baseline",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    state = json.loads(baseline_state.read_text())
+    data = json.loads(output.read_text())
+
+    assert rc == 0
+    assert state["status"] == "approved"
+    assert state["approved_by"] == "security-team"
+    assert data["baseline_action"]["action"] == "approve"
+
+
+def test_cli_repo_mode_baseline_allows_only_known_violations(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "repo_summary.json"
+    baseline_state = tmp_path / "baseline_state.json"
+    baseline_state.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "status": "approved",
+                "mode": "repo",
+                "approved_at": "2026-05-05T00:00:00+00:00",
+                "approved_by": "security-team",
+                "expires_at": "2099-01-01T00:00:00+00:00",
+                "expected_violations": ["high_repo_findings_over_limit"],
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "run_repo_audit",
+        lambda path, threat_feed_path=None: {
+            "generated_at": "2026-05-05T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": str(path),
+            "files_scanned": 1,
+            "findings_total": 1,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0, "LOW": 0},
+            "findings_by_type": {"x": 1},
+            "risk_score": 90,
+            "gates": {"pass": False, "violations": ["high_repo_findings_over_limit"]},
+            "findings": [],
+        },
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "repo",
+            "--repo-path",
+            str(tmp_path),
+            "--baseline-state-file",
+            str(baseline_state),
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    data = json.loads(output.read_text())
+
+    assert rc == 0
+    assert data["gates"]["pass"] is True
+    assert data["baseline"]["enforced_pass"] is True
+    assert data["baseline"]["new_violations"] == []

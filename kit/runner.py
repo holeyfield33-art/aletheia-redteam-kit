@@ -498,6 +498,136 @@ def _apply_gate_exceptions(mode: str, gates: dict, exceptions_data: dict) -> dic
     }
 
 
+def _load_baseline_state(path: str | None) -> tuple[dict | None, str | None]:
+    if not path:
+        return None, None
+
+    state_path = Path(path)
+    if not state_path.exists():
+        return None, None
+
+    try:
+        raw = json.loads(state_path.read_text(encoding="utf-8", errors="ignore"))
+    except json.JSONDecodeError:
+        return None, "invalid_json"
+
+    if not isinstance(raw, dict):
+        return None, "invalid_format"
+    return raw, None
+
+
+def _baseline_is_active(state: dict | None, mode: str) -> bool:
+    if not state:
+        return False
+    if str(state.get("status") or "").lower() != "approved":
+        return False
+
+    state_mode = str(state.get("mode") or "all").lower()
+    if state_mode not in {"all", mode}:
+        return False
+
+    expiry_raw = str(state.get("expires_at") or "").strip()
+    if not expiry_raw:
+        return True
+
+    expiry = _parse_exception_expiry(expiry_raw)
+    if expiry is None:
+        return False
+    return expiry >= datetime.now(timezone.utc)
+
+
+def _enforce_baseline(mode: str, gates: dict, baseline_state: dict | None, baseline_source: str | None) -> dict:
+    current = list((gates or {}).get("violations") or [])
+    baseline_violations = []
+    if baseline_state:
+        baseline_violations = [str(item) for item in (baseline_state.get("expected_violations") or []) if str(item)]
+
+    active = _baseline_is_active(baseline_state, mode)
+    baseline_set = set(baseline_violations)
+    current_set = set(current)
+    new_violations = sorted(current_set - baseline_set)
+    resolved_violations = sorted(baseline_set - current_set)
+
+    enforced_pass = False
+    if active and not new_violations and bool(current):
+        gates["pass"] = True
+        enforced_pass = True
+
+    return {
+        "source": baseline_source,
+        "status": (baseline_state or {}).get("status") if baseline_state else None,
+        "mode": (baseline_state or {}).get("mode") if baseline_state else None,
+        "active": active,
+        "approved_by": (baseline_state or {}).get("approved_by") if baseline_state else None,
+        "approved_at": (baseline_state or {}).get("approved_at") if baseline_state else None,
+        "expires_at": (baseline_state or {}).get("expires_at") if baseline_state else None,
+        "new_violations": new_violations,
+        "resolved_violations": resolved_violations,
+        "enforced_pass": enforced_pass,
+    }
+
+
+def _apply_baseline_action(
+    action: str,
+    mode: str,
+    summary: dict,
+    baseline_state_path: str | None,
+    owner: str | None,
+    reason: str | None,
+    expires_at: str | None,
+    existing_state: dict | None,
+) -> dict:
+    if not baseline_state_path:
+        return {"action": "none", "error": "baseline_state_file_required"}
+
+    path = Path(baseline_state_path)
+    now = datetime.now(timezone.utc).isoformat()
+    gates = summary.get("gates") or {}
+    current_violations = [str(item) for item in (gates.get("violations") or [])]
+
+    if action == "status":
+        return {
+            "action": "status",
+            "state": existing_state,
+            "active": _baseline_is_active(existing_state, mode),
+            "state_file": str(path),
+        }
+
+    if not owner:
+        return {"action": action, "error": "baseline_owner_required", "state_file": str(path)}
+
+    if action == "reject":
+        state = {
+            "version": 1,
+            "status": "rejected",
+            "mode": mode,
+            "rejected_at": now,
+            "rejected_by": owner,
+            "reason": reason or "",
+            "expected_violations": current_violations,
+        }
+        path.write_text(json.dumps(state, indent=2))
+        return {"action": "reject", "state_file": str(path), "state": state}
+
+    state: dict = {
+        "version": 1,
+        "status": "approved",
+        "mode": mode,
+        "approved_at": now,
+        "approved_by": owner,
+        "reason": reason or "",
+        "expected_violations": current_violations,
+    }
+    if expires_at:
+        expiry = _parse_exception_expiry(expires_at)
+        if expiry is None:
+            return {"action": "approve", "error": "invalid_baseline_expiry", "state_file": str(path)}
+        state["expires_at"] = expiry.isoformat()
+
+    path.write_text(json.dumps(state, indent=2))
+    return {"action": "approve", "state_file": str(path), "state": state}
+
+
 def load_custom_rules(path: str | None) -> list[CustomFindingRule]:
     """Load custom website finding rules from JSON file."""
     if not path:
@@ -716,6 +846,20 @@ def cli() -> int:
         default=os.environ.get("ALETHEIA_GATE_EXCEPTIONS_FILE"),
         help="JSON file containing time-bound gate exceptions (requires owner and expires_at)",
     )
+    parser.add_argument(
+        "--baseline-state-file",
+        default=os.environ.get("ALETHEIA_BASELINE_STATE_FILE"),
+        help="Baseline lifecycle state JSON file path",
+    )
+    parser.add_argument(
+        "--baseline-action",
+        choices=["none", "status", "approve", "reject"],
+        default="none",
+        help="Baseline lifecycle action for repo/combined modes",
+    )
+    parser.add_argument("--baseline-owner", help="Owner for baseline approve/reject actions")
+    parser.add_argument("--baseline-reason", help="Reason for baseline approve/reject actions")
+    parser.add_argument("--baseline-expires-at", help="Optional baseline approval expiry (ISO-8601)")
     parser.add_argument("--max-repo-critical", type=int, default=0, help="Fail repo mode if CRITICAL findings exceed this")
     parser.add_argument("--max-repo-high", type=int, default=5, help="Fail repo mode if HIGH findings exceed this")
     parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
@@ -733,6 +877,7 @@ def cli() -> int:
 
     if args.mode == "combined":
         gate_exceptions_data = _load_gate_exceptions(args.gate_exceptions_file)
+        baseline_state, baseline_error = _load_baseline_state(args.baseline_state_file)
         combined: dict = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "mode": "combined",
@@ -852,6 +997,20 @@ def cli() -> int:
                 combined["gates"]["violations"].append(f"repo:{violation}")
 
         combined["gate_exceptions"] = _apply_gate_exceptions("combined", combined["gates"], gate_exceptions_data)
+        combined["baseline"] = _enforce_baseline("combined", combined["gates"], baseline_state, args.baseline_state_file)
+        if baseline_error:
+            combined["baseline"]["error"] = baseline_error
+        if args.baseline_action != "none":
+            combined["baseline_action"] = _apply_baseline_action(
+                action=args.baseline_action,
+                mode="combined",
+                summary=combined,
+                baseline_state_path=args.baseline_state_file,
+                owner=args.baseline_owner,
+                reason=args.baseline_reason,
+                expires_at=args.baseline_expires_at,
+                existing_state=baseline_state,
+            )
 
         combined.update(_compute_combined_normalized_summary(combined, hard_error=hard_error))
 
@@ -949,6 +1108,7 @@ def cli() -> int:
 
     if args.mode == "repo":
         gate_exceptions_data = _load_gate_exceptions(args.gate_exceptions_file)
+        baseline_state, baseline_error = _load_baseline_state(args.baseline_state_file)
         summary = run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
         gates = summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
 
@@ -964,6 +1124,20 @@ def cli() -> int:
 
         summary["gates"] = gates
         summary["gate_exceptions"] = _apply_gate_exceptions("repo", summary["gates"], gate_exceptions_data)
+        summary["baseline"] = _enforce_baseline("repo", summary["gates"], baseline_state, args.baseline_state_file)
+        if baseline_error:
+            summary["baseline"]["error"] = baseline_error
+        if args.baseline_action != "none":
+            summary["baseline_action"] = _apply_baseline_action(
+                action=args.baseline_action,
+                mode="repo",
+                summary=summary,
+                baseline_state_path=args.baseline_state_file,
+                owner=args.baseline_owner,
+                reason=args.baseline_reason,
+                expires_at=args.baseline_expires_at,
+                existing_state=baseline_state,
+            )
         Path(args.output).write_text(json.dumps(summary, indent=2))
 
         print(

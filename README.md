@@ -147,6 +147,32 @@ Example exceptions file:
                     ]
                 }
 
+                Baseline approval workflow:
+
+                - Use `--baseline-state-file` to persist approved/rejected baseline state.
+                - Use `--baseline-action approve|reject|status` (repo and combined modes).
+                - `approve` and `reject` require `--baseline-owner`.
+                - Optional expiry for approved baseline: `--baseline-expires-at`.
+                - During regular runs (`--baseline-action none`), active approved baselines can
+                    allow already-known violations while still surfacing any new violations.
+
+                Examples:
+
+                    python -m kit.runner --mode repo \
+                        --repo-path . \
+                        --baseline-state-file baseline_state.json \
+                        --baseline-action approve \
+                        --baseline-owner security-team \
+                        --baseline-reason "initial accepted posture" \
+                        --baseline-expires-at 2026-06-01T00:00:00+00:00 \
+                        --output repo_summary.json
+
+                    python -m kit.runner --mode combined \
+                        --target-url https://example.com \
+                        --baseline-state-file baseline_state.json \
+                        --baseline-action status \
+                        --output combined_summary.json
+
 Normalized top-level combined signals now include:
 
 - `risk_score`
