@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from fnmatch import fnmatch
 from math import log2
+from pathlib import Path
 import re
 import tomllib
 import json
@@ -186,6 +187,19 @@ DEFAULT_THREAT_FEED: list[dict[str, str]] = [
     },
 ]
 
+TEST_FIXTURE_ALLOWLIST_MARKER = "aletheia-redteam:allowed-test-fixture"
+TEST_FIXTURE_GLOBS = (
+    "tests/**",
+    "test/**",
+)
+GENERATED_ARTIFACT_GLOBS = (
+    "summary.json",
+    "summary_*.json",
+    "website_summary.json",
+    "report.md",
+    "runs/**",
+)
+
 
 def _is_probably_text(path: Path) -> bool:
     if path.suffix.lower() in ALLOWED_TEXT_SUFFIXES:
@@ -201,20 +215,40 @@ def _iter_source_files(repo_root: Path) -> list[Path]:
         rel = path.relative_to(repo_root)
         if rel.parts and rel.parts[0] in {".git", ".venv", "venv", "env", "node_modules", "dist", "build", "__pycache__", ".pytest_cache"}:
             continue
+        if any(fnmatch(str(rel).replace("\\", "/"), pattern) for pattern in GENERATED_ARTIFACT_GLOBS):
+            continue
         if _is_probably_text(path):
             files.append(path)
     return files
 
 
-def _scan_secrets(repo_root: Path, files: list[Path]) -> list[Finding]:
+def _matches_fixture_path(rel_path: str) -> bool:
+    normalized = rel_path.replace("\\", "/")
+    return any(fnmatch(normalized, pattern) for pattern in TEST_FIXTURE_GLOBS)
+
+
+def _is_allowlisted_fixture_line(rel_path: str, line: str) -> bool:
+    return _matches_fixture_path(rel_path) and TEST_FIXTURE_ALLOWLIST_MARKER in line
+
+
+def _scan_secrets(
+    repo_root: Path,
+    files: list[Path],
+    *,
+    include_test_fixtures: bool = False,
+) -> list[Finding]:
     findings: list[Finding] = []
     for path in files:
         rel = str(path.relative_to(repo_root))
+        if not include_test_fixtures and _matches_fixture_path(rel):
+            continue
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
         for idx, line in enumerate(text.splitlines(), 1):
+            if _is_allowlisted_fixture_line(rel, line):
+                continue
             for finding_type, title, pattern in SECRET_PATTERNS:
                 if pattern.search(line):
                     findings.append(
@@ -260,6 +294,8 @@ def _shannon_entropy(value: str) -> float:
 
 def _contains_high_entropy_secret_literal(line: str) -> bool:
     if "http://" in line or "https://" in line:
+        return False
+    if not re.search(r"(?i)(api[_-]?key|token|secret|password|session)", line):
         return False
     for candidate in re.findall(r"['\"]([A-Za-z0-9_\-+/=]{20,})['\"]", line):
         has_alpha = any(char.isalpha() for char in candidate)
@@ -442,6 +478,8 @@ def _scan_language_risks(repo_root: Path, files: list[Path]) -> list[Finding]:
             stripped = line.strip()
             if not stripped or stripped.startswith("#") or stripped.startswith("//"):
                 continue
+            if _is_allowlisted_fixture_line(rel, line):
+                continue
 
             if suffix == ".py":
                 for finding_type, title, severity, pattern, recommendation in PY_RISK_PATTERNS:
@@ -597,13 +635,18 @@ def _serialize_finding(finding: Finding, threat_index: dict[str, list[dict[str, 
     return data
 
 
-def run_repo_audit(repo_path: str | Path = ".", threat_feed_path: str | None = None) -> dict:
+def run_repo_audit(
+    repo_path: str | Path = ".",
+    threat_feed_path: str | None = None,
+    *,
+    include_test_fixtures: bool = False,
+) -> dict:
     """Run static repository checks and return summary dictionary."""
     root = Path(repo_path).resolve()
     files = _iter_source_files(root)
 
     findings: list[Finding] = []
-    findings.extend(_scan_secrets(root, files))
+    findings.extend(_scan_secrets(root, files, include_test_fixtures=include_test_fixtures))
     findings.extend(_scan_ci_config(root))
     findings.extend(_scan_dependency_hygiene(root))
     findings.extend(_scan_dependency_advisories(root))
@@ -641,6 +684,12 @@ def run_repo_audit(repo_path: str | Path = ".", threat_feed_path: str | None = N
         "mode": "repo",
         "repo_root": str(root),
         "files_scanned": len(files),
+        "secret_scan": {
+            "include_test_fixtures": include_test_fixtures,
+            "excluded_globs": [] if include_test_fixtures else list(TEST_FIXTURE_GLOBS),
+            "allowlist_marker": TEST_FIXTURE_ALLOWLIST_MARKER,
+        },
+        "ignored_artifacts": list(GENERATED_ARTIFACT_GLOBS),
         "findings_total": len(unique_findings),
         "findings_by_severity": by_severity,
         "findings_by_type": by_type,

@@ -15,7 +15,7 @@ version = "0.0.1"
 dependencies = ["httpx>=0.27"]
 """.strip()
     )
-    (tmp_path / "app.py").write_text('API_KEY = "supersecretvalue123456"\n')
+    (tmp_path / "app.py").write_text('API_KEY = "sk-test-0000000000000000"\n')  # aletheia-redteam:allowed-test-fixture
 
     summary = run_repo_audit(tmp_path)
 
@@ -34,7 +34,7 @@ version = "0.0.1"
 dependencies = ["httpx>=0.27"]
 """.strip()
     )
-    (tmp_path / "secrets.txt").write_text("-----BEGIN RSA PRIVATE KEY-----\nabc\n-----END RSA PRIVATE KEY-----\n")
+    (tmp_path / "secrets.txt").write_text("-----BEGIN RSA PRIVATE KEY-----\nfixture\n-----END RSA PRIVATE KEY-----\n")  # aletheia-redteam:allowed-test-fixture
 
     summary = run_repo_audit(tmp_path)
     assert summary["findings_by_severity"]["CRITICAL"] >= 1
@@ -54,8 +54,8 @@ dependencies = ["httpx>=0.27"]
         """
 import subprocess
 cmd = input("cmd>")
-eval(input("expr>"))
-subprocess.run(cmd, shell=True)
+eval(input("expr>"))  # aletheia-redteam:allowed-test-fixture
+subprocess.run(cmd, shell=True)  # aletheia-redteam:allowed-test-fixture
 """.strip()
     )
 
@@ -180,7 +180,7 @@ dependencies = ["httpx>=0.27"]
         """
 import subprocess
 cmd = input("cmd>")
-subprocess.run(cmd, shell=True)
+subprocess.run(cmd, shell=True)  # aletheia-redteam:allowed-test-fixture
 """.strip()
     )
     (tmp_path / "threat_feed.json").write_text(
@@ -214,7 +214,7 @@ dependencies = ["httpx>=0.27"]
 """.strip()
     )
     (tmp_path / "settings.py").write_text(
-        'SESSION_TOKEN = "a9Xk_12LmN-45pqR+stuVw8Y=zzA"\n'
+        'SESSION_TOKEN = "a9Xk_12LmN-45pqR+stuVw8Y=zzA"\n'  # aletheia-redteam:allowed-test-fixture
     )
 
     summary = run_repo_audit(tmp_path)
@@ -235,8 +235,8 @@ dependencies = ["httpx>=0.27"]
     (tmp_path / "service.py").write_text(
         """
 import requests
-response = requests.get("https://example.test", verify=False)
-jwt_opts = {"alg": "none"}
+response = requests.get("https://example.test", verify=False)  # aletheia-redteam:allowed-test-fixture
+jwt_opts = {"alg": "none"}  # aletheia-redteam:allowed-test-fixture
 """.strip()
     )
 
@@ -245,3 +245,100 @@ jwt_opts = {"alg": "none"}
 
     assert "tls_verification_disabled" in finding_types
     assert "jwt_none_algorithm" in finding_types
+
+
+def test_repo_audit_ignores_test_fixture_secrets_by_default(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_fixture.py").write_text('API_KEY = "sk-test-0000000000000000"\n')
+
+    summary = run_repo_audit(tmp_path)
+
+    assert summary["findings_by_type"].get("api_key_literal", 0) == 0
+    assert summary["secret_scan"]["include_test_fixtures"] is False
+
+
+def test_repo_audit_can_include_test_fixture_findings_with_override(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_fixture.py").write_text(
+        'API_KEY = "sk-test-0000000000000000"\nsubprocess.run(cmd, shell=True)  # aletheia-redteam:allowed-test-fixture\n'
+    )
+
+    summary = run_repo_audit(tmp_path, include_test_fixtures=True)
+
+    assert summary["findings_by_type"]["api_key_literal"] >= 1
+    assert summary["findings_by_type"].get("python_subprocess_shell_true", 0) == 0
+    assert summary["secret_scan"]["include_test_fixtures"] is True
+
+
+def test_cli_repo_mode_can_include_test_fixture_secrets(monkeypatch, tmp_path) -> None:
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    tests_dir = repo_dir / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_fixture.py").write_text('API_KEY = "sk-test-0000000000000000"\n')
+    output = tmp_path / "repo_summary.json"
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "repo",
+            "--repo-path",
+            str(repo_dir),
+            "--repo-include-test-fixtures",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    assert rc == 0
+
+    data = json.loads(output.read_text())
+    assert data["findings_by_type"]["api_key_literal"] >= 1
+
+
+def test_repo_audit_ignores_generated_summary_artifacts(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "summary.json").write_text(
+        '{"receipt": "-----BEGIN RSA PRIVATE KEY-----\\nfixture\\n-----END RSA PRIVATE KEY-----"}'
+    )
+
+    summary = run_repo_audit(tmp_path)
+
+    assert summary["findings_by_severity"].get("CRITICAL", 0) == 0
+    assert "summary.json" in summary["ignored_artifacts"]

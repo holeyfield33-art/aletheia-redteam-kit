@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -131,11 +133,93 @@ def test_falls_back_to_status_when_json_body_is_empty(
         "status_code": status_code,
         "empty_body": True,
         "empty_body_anomaly": status_code == 200,
+        "attempt": 3,
+        "attempts": 3,
     }
     assert result.reason == (
-        f"Empty JSON response body from server (status {status_code}); "
+        f"Empty JSON response body from server (status {status_code}) after 3 attempts; "
         f"treated as {expected_decision}"
     )
+
+
+def test_retries_transient_empty_200_then_returns_valid_decision(monkeypatch: pytest.MonkeyPatch) -> None:
+    responses = [
+        {
+            "status_code": 200,
+            "headers": {"content-type": "application/json"},
+            "content": b"",
+        },
+        {
+            "status_code": 200,
+            "headers": {"content-type": "application/json"},
+            "content": b'{"request_id":"req-2","decision":"PROCEED","reason":"ok","receipt":{}}',
+        },
+    ]
+
+    class FakeResponse:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self.status_code = payload["status_code"]
+            self.headers = payload["headers"]
+            self.content = payload["content"]
+
+        def json(self) -> dict[str, object]:
+            return json.loads(self.content.decode("utf-8"))
+
+        def raise_for_status(self) -> None:
+            raise AssertionError("raise_for_status should not be called for 200/403")
+
+    class FakeHttpxClient:
+        def __init__(self, **_: object) -> None:
+            self.calls = 0
+
+        def post(self, path: str, json: dict[str, str]) -> FakeResponse:
+            payload = responses[self.calls]
+            self.calls += 1
+            return FakeResponse(payload)
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("kit.client.httpx.Client", FakeHttpxClient)
+
+    with AletheiaClient(api_key="k") as client:
+        result = client.audit("x", "a", "o")
+
+    assert result.decision == "PROCEED"
+    assert result.request_id == "req-2"
+
+
+def test_retries_missing_decision_then_returns_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+        content = b'{"request_id":"req-1","reason":"pending"}'
+
+        def json(self) -> dict[str, object]:
+            return {"request_id": "req-1", "reason": "pending"}
+
+        def raise_for_status(self) -> None:
+            raise AssertionError("raise_for_status should not be called for 200/403")
+
+    class FakeHttpxClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def post(self, path: str, json: dict[str, str]) -> FakeResponse:
+            return FakeResponse()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("kit.client.httpx.Client", FakeHttpxClient)
+
+    with AletheiaClient(api_key="k") as client:
+        result = client.audit("x", "a", "o")
+
+    assert result.decision == "UNKNOWN"
+    assert result.raw["missing_decision"] is True
+    assert result.raw["attempt"] == 3
+    assert result.reason == "Missing decision in JSON response body from server (status 200) after 3 attempts; treated as UNKNOWN"
 
 
 def test_raises_on_5xx(monkeypatch: pytest.MonkeyPatch) -> None:

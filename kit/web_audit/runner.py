@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from collections import Counter, deque
 from datetime import datetime, timezone
 import json
@@ -150,20 +151,20 @@ def _run_playwright_audit(config: WebAuditConfig) -> dict[str, Any]:
 
             status_code = response.status if response else None
             if status_code is None or status_code >= 400:
-                findings.append(
-                    Finding(
-                        severity="CRITICAL" if (status_code or 0) >= 500 else "HIGH",
-                        type="route_error",
-                        title="Route returned error status",
-                        page_url=url,
-                        element_selector=None,
-                        action="visit",
-                        expected="HTTP < 400",
-                        observed=f"HTTP {status_code}",
-                        evidence={"status_code": status_code},
-                        reproducible_steps=[f"Navigate to {url}"],
-                    ).to_dict()
-                )
+                _finding = Finding(
+                    severity="CRITICAL" if (status_code or 0) >= 500 else "HIGH",
+                    type="route_error",
+                    title="Route returned error status",
+                    page_url=url,
+                    element_selector=None,
+                    action="visit",
+                    expected="HTTP < 400",
+                    observed=f"HTTP {status_code}",
+                    evidence={"status_code": status_code},
+                    reproducible_steps=[f"Navigate to {url}"],
+                ).to_dict()
+                _maybe_capture_screenshot(config=config, page=page, finding=_finding)
+                findings.append(_finding)
 
             page_title = page.title()
             page_body = page.content()
@@ -221,7 +222,7 @@ def _run_playwright_audit(config: WebAuditConfig) -> dict[str, Any]:
                 except Exception as exc:
                     findings.append(
                         Finding(
-                            severity="HIGH",
+                            severity=config.dead_click_error_severity,
                             type="dead_click",
                             title="Button click failed",
                             page_url=url,
@@ -273,10 +274,11 @@ def _run_playwright_audit(config: WebAuditConfig) -> dict[str, Any]:
                         ).to_dict()
                     )
 
-            for message in console_errors:
+            js_error_cap = config.max_js_errors_per_page
+            for message in console_errors[:js_error_cap]:
                 findings.append(
                     Finding(
-                        severity="HIGH",
+                        severity=config.js_error_severity,
                         type="js_error",
                         title="Console error detected",
                         page_url=url,
@@ -289,7 +291,14 @@ def _run_playwright_audit(config: WebAuditConfig) -> dict[str, Any]:
                     ).to_dict()
                 )
 
+            net_error_cap = config.max_network_errors_per_page
+            net_error_count = 0
             for failed_url in failed_requests:
+                if config.skip_external_network_errors and not _is_internal_url(config.base_url, failed_url):
+                    continue
+                if net_error_count >= net_error_cap:
+                    break
+                net_error_count += 1
                 findings.append(
                     Finding(
                         severity="MEDIUM",
@@ -310,6 +319,9 @@ def _run_playwright_audit(config: WebAuditConfig) -> dict[str, Any]:
 
         browser.close()
 
+    if config.deduplicate_findings:
+        findings = _deduplicate_findings(findings)
+
     summary = _finalize_summary(
         config=config,
         findings=findings,
@@ -322,6 +334,44 @@ def _run_playwright_audit(config: WebAuditConfig) -> dict[str, Any]:
     )
     summary["audit_backend"] = "playwright"
     return summary
+
+
+def _deduplicate_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove duplicate findings by id, keeping first occurrence (highest priority order)."""
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for f in findings:
+        fid = f.get("id", "")
+        if fid and fid in seen:
+            continue
+        if fid:
+            seen.add(fid)
+        result.append(f)
+    return result
+
+
+def _maybe_capture_screenshot(
+    *,
+    config: Any,
+    page: Any,
+    finding: dict[str, Any],
+) -> None:
+    """Embed a base64 PNG screenshot into finding['evidence'] for CRITICAL/HIGH findings."""
+    if not getattr(config, "capture_screenshots", False):
+        return
+    if finding.get("severity") not in ("CRITICAL", "HIGH"):
+        return
+    try:
+        png_bytes = page.screenshot(full_page=False)
+        screenshot_dir = Path(getattr(config, "screenshot_dir", "screenshots"))
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
+        finding_id = finding.get("id", "unknown")
+        out_path = screenshot_dir / f"{finding_id}.png"
+        out_path.write_bytes(png_bytes)
+        finding["evidence"]["screenshot_path"] = str(out_path)
+        finding["evidence"]["screenshot_b64"] = base64.b64encode(png_bytes).decode("ascii")
+    except Exception as exc:
+        finding["evidence"]["screenshot_error"] = str(exc)
 
 
 def _run_http_fallback(config: WebAuditConfig) -> dict[str, Any]:
@@ -638,6 +688,34 @@ def _rule_match(rule: CustomFindingRule, target_value: str) -> tuple[bool, str |
     return True, excerpt[:180]
 
 
+_FINDING_TYPE_PRIORITY: dict[str, int] = {
+    "auth_bypass": 0,
+    "signature_failure": 1,
+    "route_error": 2,
+    "auth_failure": 3,
+    "prompt_injection": 4,
+    "perf_timeout": 5,
+    "tab_failure": 6,
+    "custom_rule": 7,
+    "dead_click": 8,
+    "js_error": 9,
+    "network_error": 10,
+}
+
+_SEVERITY_PRIORITY: dict[str, int] = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+
+
+def _prioritize_findings(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Sort findings: security-impacting types first, then by severity."""
+    return sorted(
+        findings,
+        key=lambda f: (
+            _SEVERITY_PRIORITY.get(f.get("severity", "LOW"), 9),
+            _FINDING_TYPE_PRIORITY.get(f.get("type", ""), 99),
+        ),
+    )
+
+
 def _finalize_summary(
     *,
     config: WebAuditConfig,
@@ -651,6 +729,7 @@ def _finalize_summary(
 ) -> dict[str, Any]:
     active_test_results = _run_active_tests(config, auth_cookies=auth_cookies)
     findings = [*findings, *active_test_results["findings"]]
+    findings = _prioritize_findings(findings)
     active_tests = active_test_results["active_tests"]
     severity_counts = Counter(f["severity"] for f in findings)
     type_counts = Counter(f["type"] for f in findings)

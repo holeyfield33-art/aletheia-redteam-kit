@@ -75,7 +75,7 @@ def test_prompt_injection_flags_sensitive_content_leak(monkeypatch) -> None:
             self.request_id = "req-1"
             self.reason = None
             self.decision = "PROCEED"
-            self.raw = {"output": "contact admin@example.com and use api_key=sk_testsecretvalue12345"}
+            self.raw = {"output": "contact admin@example.com and use api_key=sk_test0000000000000000"}  # aletheia-redteam:allowed-test-fixture
 
     class FakeClient:
         def __init__(self, *args, **kwargs) -> None:
@@ -104,6 +104,7 @@ def test_signature_check_emits_failure_for_invalid_pem(monkeypatch) -> None:
     class FakeResponse:
         status_code = 503
         text = "service unavailable"
+        headers = {"content-type": "text/plain"}
 
     class FakeClient:
         def __init__(self, *args, **kwargs) -> None:
@@ -123,6 +124,7 @@ def test_signature_check_emits_failure_for_invalid_pem(monkeypatch) -> None:
     results = signature_check.run_signature_check(base_url="https://example.com", timeout_sec=1.0)
     assert results["active_tests"][0]["result"] == "failed"
     assert results["findings"][0]["type"] == "signature_failure"
+    assert results["findings"][0]["observed"] == "Receipt key endpoint returned HTTP 503"
 
 
 def test_signature_check_verifies_live_receipt(monkeypatch) -> None:
@@ -146,6 +148,10 @@ def test_signature_check_verifies_live_receipt(monkeypatch) -> None:
     class FakeResponse:
         status_code = 200
         text = public_pem.decode()
+        headers = {
+            "content-type": "application/x-pem-file; charset=utf-8",
+            "cache-control": "public, max-age=3600",
+        }
 
     class FakeHttpClient:
         def __init__(self, *args, **kwargs) -> None:
@@ -190,6 +196,10 @@ def test_signature_check_reports_invalid_live_receipt(monkeypatch) -> None:
     class FakeResponse:
         status_code = 200
         text = "-----BEGIN PUBLIC KEY-----\nZmFrZQ==\n-----END PUBLIC KEY-----"
+        headers = {
+            "content-type": "text/plain",
+            "cache-control": "public, max-age=3600",
+        }
 
     class FakeHttpClient:
         def __init__(self, *args, **kwargs) -> None:
@@ -226,6 +236,33 @@ def test_signature_check_reports_invalid_live_receipt(monkeypatch) -> None:
     results = signature_check.run_signature_check(base_url="https://example.com", timeout_sec=1.0)
     assert results["active_tests"][1]["result"] == "failed"
     assert results["findings"][0]["type"] == "signature_failure"
+
+
+def test_signature_check_requires_static_serve_headers(monkeypatch) -> None:
+    class FakeResponse:
+        status_code = 200
+        text = "-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----\n"
+        headers = {"content-type": "application/json", "cache-control": "no-store"}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def get(self, url: str):
+            return FakeResponse()
+
+    monkeypatch.setattr(signature_check.httpx, "Client", FakeClient)
+
+    results = signature_check.run_signature_check(base_url="https://example.com", timeout_sec=1.0)
+
+    assert results["active_tests"][0]["result"] == "failed"
+    assert results["findings"][0]["observed"] == "Receipt key endpoint returned an unexpected content type"
 
 
 def test_auth_bypass_detects_unprotected_route(monkeypatch) -> None:

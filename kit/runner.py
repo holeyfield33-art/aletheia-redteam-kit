@@ -262,6 +262,19 @@ def _clamp_score(value: float) -> int:
     return int(max(0, min(100, round(value))))
 
 
+def _run_repo_audit_with_cli_options(args: argparse.Namespace) -> dict:
+    try:
+        return run_repo_audit(
+            args.repo_path,
+            threat_feed_path=args.threat_feed_file,
+            include_test_fixtures=args.repo_include_test_fixtures,
+        )
+    except TypeError as exc:
+        if "include_test_fixtures" not in str(exc):
+            raise
+        return run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
+
+
 def _api_exploitability_score(results: list[dict]) -> int:
     if not results:
         return 0
@@ -842,6 +855,11 @@ def cli() -> int:
     parser.add_argument("--repo-path", default=".", help="Repository root path for --mode repo")
     parser.add_argument("--threat-feed-file", help="Optional threat feed JSON for repo and combined modes")
     parser.add_argument(
+        "--repo-include-test-fixtures",
+        action="store_true",
+        help="Include secrets and allowlisted fixture findings from tests/ and test/ in repo scans",
+    )
+    parser.add_argument(
         "--gate-exceptions-file",
         default=os.environ.get("ALETHEIA_GATE_EXCEPTIONS_FILE"),
         help="JSON file containing time-bound gate exceptions (requires owner and expires_at)",
@@ -979,7 +997,7 @@ def cli() -> int:
             }
 
         # Repo component
-        repo_summary = run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
+        repo_summary = _run_repo_audit_with_cli_options(args)
         repo_gates = repo_summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
         critical = int((repo_summary.get("findings_by_severity") or {}).get("CRITICAL", 0))
         high = int((repo_summary.get("findings_by_severity") or {}).get("HIGH", 0))
@@ -1109,7 +1127,7 @@ def cli() -> int:
     if args.mode == "repo":
         gate_exceptions_data = _load_gate_exceptions(args.gate_exceptions_file)
         baseline_state, baseline_error = _load_baseline_state(args.baseline_state_file)
-        summary = run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
+        summary = _run_repo_audit_with_cli_options(args)
         gates = summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
 
         critical = int((summary.get("findings_by_severity") or {}).get("CRITICAL", 0))

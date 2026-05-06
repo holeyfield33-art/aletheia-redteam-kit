@@ -78,3 +78,13 @@ class WebAuditConfig:
     safe_max_exploitability: int = 20
     warning_min_trust: int = 50
     warning_max_exploitability: int = 60
+    # Noise reduction
+    js_error_severity: str = "MEDIUM"
+    dead_click_error_severity: str = "MEDIUM"
+    max_js_errors_per_page: int = 5
+    max_network_errors_per_page: int = 5
+    skip_external_network_errors: bool = True
+    deduplicate_findings: bool = True
+    # Screenshot capture
+    capture_screenshots: bool = False
+    screenshot_dir: str = "screenshots"

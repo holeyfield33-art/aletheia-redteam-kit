@@ -12,6 +12,10 @@ from kit.web_audit.schema import Finding
 from .prompt_injection import derive_api_base_url
 
 _RECEIPT_KEY_PATH = "/.well-known/aletheia-receipt-key.pem"
+_ACCEPTED_CONTENT_TYPES = {
+    "application/x-pem-file",
+    "text/plain",
+}
 
 
 def run_signature_check(*, base_url: str, timeout_sec: float) -> dict[str, Any]:
@@ -21,11 +25,13 @@ def run_signature_check(*, base_url: str, timeout_sec: float) -> dict[str, Any]:
 
     status_code: int | None = None
     body = ""
+    headers: dict[str, str] = {}
     try:
         with httpx.Client(timeout=timeout_sec, follow_redirects=True) as client:
             response = client.get(target_url)
         status_code = response.status_code
         body = response.text
+        headers = {key.lower(): value for key, value in response.headers.items()}
     except Exception as exc:
         active_tests.append({
             "type": "signature_check",
@@ -34,20 +40,22 @@ def run_signature_check(*, base_url: str, timeout_sec: float) -> dict[str, Any]:
             "severity": "CRITICAL",
             "message": str(exc),
         })
-        findings.append(_signature_failure_finding(target_url, None, str(exc)))
+        findings.append(_signature_failure_finding(target_url, None, str(exc), headers=headers))
         return {"active_tests": active_tests, "findings": findings}
 
-    if status_code != 200 or not _looks_like_pem(body):
-        message = "Trust chain cannot be verified"
+    endpoint_issue = _validate_receipt_key_endpoint(status_code=status_code, body=body, headers=headers)
+    if endpoint_issue:
         active_tests.append({
             "type": "signature_check",
             "test_name": "receipt_key",
             "result": "failed",
             "severity": "CRITICAL",
-            "message": message,
+            "message": endpoint_issue,
             "status_code": status_code,
+            "content_type": headers.get("content-type"),
+            "cache_control": headers.get("cache-control"),
         })
-        findings.append(_signature_failure_finding(target_url, status_code, message))
+        findings.append(_signature_failure_finding(target_url, status_code, endpoint_issue, headers=headers))
         return {"active_tests": active_tests, "findings": findings}
 
     active_tests.append({
@@ -57,6 +65,8 @@ def run_signature_check(*, base_url: str, timeout_sec: float) -> dict[str, Any]:
         "severity": "CRITICAL",
         "message": "Trust chain endpoint returned a valid PEM",
         "status_code": status_code,
+        "content_type": headers.get("content-type"),
+        "cache_control": headers.get("cache-control"),
     })
 
     live_receipt = _verify_live_receipt(base_url=base_url, public_key_pem=body.encode())
@@ -76,7 +86,27 @@ def _looks_like_pem(text: str) -> bool:
     return len(stripped.splitlines()) >= 3
 
 
-def _signature_failure_finding(target_url: str, status_code: int | None, message: str) -> dict[str, Any]:
+def _validate_receipt_key_endpoint(*, status_code: int | None, body: str, headers: dict[str, str]) -> str | None:
+    if status_code != 200:
+        return f"Receipt key endpoint returned HTTP {status_code}"
+    if not _looks_like_pem(body):
+        return "Receipt key endpoint did not return a valid PEM"
+    content_type = headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type not in _ACCEPTED_CONTENT_TYPES:
+        return "Receipt key endpoint returned an unexpected content type"
+    cache_control = headers.get("cache-control", "")
+    if "max-age=" not in cache_control.lower():
+        return "Receipt key endpoint is missing cache-control max-age"
+    return None
+
+
+def _signature_failure_finding(
+    target_url: str,
+    status_code: int | None,
+    message: str,
+    *,
+    headers: dict[str, str],
+) -> dict[str, Any]:
     finding = Finding(
         severity="CRITICAL",
         type="signature_failure",
@@ -86,7 +116,11 @@ def _signature_failure_finding(target_url: str, status_code: int | None, message
         action="trust_verification",
         expected="Receipt key endpoint returns a valid PEM",
         observed=message,
-        evidence={"status_code": status_code},
+        evidence={
+            "status_code": status_code,
+            "content_type": headers.get("content-type"),
+            "cache_control": headers.get("cache-control"),
+        },
         reproducible_steps=[f"Navigate to {target_url}"],
     ).to_dict()
     finding["message"] = "Trust chain cannot be verified"
