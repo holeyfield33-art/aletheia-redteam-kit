@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import sqlite3
 
 import pytest
 
@@ -1189,4 +1190,67 @@ def test_cli_run_subcommand_dispatches_legacy_and_writes_command_center_artifact
 
     rc = runner.cli()
     assert rc == 0
-    assert (artifact_dir / "index.json").exists()
+    index_payload = json.loads((artifact_dir / "index.json").read_text(encoding="utf-8"))
+    assert index_payload[-1]["sqlite"].endswith("command_center.sqlite")
+
+    run_dirs = sorted(artifact_dir.glob("run-api-*"))
+    assert run_dirs
+    run_dir = run_dirs[0]
+
+    command_center = json.loads((run_dir / "command_center.json").read_text(encoding="utf-8"))
+    assert command_center["runs"][0]["mode"] == "api"
+
+    sqlite_path = run_dir / "command_center.sqlite"
+    assert sqlite_path.exists()
+    with sqlite3.connect(sqlite_path) as conn:
+        tables = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        assert {"runs", "targets", "findings", "gate_results", "artifacts"}.issubset(tables)
+
+        run_row = conn.execute("SELECT mode FROM runs").fetchone()
+        assert run_row == ("api",)
+
+        artifact_types = {
+            row[0]
+            for row in conn.execute("SELECT artifact_type FROM artifacts")
+        }
+        assert "sqlite" in artifact_types
+
+
+def test_cli_dashboard_serve_dispatches_hosted_server(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "runs"
+    captured: dict[str, object] = {}
+
+    def _fake_serve(config):
+        captured["host"] = config.host
+        captured["port"] = config.port
+        captured["artifact_dir"] = config.artifact_dir
+        captured["dashboard_file"] = config.dashboard_file
+
+    monkeypatch.setattr(runner, "serve_dashboard", _fake_serve)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "dashboard",
+            "--artifact-dir",
+            str(artifact_dir),
+            "--dashboard-file",
+            "dashboard/index.html",
+            "--serve",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "9090",
+        ],
+    )
+
+    rc = runner.cli()
+
+    assert rc == 0
+    assert captured["host"] == "0.0.0.0"
+    assert captured["port"] == 9090
+    assert captured["artifact_dir"] == artifact_dir
+    assert str(captured["dashboard_file"]) == "dashboard/index.html"

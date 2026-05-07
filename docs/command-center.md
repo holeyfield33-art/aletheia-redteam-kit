@@ -6,6 +6,13 @@ This project dashboard is designed as an operator command center for API, websit
 
 Open `dashboard/index.html` in your browser.
 
+For a hosted, non-technical workflow, use the built-in server instead:
+
+  python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080
+
+Then open `http://<host>:8080/dashboard/`.
+The hosted dashboard automatically reads the latest run catalog from `/api/runs`, so the operator does not need to drag files into the page.
+
 Combined artifacts (`mode = combined`) can be loaded directly and switched between API/website/repo components using the Component filter.
 
 ## Primary Operator Workflow
@@ -13,12 +20,14 @@ Combined artifacts (`mode = combined`) can be loaded directly and switched betwe
 1. Run one or more API scans with `python -m kit.runner`.
 2. Run repository scan with `python -m kit.runner --mode repo --repo-path . --output repo_summary.json`.
 3. Optionally run unified sweep with `python -m kit.runner --mode combined --target-url https://example.com --repo-path . --output combined_summary.json`.
-4. Optionally attach a threat feed with `--threat-feed-file threat_feed.json` to enrich repo findings.
-5. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
-6. Triage weak categories using the Mission Priority Board.
-7. Filter to actionable rows using Command Filters and Quick Actions.
-8. Export filtered rows to hand off incidents or create follow-up attack expansions.
-9. Review API reconciliation coverage before closing transport/anomaly incidents.
+4. Write artifacts into `runs/` so the hosted dashboard can discover them automatically.
+5. Start the hosted dashboard server and share the browser URL with the operator.
+6. Optionally attach a threat feed with `--threat-feed-file threat_feed.json` to enrich repo findings.
+7. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
+8. Triage weak categories using the Mission Priority Board.
+9. Filter to actionable rows using Command Filters and Quick Actions.
+10. Export filtered rows to hand off incidents or create follow-up attack expansions.
+11. Review API reconciliation coverage before closing transport/anomaly incidents.
 
 ## Command Filters
 

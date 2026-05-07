@@ -663,6 +663,7 @@
     const DEFAULT_SUMMARY_PATH = "./summary.json";
     const DEFAULT_WEBSITE_SUMMARY_PATH = "./website_summary.json";
     const RUNS_INDEX_PATH = "./runs/index.json";
+    const HOSTED_RUNS_API_PATH = "/api/runs";
     const AUTO_SCAN_CANDIDATES = [
       "./summary.json",
       "./summary_rerun.json",
@@ -2157,39 +2158,48 @@
       return await resp.json();
     }
 
+    function toRunArtifactPath(rawPath) {
+      const text = String(rawPath || "").trim();
+      if (!text) return "";
+      if (text.startsWith("./") || text.startsWith("/") || text.startsWith("http://") || text.startsWith("https://")) {
+        return text;
+      }
+      return "./runs/" + text;
+    }
+
     async function discoverRunSummaryPaths() {
       const paths = new Set(AUTO_SCAN_CANDIDATES);
-      try {
-        const indexJson = await fetchJson(RUNS_INDEX_PATH);
-        const files = Array.isArray(indexJson)
-          ? indexJson
-          : (Array.isArray(indexJson.files) ? indexJson.files : []);
-        files.forEach(function (file) {
-          if (file && typeof file === "object") {
-            const summaryPath = String(file.summary || file.command_center || "").trim();
-            if (!summaryPath) return;
-            if (summaryPath.startsWith("./") || summaryPath.startsWith("/")) {
-              paths.add(summaryPath);
-            } else {
-              paths.add("./runs/" + summaryPath);
+      const indexSources = [HOSTED_RUNS_API_PATH, RUNS_INDEX_PATH];
+
+      for (const indexPath of indexSources) {
+        try {
+          const indexJson = await fetchJson(indexPath);
+          const files = Array.isArray(indexJson)
+            ? indexJson
+            : (Array.isArray(indexJson.files) ? indexJson.files : []);
+          files.forEach(function (file) {
+            if (file && typeof file === "object") {
+              const summaryPath = String(file.summary || file.command_center || "").trim();
+              if (!summaryPath) return;
+              paths.add(toRunArtifactPath(summaryPath));
+              return;
             }
-            return;
+            const text = String(file || "").trim();
+            if (!text) return;
+            paths.add(toRunArtifactPath(text));
+          });
+          if (files.length) {
+            break;
           }
-          const text = String(file || "").trim();
-          if (!text) return;
-          if (text.startsWith("./") || text.startsWith("/")) {
-            paths.add(text);
-          } else {
-            paths.add("./runs/" + text);
-          }
-        });
-      } catch (_) {
+        } catch (_) {
+        }
       }
+
       return Array.from(paths);
     }
 
     async function autoScanRuns() {
-      setStatus("Auto-scanning ./runs for API summaries...");
+      setStatus("Auto-scanning run artifacts...");
       const paths = await discoverRunSummaryPaths();
       const summaries = [];
 
@@ -2208,8 +2218,8 @@
       if (!summaries.length) {
         renderTrend([]);
         renderHeatmap([]);
-        setStatus("Auto-scan found no API summaries. Add files under ./runs or create ./runs/index.json.");
-        return;
+        setStatus("Auto-scan found no run artifacts. Add files under ./runs or use the hosted dashboard server.");
+        return false;
       }
 
       summaries.sort(function (a, b) {
@@ -2220,7 +2230,8 @@
 
       const latest = summaries[summaries.length - 1];
       renderAll(latest, { summaries: summaries });
-      setStatus("Auto-scan loaded " + summaries.length + " API summaries; latest run displayed.");
+      setStatus("Auto-scan loaded " + summaries.length + " run artifacts; latest run displayed.");
+      return true;
     }
 
     async function loadFromText(text, label) {
@@ -2438,7 +2449,12 @@
       setStatus("Baseline set to previous loaded run.");
     });
 
-    loadDefault();
+    (async function bootstrapDashboard() {
+      const loaded = await autoScanRuns();
+      if (!loaded) {
+        await loadDefault();
+      }
+    })();
   </script>
 </body>
 </html>

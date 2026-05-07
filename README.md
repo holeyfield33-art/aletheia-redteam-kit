@@ -23,6 +23,9 @@ Current release: `v0.2.1`
     active adversarial checks, and writes `website_summary.json` findings.
 9. Can run a combined command-center sweep that merges API, website, and repo
     scans into one unified artifact for CI gating.
+10. Emits a normalized SQLite database alongside JSON command-center artifacts
+    so downstream tooling can query run, finding, gate, and metric tables
+    directly.
 
 Receipts also appear in your Aletheia dashboard at
 [app.aletheia-core.com](https://app.aletheia-core.com) automatically - every
@@ -43,6 +46,7 @@ Command-center control plane (single entry point):
 
     python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs --open-dashboard
     python -m kit.runner dashboard --artifact-dir runs --dashboard-file dashboard/index.html --open-dashboard
+    python -m kit.runner dashboard --artifact-dir runs --dashboard-file dashboard/index.html --serve --host 0.0.0.0 --port 8080
     python -m kit.runner compare --current summary.json --baseline baseline_summary.json --output compare_summary.json
     python -m kit.runner export --input summary.json --format csv --output triage.csv --filter "category=prompt_injection,mismatch=true"
     python -m kit.runner gate --input summary.json --thresholds "max_unknown=5,max_errors=0,min_pass_rate=60"
@@ -54,7 +58,25 @@ Supported command-center flags:
 - `--filter` (category/decision/mismatch/technique/search)
 - `--open-dashboard`
 - `--artifact-dir` and `--dashboard-file`
+- `--serve`, `--host`, and `--port` for hosted dashboard mode
 - `--cli-only`
+
+Hosted operator mode:
+
+- Run a sweep once with `python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs --output summary.json`.
+- Start the hosted dashboard with `python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080`.
+- Hand the operator the browser URL `http://<host>:8080/dashboard/`.
+- The hosted dashboard auto-loads the latest run from `/api/runs`; the operator does not need to upload JSON manually.
+- Health-check endpoint: `http://<host>:8080/api/health`.
+
+Command-center run artifacts under `runs/` now include:
+
+- `summary.json`: raw mode-specific summary used by the existing dashboard flow
+- `command_center.json`: normalized incident/run model for artifact-first UX
+- `command_center.sqlite`: normalized SQLite mirror with tables such as `runs`, `findings`, `metrics`, `artifacts`, and views like `v_run_summary`
+- `index.json`: run catalog with relative paths to JSON and SQLite artifacts
+
+For hosted deployments, `index.json` is exposed through `/api/runs` with browser-safe URLs to `summary.json`, `command_center.json`, and `command_center.sqlite`.
 
 Full catalog run:
 

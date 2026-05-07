@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -390,6 +391,325 @@ def normalize_summary_to_command_center(
         },
         "baseline": baseline_summary,
     }
+
+
+def write_command_center_sqlite(model: dict[str, Any], db_path: str | Path) -> Path:
+        path = Path(db_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with sqlite3.connect(path) as conn:
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.executescript(
+                        """
+                        CREATE TABLE IF NOT EXISTS runs (
+                            id TEXT PRIMARY KEY,
+                            mode TEXT NOT NULL,
+                            target_url TEXT,
+                            repo_path TEXT,
+                            status TEXT NOT NULL,
+                            started_at TEXT NOT NULL,
+                            finished_at TEXT,
+                            duration_ms INTEGER,
+                            tool_version TEXT,
+                            git_commit TEXT,
+                            baseline_run_id TEXT,
+                            ci_verdict TEXT,
+                            ci_reason TEXT,
+                            created_by TEXT
+                        );
+
+                        CREATE TABLE IF NOT EXISTS targets (
+                            id TEXT PRIMARY KEY,
+                            run_id TEXT NOT NULL,
+                            target_url TEXT,
+                            repo_path TEXT,
+                            scope TEXT,
+                            FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE
+                        );
+
+                        CREATE TABLE IF NOT EXISTS findings (
+                            id TEXT PRIMARY KEY,
+                            run_id TEXT NOT NULL,
+                            target_id TEXT,
+                            category TEXT NOT NULL,
+                            technique TEXT,
+                            severity TEXT NOT NULL,
+                            decision TEXT NOT NULL,
+                            finding_type TEXT NOT NULL,
+                            title TEXT NOT NULL,
+                            summary TEXT,
+                            confidence REAL,
+                            exploitability REAL,
+                            trust_score REAL,
+                            created_at TEXT NOT NULL,
+                            mismatch INTEGER DEFAULT 0,
+                            FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE,
+                            FOREIGN KEY(target_id) REFERENCES targets(id)
+                        );
+
+                        CREATE TABLE IF NOT EXISTS findings_evidence (
+                            id TEXT PRIMARY KEY,
+                            finding_id TEXT NOT NULL,
+                            evidence_type TEXT NOT NULL,
+                            data_json TEXT,
+                            raw_text TEXT,
+                            sha256 TEXT,
+                            signature_valid INTEGER,
+                            created_at TEXT NOT NULL,
+                            FOREIGN KEY(finding_id) REFERENCES findings(id) ON DELETE CASCADE
+                        );
+
+                        CREATE TABLE IF NOT EXISTS metrics (
+                            id TEXT PRIMARY KEY,
+                            run_id TEXT NOT NULL,
+                            scope_type TEXT NOT NULL,
+                            scope_key TEXT,
+                            metric_name TEXT NOT NULL,
+                            metric_value REAL NOT NULL,
+                            metric_unit TEXT,
+                            created_at TEXT NOT NULL,
+                            FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE
+                        );
+
+                        CREATE TABLE IF NOT EXISTS artifacts (
+                            id TEXT PRIMARY KEY,
+                            run_id TEXT NOT NULL,
+                            artifact_type TEXT NOT NULL,
+                            path TEXT NOT NULL,
+                            mime_type TEXT,
+                            sha256 TEXT,
+                            created_at TEXT NOT NULL,
+                            FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE
+                        );
+
+                        CREATE TABLE IF NOT EXISTS gate_results (
+                            id TEXT PRIMARY KEY,
+                            run_id TEXT NOT NULL,
+                            pass INTEGER NOT NULL,
+                            violations_json TEXT,
+                            ci_verdict TEXT,
+                            ci_reason TEXT,
+                            FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE
+                        );
+
+                        CREATE TABLE IF NOT EXISTS tags (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL UNIQUE
+                        );
+
+                        CREATE TABLE IF NOT EXISTS finding_tags (
+                            finding_id TEXT NOT NULL,
+                            tag_id TEXT NOT NULL,
+                            PRIMARY KEY(finding_id, tag_id),
+                            FOREIGN KEY(finding_id) REFERENCES findings(id) ON DELETE CASCADE,
+                            FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+                        );
+
+                        CREATE TABLE IF NOT EXISTS notes (
+                            id TEXT PRIMARY KEY,
+                            run_id TEXT,
+                            finding_id TEXT,
+                            note TEXT NOT NULL,
+                            created_at TEXT NOT NULL,
+                            FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE,
+                            FOREIGN KEY(finding_id) REFERENCES findings(id) ON DELETE CASCADE
+                        );
+
+                        CREATE INDEX IF NOT EXISTS idx_findings_run_severity_decision ON findings(run_id, severity, decision);
+                        CREATE INDEX IF NOT EXISTS idx_findings_run_category ON findings(run_id, category);
+                        CREATE INDEX IF NOT EXISTS idx_findings_run_technique ON findings(run_id, technique);
+                        CREATE INDEX IF NOT EXISTS idx_metrics_run_scope_metric ON metrics(run_id, scope_type, metric_name);
+                        CREATE INDEX IF NOT EXISTS idx_artifacts_run_type ON artifacts(run_id, artifact_type);
+                        CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at DESC);
+
+                        DROP VIEW IF EXISTS v_run_summary;
+                        CREATE VIEW v_run_summary AS
+                        SELECT
+                            r.id AS run_id,
+                            r.mode,
+                            r.started_at,
+                            r.finished_at,
+                            COUNT(f.id) AS findings_total,
+                            COUNT(CASE WHEN f.decision = 'blocked' THEN 1 END) AS blocked_count,
+                            COUNT(CASE WHEN f.decision = 'proceeded' THEN 1 END) AS proceeded_count,
+                            COUNT(CASE WHEN f.decision = 'unknown' THEN 1 END) AS unknown_count,
+                            AVG(f.trust_score) AS avg_trust_score,
+                            AVG(f.exploitability) AS avg_exploitability
+                        FROM runs r
+                        LEFT JOIN findings f ON f.run_id = r.id
+                        GROUP BY r.id, r.mode, r.started_at, r.finished_at;
+
+                        DROP VIEW IF EXISTS v_category_summary;
+                        CREATE VIEW v_category_summary AS
+                        SELECT
+                            run_id,
+                            category,
+                            COUNT(*) AS total,
+                            COUNT(CASE WHEN decision = 'blocked' THEN 1 END) AS blocked,
+                            COUNT(CASE WHEN decision = 'proceeded' THEN 1 END) AS proceeded,
+                            COUNT(CASE WHEN decision = 'unknown' THEN 1 END) AS unknown
+                        FROM findings
+                        GROUP BY run_id, category;
+                        """
+                )
+
+                conn.executemany(
+                        """
+                        INSERT OR REPLACE INTO runs (
+                            id, mode, target_url, repo_path, status, started_at, finished_at,
+                            duration_ms, tool_version, git_commit, baseline_run_id,
+                            ci_verdict, ci_reason, created_by
+                        ) VALUES (
+                            :id, :mode, :target_url, :repo_path, :status, :started_at, :finished_at,
+                            :duration_ms, :tool_version, :git_commit, :baseline_run_id,
+                            :ci_verdict, :ci_reason, :created_by
+                        )
+                        """,
+                        model.get("runs") or [],
+                )
+
+                conn.executemany(
+                        """
+                        INSERT OR REPLACE INTO targets (id, run_id, target_url, repo_path, scope)
+                        VALUES (:id, :run_id, :target_url, :repo_path, :scope)
+                        """,
+                        model.get("targets") or [],
+                )
+
+                conn.executemany(
+                        """
+                        INSERT OR REPLACE INTO findings (
+                            id, run_id, target_id, category, technique, severity, decision,
+                            finding_type, title, summary, confidence, exploitability,
+                            trust_score, created_at, mismatch
+                        ) VALUES (
+                            :id, :run_id, :target_id, :category, :technique, :severity, :decision,
+                            :finding_type, :title, :summary, :confidence, :exploitability,
+                            :trust_score, :created_at, :mismatch
+                        )
+                        """,
+                        [
+                                {
+                                        **row,
+                                        "mismatch": 1 if row.get("mismatch") else 0,
+                                }
+                                for row in (model.get("findings") or [])
+                        ],
+                )
+
+                conn.executemany(
+                        """
+                        INSERT OR REPLACE INTO findings_evidence (
+                            id, finding_id, evidence_type, data_json, raw_text, sha256,
+                            signature_valid, created_at
+                        ) VALUES (
+                            :id, :finding_id, :evidence_type, :data_json, :raw_text, :sha256,
+                            :signature_valid, :created_at
+                        )
+                        """,
+                        [
+                                {
+                                        **row,
+                                        "data_json": json.dumps(row.get("data_json")),
+                                        "signature_valid": None if row.get("signature_valid") is None else (1 if row.get("signature_valid") else 0),
+                                }
+                                for row in (model.get("findings_evidence") or [])
+                        ],
+                )
+
+                conn.executemany(
+                        """
+                        INSERT OR REPLACE INTO metrics (
+                            id, run_id, scope_type, scope_key, metric_name, metric_value,
+                            metric_unit, created_at
+                        ) VALUES (
+                            :id, :run_id, :scope_type, :scope_key, :metric_name, :metric_value,
+                            :metric_unit, :created_at
+                        )
+                        """,
+                        model.get("metrics") or [],
+                )
+
+                conn.executemany(
+                        """
+                        INSERT OR REPLACE INTO artifacts (
+                            id, run_id, artifact_type, path, mime_type, sha256, created_at
+                        ) VALUES (
+                            :id, :run_id, :artifact_type, :path, :mime_type, :sha256, :created_at
+                        )
+                        """,
+                        model.get("artifacts") or [],
+                )
+
+                conn.executemany(
+                        """
+                        INSERT OR REPLACE INTO gate_results (
+                            id, run_id, pass, violations_json, ci_verdict, ci_reason
+                        ) VALUES (
+                            :id, :run_id, :pass, :violations_json, :ci_verdict, :ci_reason
+                        )
+                        """,
+                        [
+                                {
+                                        "id": row.get("id"),
+                                        "run_id": row.get("run_id"),
+                                        "pass": 1 if row.get("pass") else 0,
+                                        "violations_json": json.dumps(row.get("violations") or []),
+                                        "ci_verdict": row.get("ci_verdict"),
+                                        "ci_reason": row.get("ci_reason"),
+                                }
+                                for row in (model.get("gate_results") or [])
+                        ],
+                )
+
+                tags_by_name: dict[str, str] = {}
+                for item in model.get("tags") or []:
+                        tag_id = str(item.get("id") or uuid.uuid4())
+                        tag_name = str(item.get("name") or "").strip()
+                        if not tag_name:
+                                continue
+                        tags_by_name[tag_name] = tag_id
+
+                for relation in model.get("finding_tags") or []:
+                        tag_name = str(relation.get("tag") or "").strip()
+                        if not tag_name:
+                                continue
+                        tags_by_name.setdefault(tag_name, str(uuid.uuid4()))
+
+                conn.executemany(
+                        "INSERT OR REPLACE INTO tags (id, name) VALUES (:id, :name)",
+                        [{"id": tag_id, "name": tag_name} for tag_name, tag_id in tags_by_name.items()],
+                )
+
+                conn.executemany(
+                        "INSERT OR REPLACE INTO finding_tags (finding_id, tag_id) VALUES (:finding_id, :tag_id)",
+                        [
+                                {
+                                        "finding_id": relation.get("finding_id"),
+                                        "tag_id": tags_by_name[str(relation.get("tag") or "").strip()],
+                                }
+                                for relation in (model.get("finding_tags") or [])
+                                if str(relation.get("tag") or "").strip() in tags_by_name
+                        ],
+                )
+
+                conn.executemany(
+                        "INSERT OR REPLACE INTO notes (id, run_id, finding_id, note, created_at) VALUES (:id, :run_id, :finding_id, :note, :created_at)",
+                        [
+                                {
+                                        "id": str(item.get("id") or uuid.uuid4()),
+                                        "run_id": item.get("run_id"),
+                                        "finding_id": item.get("finding_id"),
+                                        "note": item.get("note") or "",
+                                        "created_at": item.get("created_at") or _now_iso(),
+                                }
+                                for item in (model.get("notes") or [])
+                        ],
+                )
+
+                conn.commit()
+
+        return path
 
 
 def compare_summaries(current: dict[str, Any], baseline: dict[str, Any]) -> dict[str, Any]:

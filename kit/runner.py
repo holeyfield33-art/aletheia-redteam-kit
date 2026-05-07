@@ -29,6 +29,7 @@ import time
 from datetime import datetime, timezone
 from fnmatch import fnmatch
 from pathlib import Path
+from uuid import uuid4
 
 import httpx
 
@@ -42,7 +43,9 @@ from kit.command_center import (
     evaluate_gates,
     export_rows,
     normalize_summary_to_command_center,
+    write_command_center_sqlite,
 )
+from kit.dashboard_server import DashboardServerConfig, serve_dashboard
 from kit.api_analysis import build_api_regression_summary, extract_multi_turn_steps
 from kit.catalog import load_attacks as load_attacks_from_catalog
 from kit.client import AletheiaClient
@@ -125,6 +128,21 @@ def _write_command_center_artifacts(
     summary_copy = run_dir / "summary.json"
     summary_copy.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
+    sqlite_path = run_dir / "command_center.sqlite"
+    command_center["artifacts"].append(
+        {
+            "id": str(uuid4()),
+            "run_id": command_center["runs"][0]["id"],
+            "artifact_type": "sqlite",
+            "path": str(sqlite_path.relative_to(artifact_dir)),
+            "mime_type": "application/vnd.sqlite3",
+            "sha256": None,
+            "created_at": command_center["generated_at"],
+        }
+    )
+
+    write_command_center_sqlite(command_center, sqlite_path)
+
     command_center_path = run_dir / "command_center.json"
     command_center_path.write_text(json.dumps(command_center, indent=2), encoding="utf-8")
 
@@ -144,6 +162,7 @@ def _write_command_center_artifacts(
             "mode": mode,
             "summary": str(summary_copy.relative_to(artifact_dir)),
             "command_center": str(command_center_path.relative_to(artifact_dir)),
+            "sqlite": str(sqlite_path.relative_to(artifact_dir)),
         }
     )
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
@@ -189,6 +208,9 @@ def _command_center_cli(argv: list[str]) -> int:
     dashboard_parser.add_argument("--dashboard-file", default="dashboard/index.html")
     dashboard_parser.add_argument("--open-dashboard", action="store_true")
     dashboard_parser.add_argument("--cli-only", action="store_true")
+    dashboard_parser.add_argument("--serve", action="store_true", help="Serve a hosted dashboard for non-technical users")
+    dashboard_parser.add_argument("--host", default="127.0.0.1")
+    dashboard_parser.add_argument("--port", type=int, default=8080)
 
     compare_parser = subparsers.add_parser("compare", help="Compare current summary against baseline")
     compare_parser.add_argument("--current", required=True, help="Current summary JSON")
@@ -251,6 +273,18 @@ def _command_center_cli(argv: list[str]) -> int:
         manifest = artifact_dir / "index.json"
         if not manifest.exists():
             manifest.write_text("[]\n", encoding="utf-8")
+        if args.serve:
+            print(f"Dashboard available at http://{args.host}:{args.port}/dashboard/", file=sys.stderr)
+            serve_dashboard(
+                DashboardServerConfig(
+                    repo_root=Path.cwd(),
+                    artifact_dir=artifact_dir,
+                    dashboard_file=Path(args.dashboard_file),
+                    host=args.host,
+                    port=args.port,
+                )
+            )
+            return PASS
         if not args.cli_only:
             _open_dashboard_if_requested(args.open_dashboard, args.dashboard_file)
         print(f"Dashboard artifact index: {manifest}", file=sys.stderr)
