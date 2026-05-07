@@ -29,6 +29,16 @@ Notes:
 - Baseline active: false
 - New violations vs baseline state: 4
 
+## Reconciliation Status
+
+- total_reconciled: **0**
+- unreconciled: **0**
+- reconciliation_coverage_pct: **N/A** (run generated before `v0.2.0` reconciliation rollout)
+
+Notes:
+- This report snapshot predates automatic request-id reconciliation.
+- New runs include `reconciliation` metrics in `summary.json` and combined artifacts.
+
 ## Component Findings
 
 ### 1) API Component

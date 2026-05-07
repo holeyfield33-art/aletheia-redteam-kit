@@ -18,6 +18,7 @@ Combined artifacts (`mode = combined`) can be loaded directly and switched betwe
 6. Triage weak categories using the Mission Priority Board.
 7. Filter to actionable rows using Command Filters and Quick Actions.
 8. Export filtered rows to hand off incidents or create follow-up attack expansions.
+9. Review API reconciliation coverage before closing transport/anomaly incidents.
 
 ## Command Filters
 
@@ -61,8 +62,23 @@ before lower-risk or already-stable families.
 - Mutation panel shows attempts/bypasses per mutation strategy.
 - Gap Analysis panel highlights top bypass-prone techniques.
 
+## Reconciliation Signals
+
+For API and combined artifacts, review the `reconciliation` object:
+
+- `total_reconciled`: count of previously `UNKNOWN`/`ERROR` rows resolved from saved decisions
+- `unreconciled`: unresolved rows that still need operator investigation
+- `reconciliation_coverage_pct`: coverage percentage for reconcilable rows
+- `unreconciled_request_ids`: concrete IDs for escalation and dashboard traceability
+
+Coverage policy:
+
+- API runs enforce reconciliation coverage when errors are present.
+- Coverage below 95% surfaces `api:reconciliation_coverage_below_threshold`.
+
 ## Interpretation Guidance
 
 - `UNKNOWN` decisions are safety-biased classifications for anomalous transport behavior.
+- Reconciled `UNKNOWN`/`ERROR` rows should be treated as authoritative enforcement outcomes.
 - High `empty_200_anomalies` indicates API contract instability or edge-layer response stripping.
 - Treat unknown/anomaly spikes as operational incidents, not model performance wins.

@@ -4,21 +4,25 @@ Adversarial test kit for the [Aletheia](https://aletheia-core.com) AI security
 API. Fires 140+ attacks at the hosted engine, groups misses by custom technique,
 and produces JSON artifacts for dashboard review, regression tracking, and CI.
 
+Current release: `v0.2.0`
+
 ## What it does
 
 1. Loads ~100 adversarial payloads from `attacks/*.json`
     (prompt injection, data exfiltration, tool abuse, jailbreak, policy evasion,
     plus benign controls).
 2. Sends each payload to `https://api.aletheia-core.com/v1/audit`.
-3. Records the receipt payload the engine returns for every decision.
-4. Writes `summary.json` with full results, per-category stats, technique-level
+3. Captures `request_id` for every audit attempt (success, unknown, or error when available).
+4. Reconciles `UNKNOWN`/`ERROR` rows against saved decisions using receipt/log lookup.
+5. Records the receipt payload the engine returns for every decision.
+6. Writes `summary.json` with full results, per-category stats, technique-level
     gap analysis, and raw per-attack rows.
-5. Renders a static dashboard (`dashboard/index.html`) that reads API,
+7. Renders a static dashboard (`dashboard/index.html`) that reads API,
     website, repo, and combined summary JSON files, including auto-scan from
     `runs/`.
-6. Can run a website audit mode that crawls routes, probes UI actions, runs
+8. Can run a website audit mode that crawls routes, probes UI actions, runs
     active adversarial checks, and writes `website_summary.json` findings.
-7. Can run a combined command-center sweep that merges API, website, and repo
+9. Can run a combined command-center sweep that merges API, website, and repo
     scans into one unified artifact for CI gating.
 
 Receipts also appear in your Aletheia dashboard at
@@ -58,8 +62,19 @@ Important API outputs:
 - `categories`: blocked / proceeded totals per category
 - `gap_report`: custom-technique bypass analysis
 - `results[*].technique`: explicit or inferred custom technique tag per attack
+- `results[*].request_id`: captured request id (or `null` when unavailable)
 - `unknown`: count of requests classified as unknown decisions
 - `empty_200_anomalies`: count of empty JSON HTTP 200 responses
+- `reconciliation.total_reconciled`: `UNKNOWN`/`ERROR` rows resolved from saved decisions
+- `reconciliation.unreconciled`: unresolved rows with request IDs
+- `reconciliation.reconciliation_coverage_pct`: reconciliation coverage percentage
+- `reconciliation.unreconciled_request_ids`: IDs surfaced when coverage is low
+
+API pacing and retry behavior:
+
+- baseline delay: 1 second between attacks
+- on `429`: delay doubles up to 30 seconds
+- on `5xx`: one retry after 5 seconds
 
 ## Repository audit mode (Phase 5B)
 
@@ -186,11 +201,26 @@ Decision hardening note:
     to avoid optimistic pass classification when upstream or edge layers return
     an anomalous empty body.
 
+Decision reconciliation note:
+
+- The runner attempts decision lookup in this order:
+    1. `GET /api/v1/receipt/{request_id}`
+    2. `GET /v1/receipt/{request_id}`
+    3. `GET https://app.aletheia-core.com/api/logs` filtered by request ID
+- Mappings: `PROCEED -> PROCEED`, `DENIED -> DENIED`, `SANDBOX_BLOCKED -> DENIED`.
+- If dashboard logs require a browser session cookie, reconciliation is skipped
+    and coverage is reported explicitly.
+
 Exit codes in API mode:
 
 - `0`: run completed and matched the configured threshold
 - `1`: run completed but failed a gate or threshold
 - `2`: run had one or more request/runtime errors
+
+API reconciliation gate:
+
+- `api:errors_present` only hard-fails when reconciliation coverage is below 95%.
+- Coverage gate violation: `api:reconciliation_coverage_below_threshold`.
 
 Current custom technique taxonomy examples:
 
