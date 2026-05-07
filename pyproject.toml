@@ -1,6 +1,6 @@
 [project]
 name = "aletheia-redteam-kit"
-version = "0.2.0"
+version = "0.2.1"
 description = "Adversarial test kit for the Aletheia AI security API"
 requires-python = ">=3.11"
 dependencies = ["httpx>=0.27"]

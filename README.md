@@ -4,7 +4,7 @@ Adversarial test kit for the [Aletheia](https://aletheia-core.com) AI security
 API. Fires 140+ attacks at the hosted engine, groups misses by custom technique,
 and produces JSON artifacts for dashboard review, regression tracking, and CI.
 
-Current release: `v0.2.0`
+Current release: `v0.2.1`
 
 ## What it does
 
