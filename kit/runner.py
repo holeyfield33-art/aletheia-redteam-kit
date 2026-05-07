@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 import time
 from datetime import datetime, timezone
@@ -35,6 +36,13 @@ from engine.agentic import AgenticConfig, run_agentic_loop
 from engine.gap_analysis import build_gap_report
 from engine.repo_audit import run_repo_audit
 from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
+from kit.command_center import (
+    apply_finding_filter,
+    compare_summaries,
+    evaluate_gates,
+    export_rows,
+    normalize_summary_to_command_center,
+)
 from kit.api_analysis import build_api_regression_summary, extract_multi_turn_steps
 from kit.catalog import load_attacks as load_attacks_from_catalog
 from kit.client import AletheiaClient
@@ -47,6 +55,238 @@ DEFAULT_OUTPUT = Path("summary.json")
 DEFAULT_REQUEST_DELAY_SEC = 1.0
 DEFAULT_MAX_REQUEST_DELAY_SEC = 30.0
 RECONCILIATION_COVERAGE_THRESHOLD_PCT = 95.0
+
+
+def _parse_key_value_csv(raw: str | None) -> dict[str, str]:
+    pairs: dict[str, str] = {}
+    if not raw:
+        return pairs
+    for item in str(raw).split(","):
+        if "=" not in item:
+            continue
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if key:
+            pairs[key] = value
+    return pairs
+
+
+def _apply_thresholds_to_legacy_args(legacy_args: list[str], thresholds_raw: str | None) -> None:
+    thresholds = _parse_key_value_csv(thresholds_raw)
+    mapping = {
+        "min_pass_rate": "--min-pass-rate",
+        "max_critical": "--max-critical",
+        "max_high": "--max-high",
+        "min_expectation_match_rate": "--min-expectation-match-rate",
+        "max_repo_critical": "--max-repo-critical",
+        "max_repo_high": "--max-repo-high",
+        "max_deps_critical": "--max-deps-critical",
+        "max_deps_high": "--max-deps-high",
+    }
+    for key, value in thresholds.items():
+        flag = mapping.get(key)
+        if flag:
+            legacy_args.extend([flag, value])
+
+
+def _write_command_center_artifacts(
+    *,
+    summary_path: Path,
+    artifact_dir: Path,
+    dashboard_file: Path | None,
+    baseline_path: str | None,
+) -> Path:
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    baseline_summary = None
+    if baseline_path:
+        base = Path(baseline_path)
+        if base.exists():
+            try:
+                baseline_summary = json.loads(base.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                baseline_summary = None
+
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    command_center = normalize_summary_to_command_center(
+        summary,
+        source_path=str(summary_path),
+        baseline_summary=baseline_summary,
+        tool_version="0.2.1",
+        git_commit=os.environ.get("GIT_COMMIT"),
+    )
+
+    mode = str(summary.get("mode") or "api")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = artifact_dir / f"run-{mode}-{stamp}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    summary_copy = run_dir / "summary.json"
+    summary_copy.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    command_center_path = run_dir / "command_center.json"
+    command_center_path.write_text(json.dumps(command_center, indent=2), encoding="utf-8")
+
+    index_path = artifact_dir / "index.json"
+    index: list[dict] = []
+    if index_path.exists():
+        try:
+            raw = json.loads(index_path.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                index = [item for item in raw if isinstance(item, dict)]
+        except json.JSONDecodeError:
+            index = []
+
+    index.append(
+        {
+            "generated_at": command_center.get("generated_at"),
+            "mode": mode,
+            "summary": str(summary_copy.relative_to(artifact_dir)),
+            "command_center": str(command_center_path.relative_to(artifact_dir)),
+        }
+    )
+    index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+
+    if dashboard_file:
+        dashboard_path = Path(dashboard_file)
+        if dashboard_path.exists():
+            shutil.copy2(dashboard_path, run_dir / dashboard_path.name)
+
+    return command_center_path
+
+
+def _open_dashboard_if_requested(open_dashboard: bool, dashboard_file: str | None) -> None:
+    if not open_dashboard or not dashboard_file:
+        return
+    dashboard_path = Path(dashboard_file)
+    if not dashboard_path.exists():
+        return
+    browser = os.environ.get("BROWSER")
+    if browser:
+        os.system(f'{browser} "{dashboard_path.resolve()}" >/dev/null 2>&1')
+
+
+def _command_center_cli(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description="Aletheia command-center control plane")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run_parser = subparsers.add_parser("run", help="Run API/website/repo/combined sweeps")
+    run_parser.add_argument("--mode", choices=["api", "website", "repo", "combined", "agentic"], default="api")
+    run_parser.add_argument("--baseline", help="Baseline summary path used for compare/regression")
+    run_parser.add_argument("--thresholds", help="Comma-separated thresholds, e.g. max_unknown=2,max_repo_high=5")
+    run_parser.add_argument("--filter", dest="filter_expr", help="Comma-separated filter (category, decision, mismatch, technique, q)")
+    run_parser.add_argument("--open-dashboard", action="store_true")
+    run_parser.add_argument("--artifact-dir", default="runs", help="Output directory for command-center run artifacts")
+    run_parser.add_argument("--dashboard-file", default="dashboard/index.html", help="Dashboard HTML file path")
+    run_parser.add_argument("--cli-only", action="store_true", help="Do not open dashboard/browser")
+    run_parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Summary output path")
+    run_parser.add_argument("--target-url")
+    run_parser.add_argument("--repo-path", default=".")
+
+    dashboard_parser = subparsers.add_parser("dashboard", help="Prepare/open dashboard from artifacts")
+    dashboard_parser.add_argument("--artifact-dir", default="runs")
+    dashboard_parser.add_argument("--dashboard-file", default="dashboard/index.html")
+    dashboard_parser.add_argument("--open-dashboard", action="store_true")
+    dashboard_parser.add_argument("--cli-only", action="store_true")
+
+    compare_parser = subparsers.add_parser("compare", help="Compare current summary against baseline")
+    compare_parser.add_argument("--current", required=True, help="Current summary JSON")
+    compare_parser.add_argument("--baseline", required=True, help="Baseline summary JSON")
+    compare_parser.add_argument("--output", default="compare_summary.json")
+
+    export_parser = subparsers.add_parser("export", help="Export filtered rows from summary")
+    export_parser.add_argument("--input", required=True, help="Summary JSON path")
+    export_parser.add_argument("--format", choices=["json", "csv"], default="json")
+    export_parser.add_argument("--output", required=True)
+    export_parser.add_argument("--filter", dest="filter_expr", help="Comma-separated filter (category, decision, mismatch, technique, q)")
+
+    gate_parser = subparsers.add_parser("gate", help="Evaluate custom thresholds against summary")
+    gate_parser.add_argument("--input", required=True, help="Summary JSON path")
+    gate_parser.add_argument("--thresholds", required=True, help="Comma-separated thresholds")
+    gate_parser.add_argument("--output", default="gate_results.json")
+
+    args = parser.parse_args(argv)
+
+    if args.command == "run":
+        legacy_args: list[str] = ["--mode", args.mode, "--output", args.output, "--repo-path", args.repo_path]
+        if args.target_url:
+            legacy_args.extend(["--target-url", args.target_url])
+        if args.baseline:
+            if args.mode == "api":
+                legacy_args.extend(["--api-baseline-summary", args.baseline])
+            elif args.mode == "website":
+                legacy_args.extend(["--baseline-summary", args.baseline])
+            else:
+                legacy_args.extend(["--baseline-state-file", args.baseline])
+        _apply_thresholds_to_legacy_args(legacy_args, args.thresholds)
+
+        rc = _legacy_cli(legacy_args)
+
+        output_path = Path(args.output)
+        if output_path.exists():
+            summary_payload = json.loads(output_path.read_text(encoding="utf-8"))
+            if args.filter_expr:
+                rows = summary_payload.get("results") if isinstance(summary_payload.get("results"), list) else summary_payload.get("findings")
+                if isinstance(rows, list):
+                    filtered_rows = apply_finding_filter(rows, args.filter_expr)
+                    summary_payload["filtered_preview"] = filtered_rows[:50]
+                    output_path.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
+
+            command_center_path = _write_command_center_artifacts(
+                summary_path=output_path,
+                artifact_dir=Path(args.artifact_dir),
+                dashboard_file=Path(args.dashboard_file),
+                baseline_path=args.baseline,
+            )
+            print(f"Command-center artifact written: {command_center_path}", file=sys.stderr)
+
+        if not args.cli_only:
+            _open_dashboard_if_requested(args.open_dashboard, args.dashboard_file)
+        return rc
+
+    if args.command == "dashboard":
+        artifact_dir = Path(args.artifact_dir)
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        manifest = artifact_dir / "index.json"
+        if not manifest.exists():
+            manifest.write_text("[]\n", encoding="utf-8")
+        if not args.cli_only:
+            _open_dashboard_if_requested(args.open_dashboard, args.dashboard_file)
+        print(f"Dashboard artifact index: {manifest}", file=sys.stderr)
+        return PASS
+
+    if args.command == "compare":
+        current = json.loads(Path(args.current).read_text(encoding="utf-8"))
+        baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8"))
+        comparison = compare_summaries(current, baseline)
+        Path(args.output).write_text(json.dumps(comparison, indent=2), encoding="utf-8")
+        print(f"Comparison written: {args.output}", file=sys.stderr)
+        return PASS
+
+    if args.command == "export":
+        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+        rows: list[dict] = []
+        if isinstance(payload.get("results"), list):
+            rows = payload["results"]
+        elif isinstance(payload.get("findings"), list):
+            rows = payload["findings"]
+        filtered = apply_finding_filter(rows, args.filter_expr)
+        export_rows(filtered, Path(args.output), args.format)
+        print(f"Exported {len(filtered)} rows to {args.output}", file=sys.stderr)
+        return PASS
+
+    if args.command == "gate":
+        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
+        results = evaluate_gates(payload, args.thresholds)
+        Path(args.output).write_text(json.dumps(results, indent=2), encoding="utf-8")
+        if not results.get("pass", False):
+            print("Gate violations: " + ", ".join(results.get("violations") or []), file=sys.stderr)
+            return FAIL_THRESHOLD
+        print(f"Gate evaluation passed: {args.output}", file=sys.stderr)
+        return PASS
+
+    return PASS
 
 
 def _extract_request_id_from_http_error(exc: httpx.HTTPStatusError) -> str | None:
@@ -992,7 +1232,7 @@ def load_protected_profiles(values: list[str] | None) -> list[str]:
     return profiles
 
 
-def cli() -> int:
+def _legacy_cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Aletheia red team kit")
     parser.add_argument("--mode", choices=["api", "website", "agentic", "repo", "combined"], default="api", help="Run API catalog, autonomous agentic loop, website UI audit, static repository audit, or combined command-center sweep")
     parser.add_argument("--category", help="Run only one category (filename without .json)")
@@ -1089,7 +1329,7 @@ def cli() -> int:
         help="Mutation strategy for agentic mode; repeatable (objective_suffix, safe_reframe, step_escalation, base64_wrap, roleplay)",
     )
     parser.add_argument("--agentic-no-early-stop", action="store_true", help="Do not stop agentic mode after first bypass")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.mode == "combined":
         gate_exceptions_data = _load_gate_exceptions(args.gate_exceptions_file)
@@ -1446,6 +1686,13 @@ def cli() -> int:
             )
             return FAIL_THRESHOLD
     return PASS
+
+
+def cli() -> int:
+    argv = sys.argv[1:]
+    if argv and argv[0] in {"run", "dashboard", "compare", "export", "gate"}:
+        return _command_center_cli(argv)
+    return _legacy_cli(argv)
 
 
 if __name__ == "__main__":

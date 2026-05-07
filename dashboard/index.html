@@ -75,6 +75,40 @@
       margin: 1rem 0;
     }
 
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr) 360px;
+      gap: 0.8rem;
+      align-items: start;
+    }
+
+    .clickable {
+      cursor: pointer;
+    }
+
+    .clickable:hover {
+      border-color: #8f6a70;
+      background: #231718;
+    }
+
+    .run-list {
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .run-item {
+      border: 1px solid #4a373b;
+      border-radius: 10px;
+      background: #181112;
+      padding: 0.45rem 0.55rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .run-item:hover {
+      background: #241719;
+    }
+
     .drop-zone {
       border: 1px dashed color-mix(in srgb, var(--silver) 70%, transparent);
       border-radius: 14px;
@@ -363,7 +397,101 @@
       gap: 0.5rem;
     }
 
+    .heatmap-grid {
+      display: grid;
+      gap: 0.35rem;
+      overflow: auto;
+    }
+
+    .heatmap-header,
+    .heatmap-row {
+      display: grid;
+      gap: 0.35rem;
+      align-items: center;
+    }
+
+    .heatmap-label,
+    .heatmap-cell {
+      min-height: 34px;
+      border-radius: 8px;
+      padding: 0.35rem 0.45rem;
+      font-size: 0.76rem;
+    }
+
+    .heatmap-label {
+      background: #1d1415;
+      border: 1px solid #4a373b;
+      color: #e9dde0;
+      font-weight: 600;
+    }
+
+    .heatmap-cell {
+      border: 1px solid #4a373b;
+      color: #f7ecee;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .heatmap-cell:hover {
+      outline: 1px solid #d9b8be;
+    }
+
+    .remediation-notes {
+      width: 100%;
+      margin-top: 0.6rem;
+      border: 1px solid #4f3b3e;
+      border-radius: 10px;
+      background: #150f10;
+      color: #efe6e8;
+      padding: 0.55rem;
+      font: inherit;
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    #filtersPane,
+    #runScopePane,
+    #trendPane {
+      grid-column: 1;
+    }
+
+    .controls,
+    #topMetrics,
+    #summaryBars,
+    #opsTable {
+      grid-column: 2;
+    }
+
+    #regressionPane,
+    #heatmapPane,
+    #mutationPane,
+    #missionPane,
+    #gapPane,
+    #detail {
+      grid-column: 3;
+    }
+
     @media (max-width: 780px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+
+      #filtersPane,
+      #runScopePane,
+      #trendPane,
+      .controls,
+      #topMetrics,
+      #summaryBars,
+      #opsTable,
+      #regressionPane,
+      #heatmapPane,
+      #mutationPane,
+      #missionPane,
+      #gapPane,
+      #detail {
+        grid-column: 1;
+      }
+
       .controls {
         grid-template-columns: 1fr;
       }
@@ -381,10 +509,11 @@
 <body>
   <div class="frame">
     <div class="header">
-      <h1 class="title">Aletheia Red Team Kit</h1>
+      <h1 class="title">Aletheia Adversarial Command Center</h1>
       <div class="meta" id="meta"></div>
     </div>
 
+    <div class="dashboard-grid">
     <div class="controls">
       <div class="drop-zone" id="dropZone">Drop an API, website, or repo summary JSON here, or use Auto-scan ./runs for API history.</div>
       <div class="button-row">
@@ -396,7 +525,12 @@
       </div>
     </div>
 
-    <div class="bars">
+    <div class="bars" id="runScopePane">
+      <h2>Scopes & Runs</h2>
+      <div class="run-list" id="runList"></div>
+    </div>
+
+    <div class="bars" id="filtersPane">
       <h2>Command Filters</h2>
       <div class="command-controls">
         <label>
@@ -428,6 +562,12 @@
           Search
           <input id="searchBox" type="text" placeholder="id, name, payload term">
         </label>
+        <label>
+          Technique
+          <select id="techniqueFilter">
+            <option value="all">all</option>
+          </select>
+        </label>
         <label class="toggle-row">
           <input id="mismatchOnly" type="checkbox">
           <span>Mismatches only</span>
@@ -445,37 +585,51 @@
 
     <div class="stats" id="stats"></div>
 
-    <div class="bars">
+    <div class="bars" id="summaryBars">
       <h2 id="barsTitle">Per-Category Blocking Ratio</h2>
       <div id="bars"></div>
     </div>
 
-    <div class="bars">
+    <div class="bars" id="trendPane">
       <h2>Regression Trend (API)</h2>
       <div id="trend"></div>
     </div>
 
-    <div class="bars">
+    <div class="bars" id="regressionPane">
       <h2>API Regression (High-Risk)</h2>
       <div id="regressionApi"></div>
+      <div class="command-controls" style="margin-top:0.6rem;">
+        <label>
+          Baseline Run
+          <select id="baselineRunFilter">
+            <option value="">none</option>
+          </select>
+        </label>
+        <button id="useSelectedAsBaselineBtn" type="button">Use Selected Run as Baseline</button>
+      </div>
     </div>
 
-    <div class="bars">
+    <div class="bars" id="heatmapPane">
+      <h2>Run-to-Run Regression Heatmap</h2>
+      <div id="heatmap"></div>
+    </div>
+
+    <div class="bars" id="mutationPane">
       <h2>Mutation Strategy Analytics</h2>
       <div id="mutationAnalytics"></div>
     </div>
 
-    <div class="bars">
+    <div class="bars" id="missionPane">
       <h2>Mission Priority Board</h2>
       <div id="missionBoard"></div>
     </div>
 
-    <div class="bars">
+    <div class="bars" id="gapPane">
       <h2>Technique Gap Analysis</h2>
       <div id="gapBars"></div>
     </div>
 
-    <div class="table-wrap">
+    <div class="table-wrap" id="opsTable">
       <h2 id="tableTitle">Results Table</h2>
       <div class="scroll">
         <table>
@@ -491,12 +645,17 @@
     <div class="detail" id="detail">
       <h2>Result Detail</h2>
       <p class="muted">Click any row to inspect the full JSON payload.</p>
+      <div class="muted" id="detailMeta">No selection context.</div>
       <div class="detail-top">
         <button id="copyReceiptBtn" type="button" disabled>Copy Receipt JSON</button>
         <button id="verifyBtn" type="button" disabled>Verify Signature</button>
       </div>
       <pre id="receiptView">No selection.</pre>
+      <h2 style="margin-top:0.9rem;">Inline Regression Diff</h2>
+      <pre id="regressionDiffView">No baseline selected.</pre>
+      <textarea id="remediationNotes" class="remediation-notes" placeholder="Remediation notes and operator comments..."></textarea>
       <div class="status" id="verifyStatus"></div>
+    </div>
     </div>
   </div>
 
@@ -529,12 +688,15 @@
       combinedSummary: null,
       selected: null,
       summaries: [],
+      runCatalog: [],
+      baselineSummary: null,
       verifyStats: { checked: 0, valid: 0 },
       rowVerification: new Map(),
       filters: {
         component: "auto",
         category: "all",
         decision: "all",
+        technique: "all",
         mismatchOnly: false,
         search: "",
       },
@@ -558,12 +720,14 @@
     const tableHeadRowEl = document.getElementById("tableHeadRow");
     const trendEl = document.getElementById("trend");
     const regressionApiEl = document.getElementById("regressionApi");
+    const heatmapEl = document.getElementById("heatmap");
     const mutationAnalyticsEl = document.getElementById("mutationAnalytics");
     const gapBarsEl = document.getElementById("gapBars");
     const missionBoardEl = document.getElementById("missionBoard");
     const componentFilterEl = document.getElementById("componentFilter");
     const categoryFilterEl = document.getElementById("categoryFilter");
     const decisionFilterEl = document.getElementById("decisionFilter");
+    const techniqueFilterEl = document.getElementById("techniqueFilter");
     const searchBoxEl = document.getElementById("searchBox");
     const mismatchOnlyEl = document.getElementById("mismatchOnly");
     const resetFiltersBtnEl = document.getElementById("resetFiltersBtn");
@@ -572,6 +736,11 @@
     const exportFilteredBtnEl = document.getElementById("exportFilteredBtn");
     const repoHotBtnEl = document.getElementById("repoHotBtn");
     const exportRepoHotBtnEl = document.getElementById("exportRepoHotBtn");
+    const runListEl = document.getElementById("runList");
+    const detailMetaEl = document.getElementById("detailMeta");
+    const baselineRunFilterEl = document.getElementById("baselineRunFilter");
+    const useSelectedAsBaselineBtnEl = document.getElementById("useSelectedAsBaselineBtn");
+    const regressionDiffViewEl = document.getElementById("regressionDiffView");
 
     function escapeHtml(value) {
       return String(value)
@@ -610,6 +779,155 @@
       verifyStatusEl.innerHTML = escapeHtml(message);
     }
 
+    function saveFilterState() {
+      const hash = new URLSearchParams({
+        component: state.filters.component,
+        category: state.filters.category,
+        decision: state.filters.decision,
+        technique: state.filters.technique,
+        mismatch: state.filters.mismatchOnly ? "1" : "0",
+        search: state.filters.search || "",
+      });
+      window.location.hash = hash.toString();
+    }
+
+    function loadFilterState() {
+      const raw = String(window.location.hash || "").replace(/^#/, "");
+      if (!raw) return;
+      const params = new URLSearchParams(raw);
+      state.filters.component = params.get("component") || state.filters.component;
+      state.filters.category = params.get("category") || state.filters.category;
+      state.filters.decision = params.get("decision") || state.filters.decision;
+      state.filters.technique = params.get("technique") || state.filters.technique;
+      state.filters.mismatchOnly = (params.get("mismatch") || "0") === "1";
+      state.filters.search = (params.get("search") || "").toLowerCase();
+    }
+
+    function renderRunList() {
+      const runs = Array.isArray(state.summaries) ? state.summaries : [];
+      if (!runs.length) {
+        runListEl.innerHTML = '<div class="empty-note">Load one or more run artifacts to populate scopes.</div>';
+        baselineRunFilterEl.innerHTML = '<option value="">none</option>';
+        return;
+      }
+      runListEl.innerHTML = runs
+        .map(function (item, idx) {
+          const mode = String(item.mode || "api");
+          const generated = toIsoOrDash(item.generated_at);
+          return (
+            '<div class="run-item" data-run-index="' + escapeHtml(idx) + '">' +
+            '<div><strong>' + escapeHtml(mode) + '</strong></div>' +
+            '<div class="muted">' + escapeHtml(generated) + '</div>' +
+            '</div>'
+          );
+        })
+        .join("");
+
+      runListEl.querySelectorAll("[data-run-index]").forEach(function (node) {
+        node.addEventListener("click", function () {
+          const index = Number(node.getAttribute("data-run-index"));
+          const selected = runs[index];
+          if (!selected) return;
+          renderAll(selected, { summaries: runs });
+        });
+      });
+
+      baselineRunFilterEl.innerHTML = ['<option value="">none</option>']
+        .concat(runs.map(function (item, idx) {
+          const mode = String(item.mode || "api");
+          const generated = toIsoOrDash(item.generated_at);
+          return '<option value="' + escapeHtml(String(idx)) + '">' + escapeHtml(mode + ' @ ' + generated) + '</option>';
+        }))
+        .join("");
+
+      if (state.baselineSummary) {
+        const baselineIndex = runs.findIndex(function (item) {
+          return String(item.generated_at || "") === String(state.baselineSummary.generated_at || "");
+        });
+        baselineRunFilterEl.value = baselineIndex >= 0 ? String(baselineIndex) : "";
+      }
+    }
+
+    function _toComparableRow(row) {
+      if (!row) return null;
+      return {
+        id: row.id || null,
+        category: row.category || row.type || null,
+        technique: row.technique || row.action || null,
+        expected: row.expected_decision || row.expected || null,
+        actual: row.actual_decision || row.observed || row.severity || null,
+        reason: row.reason || row.message || row.summary || null,
+      };
+    }
+
+    function _findBaselineRow(currentRow) {
+      if (!state.baselineSummary || !currentRow) {
+        return null;
+      }
+      const baselineRows = (isWebsiteSummary(state.baselineSummary) || isRepoSummary(state.baselineSummary))
+        ? (state.baselineSummary.findings || [])
+        : (state.baselineSummary.results || []);
+
+      return baselineRows.find(function (row) {
+        if (currentRow.id && row.id && String(row.id) === String(currentRow.id)) {
+          return true;
+        }
+        return (
+          String(row.category || row.type || "") === String(currentRow.category || currentRow.type || "") &&
+          String(row.name || row.title || "") === String(currentRow.name || currentRow.title || "")
+        );
+      }) || null;
+    }
+
+    function renderInlineRegressionDiff(currentRow) {
+      if (!currentRow) {
+        regressionDiffViewEl.textContent = "No row selected.";
+        return;
+      }
+      if (!state.baselineSummary) {
+        regressionDiffViewEl.textContent = "No baseline selected.";
+        return;
+      }
+
+      const baselineRow = _findBaselineRow(currentRow);
+      if (!baselineRow) {
+        regressionDiffViewEl.textContent = "No matching baseline row found for selected item.";
+        return;
+      }
+
+      const currentComparable = _toComparableRow(currentRow) || {};
+      const baselineComparable = _toComparableRow(baselineRow) || {};
+      const keys = ["id", "category", "technique", "expected", "actual", "reason"];
+      const diffs = keys
+        .map(function (key) {
+          const before = baselineComparable[key];
+          const after = currentComparable[key];
+          const changed = String(before || "") !== String(after || "");
+          return { key: key, before: before, after: after, changed: changed };
+        })
+        .filter(function (item) { return item.changed; });
+
+      if (!diffs.length) {
+        regressionDiffViewEl.textContent = JSON.stringify({
+          status: "no_change",
+          baseline_generated_at: state.baselineSummary.generated_at,
+          fields: keys,
+        }, null, 2);
+        return;
+      }
+
+      regressionDiffViewEl.textContent = JSON.stringify(
+        {
+          status: "changed",
+          baseline_generated_at: state.baselineSummary.generated_at,
+          current_generated_at: state.summary && state.summary.generated_at,
+          deltas: diffs,
+        },
+        null,
+        2,
+      );
+    }
+
     function isWebsiteSummary(summary) {
       return Array.isArray(summary.findings) && !Array.isArray(summary.results);
     }
@@ -620,6 +938,76 @@
 
     function isCombinedSummary(summary) {
       return summary && summary.mode === "combined" && summary.components && typeof summary.components === "object";
+    }
+
+    function isCommandCenterModel(summary) {
+      return summary && Array.isArray(summary.runs) && Array.isArray(summary.findings) && Array.isArray(summary.metrics);
+    }
+
+    function commandCenterToSummary(model) {
+      const runs = model.runs || [];
+      const findings = model.findings || [];
+      const latest = runs[0] || {};
+      const categories = {};
+      let blocked = 0;
+      let proceeded = 0;
+      let unknown = 0;
+      findings.forEach(function (finding, idx) {
+        const category = String(finding.category || "unknown");
+        if (!categories[category]) {
+          categories[category] = { total: 0, matches: 0, blocked: 0, proceeded: 0, unknown: 0 };
+        }
+        categories[category].total += 1;
+        const decision = String(finding.decision || "unknown");
+        if (decision === "blocked") {
+          blocked += 1;
+          categories[category].blocked += 1;
+        } else if (decision === "proceeded") {
+          proceeded += 1;
+          categories[category].proceeded += 1;
+        } else {
+          unknown += 1;
+          categories[category].unknown += 1;
+        }
+        if (!finding.title) {
+          findings[idx].title = category + " finding";
+        }
+      });
+
+      const results = findings.map(function (finding) {
+        const decision = String(finding.decision || "unknown");
+        const actual = decision === "blocked" ? "DENIED" : (decision === "proceeded" ? "PROCEED" : "UNKNOWN");
+        return {
+          id: finding.id,
+          name: finding.title,
+          category: finding.category,
+          technique: finding.technique,
+          expected_decision: actual,
+          actual_decision: actual,
+          match: !finding.mismatch,
+          request_id: null,
+          receipt: {},
+          reason: finding.summary,
+          error: null,
+        };
+      });
+
+      const total = findings.length;
+      const passRate = total ? ((total - unknown) / total) * 100 : 0;
+      return {
+        generated_at: model.generated_at,
+        mode: String(latest.mode || "api"),
+        attacks_total: total,
+        blocked: blocked,
+        proceeded: proceeded,
+        unknown: unknown,
+        errors: 0,
+        empty_200_anomalies: 0,
+        block_rate: total ? (blocked / total) * 100 : 0,
+        expectation_match_rate: passRate,
+        categories: categories,
+        results: results,
+      };
     }
 
     function resolveCombinedComponent(summary) {
@@ -789,27 +1177,57 @@
       const total = Number(summary.attacks_total || 0);
       const blocked = Number(summary.blocked || 0);
       const blockRate = Number(summary.block_rate || 0);
-      const matchRate = Number(summary.expectation_match_rate || 0);
-      const verified = state.verifyStats.valid;
-      const checked = state.verifyStats.checked;
-      const verifyPct = checked ? Number(percent(verified, checked)) : 0;
+      const passRate = Number(summary.expectation_match_rate || 0);
+      const unknown = Number(summary.unknown || 0);
+      const anomalies = Number(summary.empty_200_anomalies || 0);
+      const regression = summary.regression || null;
+      const activeRegressions = regression && regression.regressed ? 1 : 0;
+      const ciVerdict = (state.combinedSummary && state.combinedSummary.ci_verdict)
+        || summary.ci_verdict
+        || ((summary.errors || 0) > 0 ? "FAIL" : "PASS");
 
       const cards = [
-        { label: "Total Attacks", value: total },
-        { label: "Blocked", value: blocked },
-        { label: "Block Rate", value: blockRate.toFixed(1) + "%" },
-        { label: "Expectation Match", value: matchRate.toFixed(1) + "%" },
-        { label: "Signature Verification", value: verifyPct.toFixed(1) + "%" }
+        { label: "Pass Rate", value: passRate.toFixed(1) + "%", metric: "pass_rate" },
+        { label: "Blocked Rate", value: blockRate.toFixed(1) + "%", metric: "blocked_rate" },
+        { label: "Unknowns", value: unknown, metric: "unknown" },
+        { label: "Anomalies", value: anomalies, metric: "anomalies" },
+        { label: "Active Regressions", value: activeRegressions, metric: "regressions" },
+        { label: "CI Verdict", value: String(ciVerdict).toUpperCase(), metric: "ci_verdict" },
+        { label: "Total Attacks", value: total, metric: "total" },
+        { label: "Blocked", value: blocked, metric: "blocked" }
       ];
 
       statsEl.innerHTML = cards.map(function (card) {
         return (
-          "<div class=\"card\">" +
+          "<div class=\"card clickable\" data-metric=\"" + escapeHtml(card.metric || "") + "\">" +
           "<div class=\"card-label\">" + escapeHtml(card.label) + "</div>" +
           "<div class=\"card-value\">" + escapeHtml(card.value) + "</div>" +
           "</div>"
         );
       }).join("");
+
+      statsEl.querySelectorAll("[data-metric]").forEach(function (node) {
+        node.addEventListener("click", function () {
+          const metric = node.getAttribute("data-metric");
+          if (metric === "unknown") {
+            state.filters.decision = "UNKNOWN";
+            decisionFilterEl.value = "UNKNOWN";
+          } else if (metric === "anomalies") {
+            state.filters.decision = "UNKNOWN";
+            state.filters.search = "empty json response body from server (status 200)";
+            decisionFilterEl.value = "UNKNOWN";
+            searchBoxEl.value = state.filters.search;
+          } else if (metric === "blocked" || metric === "blocked_rate") {
+            state.filters.decision = "DENIED";
+            decisionFilterEl.value = "DENIED";
+          } else if (metric === "pass_rate") {
+            state.filters.mismatchOnly = true;
+            mismatchOnlyEl.checked = true;
+          }
+          saveFilterState();
+          if (state.summary) renderRows(state.summary);
+        });
+      });
     }
 
     function barColor(ratio) {
@@ -877,7 +1295,7 @@
         const ratio = Number(percent(cat.blocked || 0, cat.total || 0));
         const fill = Math.max(0, Math.min(100, ratio));
         return (
-          "<div class=\"bar-row\">" +
+          "<div class=\"bar-row clickable\" data-filter-category=\"" + escapeHtml(name) + "\">" +
           "<div>" + escapeHtml(name) + "</div>" +
           "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" +
           escapeHtml(fill) + "%;background:" + escapeHtml(barColor(ratio)) + "\"></div></div>" +
@@ -886,6 +1304,16 @@
           "</div>"
         );
       }).join("");
+
+      barsEl.querySelectorAll("[data-filter-category]").forEach(function (node) {
+        node.addEventListener("click", function () {
+          const category = node.getAttribute("data-filter-category") || "all";
+          state.filters.category = category;
+          categoryFilterEl.value = category;
+          saveFilterState();
+          if (state.summary) renderRows(state.summary);
+        });
+      });
     }
 
     function renderRows(summary) {
@@ -1008,6 +1436,10 @@
           if (state.filters.decision !== "all" && decision !== state.filters.decision) {
             return false;
           }
+          const technique = String(row.technique || row.action || row.type || "");
+          if (state.filters.technique !== "all" && technique !== state.filters.technique) {
+            return false;
+          }
           const isMismatch = (typeof row.match === "boolean") ? !row.match : (row.severity === "CRITICAL" || row.severity === "HIGH");
           if (state.filters.mismatchOnly && !isMismatch) {
             return false;
@@ -1023,6 +1455,11 @@
               row.reason,
               row.error,
               row.evidence,
+              row.technique,
+              row.action,
+              row.observed,
+              row.expected,
+              row.payload,
             ]
               .map(function (v) { return String(v || "").toLowerCase(); })
               .join(" ");
@@ -1105,6 +1542,17 @@
         return;
       }
 
+      if (isWebsiteSummary(summary)) {
+        const types = Object.keys(summary.findings_by_type || {}).sort();
+        categoryFilterEl.innerHTML = ['<option value="all">all</option>']
+          .concat(types.map(function (name) {
+            return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
+          }))
+          .join("");
+        categoryFilterEl.value = state.filters.category;
+        return;
+      }
+
       if (!isApiSummary(summary)) {
         categoryFilterEl.innerHTML = '<option value="all">all</option>';
         return;
@@ -1116,6 +1564,33 @@
         }))
         .join("");
       categoryFilterEl.value = state.filters.category;
+    }
+
+    function populateTechniqueFilter(summary) {
+      let techniques = [];
+      if (isApiSummary(summary)) {
+        const rows = Array.isArray(summary.results) ? summary.results : [];
+        techniques = Array.from(new Set(rows.map(function (row) {
+          return String(row.technique || "").trim();
+        }).filter(Boolean))).sort();
+      } else if (isRepoSummary(summary)) {
+        const rows = Array.isArray(summary.findings) ? summary.findings : [];
+        techniques = Array.from(new Set(rows.map(function (row) {
+          return String(row.type || "").trim();
+        }).filter(Boolean))).sort();
+      } else if (isWebsiteSummary(summary)) {
+        const rows = Array.isArray(summary.findings) ? summary.findings : [];
+        techniques = Array.from(new Set(rows.map(function (row) {
+          return String(row.action || row.type || "").trim();
+        }).filter(Boolean))).sort();
+      }
+
+      techniqueFilterEl.innerHTML = ['<option value="all">all</option>']
+        .concat(techniques.map(function (name) {
+          return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
+        }))
+        .join("");
+      techniqueFilterEl.value = state.filters.technique;
     }
 
     function renderMissionBoard(summary) {
@@ -1154,6 +1629,7 @@
       }
 
       const categories = summary.categories || {};
+      const rows = Array.isArray(summary.results) ? summary.results : [];
       const priorities = Object.entries(categories)
         .map(function (entry) {
           const name = entry[0];
@@ -1164,8 +1640,26 @@
           const unknown = Number(row.unknown || 0);
           const matchRate = total ? (100 * matches / total) : 0;
           const blockRate = total ? (100 * blocked / total) : 0;
-          const score = (100 - matchRate) + (unknown * 6);
-          return { name: name, total: total, matchRate: matchRate, blockRate: blockRate, unknown: unknown, score: score };
+          const categoryRows = rows.filter(function (item) { return String(item.category || "") === name; });
+          const proceededBypass = categoryRows.filter(function (item) {
+            return String(item.actual_decision || "") === "PROCEED" && String(item.expected_decision || "") === "DENIED";
+          }).length;
+          const exploitability = total ? (100 * proceededBypass / total) : 0;
+          const confidence = Math.min(100, total * 10);
+          const regressionPenalty = summary.regression && summary.regression.regressed ? 25 : 0;
+          const severityWeight = Math.max(0, 100 - matchRate);
+          const score = (severityWeight * 0.35) + (exploitability * 0.3) + (regressionPenalty * 0.2) + ((100 - confidence) * 0.15) + (unknown * 2);
+          return {
+            name: name,
+            total: total,
+            matchRate: matchRate,
+            blockRate: blockRate,
+            unknown: unknown,
+            exploitability: exploitability,
+            confidence: confidence,
+            regressed: Boolean(summary.regression && summary.regression.regressed),
+            score: score,
+          };
         })
         .filter(function (row) { return row.total > 0; })
         .sort(function (a, b) { return b.score - a.score; })
@@ -1179,16 +1673,27 @@
       missionBoardEl.innerHTML = priorities.map(function (row, idx) {
         const priority = idx === 0 ? "critical" : (idx < 3 ? "high" : "watch");
         return (
-          '<div class="mission-item">' +
+          '<div class="mission-item clickable" data-filter-category="' + escapeHtml(row.name) + '">' +
           '<div class="mission-top">' +
           '<strong>' + escapeHtml(row.name) + '</strong>' +
           '<span class="mission-tag">' + escapeHtml(priority) + '</span>' +
           '</div>' +
-          '<div class="muted">Match rate: ' + escapeHtml(row.matchRate.toFixed(1)) + '% | Block rate: ' + escapeHtml(row.blockRate.toFixed(1)) + '% | Unknown: ' + escapeHtml(row.unknown) + '</div>' +
-          '<div class="muted">Operator action: increase targeted test pressure and analyze top mismatch prompts in this category.</div>' +
+          '<div class="muted">Severity pressure: ' + escapeHtml((100 - row.matchRate).toFixed(1)) + ' | Exploitability: ' + escapeHtml(row.exploitability.toFixed(1)) + ' | Confidence: ' + escapeHtml(row.confidence.toFixed(0)) + '</div>' +
+          '<div class="muted">Regressed: ' + escapeHtml(row.regressed ? 'yes' : 'no') + ' | Unknown: ' + escapeHtml(row.unknown) + '</div>' +
+          '<div class="muted">Operator action: open category, inspect proceeded mismatches, and apply targeted policy patch.</div>' +
           '</div>'
         );
       }).join('');
+
+      missionBoardEl.querySelectorAll("[data-filter-category]").forEach(function (node) {
+        node.addEventListener("click", function () {
+          const category = node.getAttribute("data-filter-category") || "all";
+          state.filters.category = category;
+          categoryFilterEl.value = category;
+          saveFilterState();
+          if (state.summary) renderRows(state.summary);
+        });
+      });
     }
 
     function renderTrend(summaries) {
@@ -1232,6 +1737,79 @@
       }).join("");
     }
 
+    function heatmapColor(score) {
+      const clamped = Math.max(0, Math.min(100, score));
+      if (clamped >= 90) return "#2f8f4e";
+      if (clamped >= 70) return "#7c7b2c";
+      if (clamped >= 45) return "#9f5b25";
+      return "#8b1a2a";
+    }
+
+    function renderHeatmap(summaries) {
+      const apiSummaries = (summaries || []).filter(isApiSummary);
+      if (apiSummaries.length < 2) {
+        heatmapEl.innerHTML = '<div class="empty-note">Load two or more API runs to render the run-to-run heatmap.</div>';
+        return;
+      }
+
+      const ordered = apiSummaries.slice().sort(function (a, b) {
+        const aTs = Date.parse(a.generated_at || "") || 0;
+        const bTs = Date.parse(b.generated_at || "") || 0;
+        return aTs - bTs;
+      });
+      const categories = [
+        "prompt_injection",
+        "data_exfiltration",
+        "tool_abuse",
+        "jailbreak",
+        "policy_evasion",
+        "benign_controls"
+      ];
+
+      const columns = ordered.length + 1;
+      const headerStyle = 'grid-template-columns: 170px repeat(' + escapeHtml(String(ordered.length)) + ', minmax(70px, 1fr));';
+      const header =
+        '<div class="heatmap-header" style="' + headerStyle + '">' +
+        '<div class="heatmap-label">Category</div>' +
+        ordered.map(function (summary, idx) {
+          const stamp = new Date(summary.generated_at || Date.now()).toISOString().slice(5, 16).replace('T', ' ');
+          return '<div class="heatmap-label">R' + escapeHtml(String(idx + 1)) + '<br>' + escapeHtml(stamp) + '</div>';
+        }).join('') +
+        '</div>';
+
+      const rows = categories.map(function (category) {
+        const style = 'grid-template-columns: 170px repeat(' + escapeHtml(String(ordered.length)) + ', minmax(70px, 1fr));';
+        const cells = ordered.map(function (summary, idx) {
+          const cat = (summary.categories || {})[category] || { blocked: 0, total: 0 };
+          const rate = Number(percent(cat.blocked || 0, cat.total || 0));
+          return (
+            '<div class="heatmap-cell" data-heatmap-run="' + escapeHtml(String(idx)) + '" data-heatmap-category="' + escapeHtml(category) + '" style="background:' + escapeHtml(heatmapColor(rate)) + ';">' +
+            escapeHtml(rate.toFixed(1)) + '%</div>'
+          );
+        }).join('');
+        return '<div class="heatmap-row" style="' + style + '"><div class="heatmap-label">' + escapeHtml(category) + '</div>' + cells + '</div>';
+      }).join('');
+
+      heatmapEl.innerHTML = '<div class="heatmap-grid">' + header + rows + '</div>';
+
+      heatmapEl.querySelectorAll('[data-heatmap-run]').forEach(function (node) {
+        node.addEventListener('click', function () {
+          const runIndex = Number(node.getAttribute('data-heatmap-run'));
+          const category = node.getAttribute('data-heatmap-category') || 'all';
+          const selected = ordered[runIndex];
+          if (!selected) return;
+          state.filters.category = category;
+          categoryFilterEl.value = category;
+          renderAll(selected, { summaries: ordered });
+          state.filters.category = category;
+          categoryFilterEl.value = category;
+          saveFilterState();
+          if (state.summary) renderRows(state.summary);
+          setStatus('Heatmap selection applied: run ' + (runIndex + 1) + ', category=' + category + '.');
+        });
+      });
+    }
+
     function renderGapReport(summary) {
       if (!isApiSummary(summary) || !summary.gap_report || !summary.gap_report.techniques) {
         gapBarsEl.innerHTML = '<div class="empty-note">No gap_report block found yet. Generate a new API summary to populate technique gaps.</div>';
@@ -1253,7 +1831,7 @@
         const ratio = Number(stats.bypass_rate || 0);
         const fill = Math.max(0, Math.min(100, ratio));
         return (
-          "<div class=\"bar-row\">" +
+          "<div class=\"bar-row clickable\" data-filter-technique=\"" + escapeHtml(name) + "\">" +
           "<div>" + escapeHtml(name) + "</div>" +
           "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" +
           escapeHtml(fill) + "%;background:" + escapeHtml(barColor(100 - ratio)) + "\"></div></div>" +
@@ -1262,6 +1840,16 @@
           "</div>"
         );
       }).join("");
+
+      gapBarsEl.querySelectorAll("[data-filter-technique]").forEach(function (node) {
+        node.addEventListener("click", function () {
+          const technique = node.getAttribute("data-filter-technique") || "all";
+          state.filters.technique = technique;
+          techniqueFilterEl.value = technique;
+          saveFilterState();
+          if (state.summary) renderRows(state.summary);
+        });
+      });
     }
 
     function renderApiRegression(summary) {
@@ -1336,26 +1924,64 @@
       const row = rows[index];
       if (!row) return;
       state.selected = row;
+      const classification = isApiSummary(state.summary)
+        ? (row.match ? "Expected outcome matched policy." : "Expected outcome mismatch; investigate policy coverage.")
+        : ((row.severity === "CRITICAL" || row.severity === "HIGH")
+          ? "High-risk finding requires immediate remediation."
+          : "Monitor and remediate in normal backlog.");
+      const nextBestAction = isApiSummary(state.summary)
+        ? (String(row.actual_decision || "") === "PROCEED"
+          ? "Review prompt/technique, tighten policy rule, and re-run category-focused sweep."
+          : "Validate receipt signature and compare against baseline deltas.")
+        : "Patch affected surface, re-run targeted mode, and verify gate clears.";
+
       if (isWebsiteSummary(state.summary) || isRepoSummary(state.summary)) {
-        receiptViewEl.textContent = JSON.stringify(row, null, 2);
+        receiptViewEl.textContent = JSON.stringify(
+          {
+            finding: row,
+            classification_rationale: classification,
+            next_best_action: nextBestAction,
+          },
+          null,
+          2,
+        );
+        detailMetaEl.textContent =
+          "Type=" + String(row.type || "unknown") +
+          " | Severity=" + String(row.severity || "unknown") +
+          " | Action=" + String(row.action || "n/a");
         copyReceiptBtnEl.disabled = false;
         verifyBtnEl.disabled = true;
         setVerifyStatus("Selected finding: " + (row.id || row.type || "(unknown)"));
       } else {
         const receipt = row.receipt || {};
-        receiptViewEl.textContent = JSON.stringify(receipt, null, 2);
+        receiptViewEl.textContent = JSON.stringify(
+          {
+            receipt: receipt,
+            matched_technique: row.technique || "unspecified",
+            payload_summary: row.name || row.id || "attack",
+            classification_rationale: classification,
+            next_best_action: nextBestAction,
+          },
+          null,
+          2,
+        );
+        detailMetaEl.textContent =
+          "Decision=" + String(row.actual_decision || "unknown") +
+          " | Expected=" + String(row.expected_decision || "unknown") +
+          " | Request ID=" + String(row.request_id || "n/a");
         copyReceiptBtnEl.disabled = false;
         verifyBtnEl.disabled = false;
         setVerifyStatus("Selected: " + (row.id || "(unknown)"));
       }
+      renderInlineRegressionDiff(row);
     }
 
     async function copySelectedReceipt() {
       if (!state.selected) return;
       try {
-        const text = JSON.stringify(state.selected.receipt || {}, null, 2);
+        const text = JSON.stringify(state.selected, null, 2);
         await navigator.clipboard.writeText(text);
-        setVerifyStatus("Receipt JSON copied to clipboard.");
+        setVerifyStatus("Selected row JSON copied to clipboard.");
       } catch (_) {
         setVerifyStatus("Clipboard copy failed in this browser context.");
       }
@@ -1479,29 +2105,29 @@
       state.summaries = (options && Array.isArray(options.summaries) && options.summaries.length)
         ? options.summaries
         : (isApiSummary(state.summary) ? [state.summary] : []);
+      loadFilterState();
       state.verifyStats = { checked: 0, valid: 0 };
       state.rowVerification = new Map();
-      state.filters = {
-        component: state.filters.component || "auto",
-        category: "all",
-        decision: "all",
-        mismatchOnly: false,
-        search: "",
-      };
       componentFilterEl.value = state.filters.component;
-      categoryFilterEl.value = "all";
-      decisionFilterEl.value = "all";
-      mismatchOnlyEl.checked = false;
-      searchBoxEl.value = "";
+      categoryFilterEl.value = state.filters.category;
+      decisionFilterEl.value = state.filters.decision;
+      mismatchOnlyEl.checked = state.filters.mismatchOnly;
+      searchBoxEl.value = state.filters.search;
+      techniqueFilterEl.value = state.filters.technique;
       copyReceiptBtnEl.disabled = true;
       verifyBtnEl.disabled = true;
+      detailMetaEl.textContent = "No selection context.";
       receiptViewEl.textContent = "No selection.";
+      regressionDiffViewEl.textContent = "No baseline selected.";
       populateCategoryFilter(state.summary);
       populateDecisionFilter(state.summary);
+      populateTechniqueFilter(state.summary);
+      renderRunList();
       renderMeta(state.summary);
       renderStats(state.summary);
       renderBars(state.summary);
       renderTrend(state.summaries);
+      renderHeatmap(state.summaries);
       renderApiRegression(state.summary);
       renderMutationAnalytics(state.summary);
       renderGapReport(state.summary);
@@ -1519,6 +2145,7 @@
           ". Overall gate: " + (((state.combinedSummary.gates || {}).pass) ? "PASS" : "FAIL")
         );
       }
+      saveFilterState();
       setVerifyStatus("");
     }
 
@@ -1538,6 +2165,16 @@
           ? indexJson
           : (Array.isArray(indexJson.files) ? indexJson.files : []);
         files.forEach(function (file) {
+          if (file && typeof file === "object") {
+            const summaryPath = String(file.summary || file.command_center || "").trim();
+            if (!summaryPath) return;
+            if (summaryPath.startsWith("./") || summaryPath.startsWith("/")) {
+              paths.add(summaryPath);
+            } else {
+              paths.add("./runs/" + summaryPath);
+            }
+            return;
+          }
           const text = String(file || "").trim();
           if (!text) return;
           if (text.startsWith("./") || text.startsWith("/")) {
@@ -1561,6 +2198,8 @@
           const summary = await fetchJson(path);
           if (isApiSummary(summary)) {
             summaries.push(summary);
+          } else if (isCommandCenterModel(summary)) {
+            summaries.push(commandCenterToSummary(summary));
           }
         } catch (_) {
         }
@@ -1568,6 +2207,7 @@
 
       if (!summaries.length) {
         renderTrend([]);
+        renderHeatmap([]);
         setStatus("Auto-scan found no API summaries. Add files under ./runs or create ./runs/index.json.");
         return;
       }
@@ -1586,6 +2226,12 @@
     async function loadFromText(text, label) {
       try {
         const parsed = JSON.parse(text);
+        if (isCommandCenterModel(parsed)) {
+          const summary = commandCenterToSummary(parsed);
+          renderAll(summary);
+          setStatus("Loaded normalized command-center artifact " + label + " successfully.");
+          return;
+        }
         renderAll(parsed);
         setStatus("Loaded " + label + " successfully.");
       } catch (err) {
@@ -1669,6 +2315,7 @@
       state.filters.mismatchOnly = true;
       categoryFilterEl.value = weakest;
       mismatchOnlyEl.checked = true;
+      saveFilterState();
       if (state.summary) renderRows(state.summary);
     });
     showAnomalyBtnEl.addEventListener("click", function () {
@@ -1680,6 +2327,7 @@
       state.filters.decision = "UNKNOWN";
       searchBoxEl.value = state.filters.search;
       decisionFilterEl.value = "UNKNOWN";
+      saveFilterState();
       if (state.summary) renderRows(state.summary);
     });
     exportFilteredBtnEl.addEventListener("click", exportFilteredRows);
@@ -1704,13 +2352,16 @@
         state.selected = null;
         state.filters.category = "all";
         state.filters.decision = "all";
+        state.filters.technique = "all";
         state.filters.mismatchOnly = false;
         state.filters.search = "";
         categoryFilterEl.value = "all";
+        techniqueFilterEl.value = "all";
         mismatchOnlyEl.checked = false;
         searchBoxEl.value = "";
         populateCategoryFilter(display);
         populateDecisionFilter(display);
+        populateTechniqueFilter(display);
         renderMeta(display);
         renderStats(display);
         renderBars(display);
@@ -1719,32 +2370,72 @@
         renderGapReport(display);
         renderMissionBoard(display);
         renderRows(display);
+        saveFilterState();
         setVerifyStatus("");
       }
     });
     categoryFilterEl.addEventListener("change", function () {
       state.filters.category = categoryFilterEl.value;
+      saveFilterState();
       if (state.summary) renderRows(state.summary);
     });
     decisionFilterEl.addEventListener("change", function () {
       state.filters.decision = decisionFilterEl.value;
+      saveFilterState();
+      if (state.summary) renderRows(state.summary);
+    });
+    techniqueFilterEl.addEventListener("change", function () {
+      state.filters.technique = techniqueFilterEl.value;
+      saveFilterState();
       if (state.summary) renderRows(state.summary);
     });
     mismatchOnlyEl.addEventListener("change", function () {
       state.filters.mismatchOnly = mismatchOnlyEl.checked;
+      saveFilterState();
       if (state.summary) renderRows(state.summary);
     });
     searchBoxEl.addEventListener("input", function () {
       state.filters.search = String(searchBoxEl.value || "").trim().toLowerCase();
+      saveFilterState();
       if (state.summary) renderRows(state.summary);
     });
     resetFiltersBtnEl.addEventListener("click", function () {
-      state.filters = { category: "all", decision: "all", mismatchOnly: false, search: "" };
+      state.filters = { component: state.filters.component || "auto", category: "all", decision: "all", technique: "all", mismatchOnly: false, search: "" };
       categoryFilterEl.value = "all";
       decisionFilterEl.value = "all";
+      techniqueFilterEl.value = "all";
       mismatchOnlyEl.checked = false;
       searchBoxEl.value = "";
+      saveFilterState();
       if (state.summary) renderRows(state.summary);
+    });
+
+    baselineRunFilterEl.addEventListener("change", function () {
+      const idx = Number(baselineRunFilterEl.value);
+      if (Number.isNaN(idx) || idx < 0) {
+        state.baselineSummary = null;
+      } else {
+        state.baselineSummary = (state.summaries || [])[idx] || null;
+      }
+      renderInlineRegressionDiff(state.selected);
+    });
+
+    useSelectedAsBaselineBtnEl.addEventListener("click", function () {
+      if (!Array.isArray(state.summaries) || !state.summaries.length || !state.summary) {
+        setStatus("No loaded run history is available for baseline selection.");
+        return;
+      }
+      const currentIdx = state.summaries.findIndex(function (item) {
+        return String(item.generated_at || "") === String((state.summary || {}).generated_at || "");
+      });
+      if (currentIdx <= 0) {
+        setStatus("Select a non-first run to use previous run as baseline.");
+        return;
+      }
+      state.baselineSummary = state.summaries[currentIdx - 1] || null;
+      baselineRunFilterEl.value = String(currentIdx - 1);
+      renderInlineRegressionDiff(state.selected);
+      setStatus("Baseline set to previous loaded run.");
     });
 
     loadDefault();

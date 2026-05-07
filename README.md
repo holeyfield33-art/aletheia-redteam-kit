@@ -1,8 +1,7 @@
 # aletheia-redteam-kit
 
-Adversarial test kit for the [Aletheia](https://aletheia-core.com) AI security
-API. Fires 140+ attacks at the hosted engine, groups misses by custom technique,
-and produces JSON artifacts for dashboard review, regression tracking, and CI.
+A command center for adversarial operations against the [Aletheia](https://aletheia-core.com) AI security surface.
+The dashboard is the primary operating surface for triage, drill-down, and mission prioritization, while the CLI is the execution surface for running sweeps, applying gates, and exporting artifacts.
 
 Current release: `v0.2.1`
 
@@ -39,6 +38,23 @@ API call is logged on the engine side under your tenant.
     export $(cat .env | xargs)
 
 ## API red-team quick start
+
+Command-center control plane (single entry point):
+
+    python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs --open-dashboard
+    python -m kit.runner dashboard --artifact-dir runs --dashboard-file dashboard/index.html --open-dashboard
+    python -m kit.runner compare --current summary.json --baseline baseline_summary.json --output compare_summary.json
+    python -m kit.runner export --input summary.json --format csv --output triage.csv --filter "category=prompt_injection,mismatch=true"
+    python -m kit.runner gate --input summary.json --thresholds "max_unknown=5,max_errors=0,min_pass_rate=60"
+
+Supported command-center flags:
+
+- `--mode api|website|repo|combined|agentic`
+- `--baseline` and `--thresholds`
+- `--filter` (category/decision/mismatch/technique/search)
+- `--open-dashboard`
+- `--artifact-dir` and `--dashboard-file`
+- `--cli-only`
 
 Full catalog run:
 

@@ -1009,3 +1009,184 @@ def test_cli_repo_mode_fails_when_dependency_high_over_limit(monkeypatch: pytest
 
     assert rc == 1
     assert "deps_high_over_limit" in ((data.get("gates") or {}).get("violations") or [])
+
+
+def test_cli_compare_subcommand_writes_delta_file(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    current = tmp_path / "current.json"
+    baseline = tmp_path / "baseline.json"
+    output = tmp_path / "compare.json"
+
+    current.write_text(
+        json.dumps(
+            {
+                "mode": "api",
+                "blocked": 5,
+                "proceeded": 1,
+                "unknown": 2,
+                "errors": 1,
+                "empty_200_anomalies": 1,
+            }
+        )
+    )
+    baseline.write_text(
+        json.dumps(
+            {
+                "mode": "api",
+                "blocked": 4,
+                "proceeded": 0,
+                "unknown": 1,
+                "errors": 0,
+                "empty_200_anomalies": 0,
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "compare",
+            "--current",
+            str(current),
+            "--baseline",
+            str(baseline),
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    data = json.loads(output.read_text())
+
+    assert rc == 0
+    assert "proceeded_increase" in data["active_regressions"]
+
+
+def test_cli_export_subcommand_filters_rows(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    source = tmp_path / "summary.json"
+    output = tmp_path / "filtered.json"
+    source.write_text(
+        json.dumps(
+            {
+                "mode": "api",
+                "results": [
+                    {
+                        "id": "A1",
+                        "category": "prompt_injection",
+                        "technique": "t1",
+                        "actual_decision": "PROCEED",
+                        "match": False,
+                    },
+                    {
+                        "id": "A2",
+                        "category": "tool_abuse",
+                        "technique": "t2",
+                        "actual_decision": "DENIED",
+                        "match": True,
+                    },
+                ],
+            }
+        )
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "export",
+            "--input",
+            str(source),
+            "--format",
+            "json",
+            "--output",
+            str(output),
+            "--filter",
+            "category=prompt_injection,mismatch=true",
+        ],
+    )
+
+    rc = runner.cli()
+    rows = json.loads(output.read_text())
+    assert rc == 0
+    assert len(rows) == 1
+    assert rows[0]["id"] == "A1"
+
+
+def test_cli_gate_subcommand_fails_on_threshold(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    source = tmp_path / "summary.json"
+    output = tmp_path / "gate.json"
+    source.write_text(json.dumps({"mode": "api", "unknown": 10, "errors": 0, "empty_200_anomalies": 0, "expectation_match_rate": 90}))
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "gate",
+            "--input",
+            str(source),
+            "--thresholds",
+            "max_unknown=5,min_pass_rate=80",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    payload = json.loads(output.read_text())
+    assert rc == 1
+    assert "max_unknown" in payload["violations"]
+
+
+def test_cli_run_subcommand_dispatches_legacy_and_writes_command_center_artifact(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "summary.json"
+    artifact_dir = tmp_path / "runs"
+    output.write_text(
+        json.dumps(
+            {
+                "generated_at": "2026-05-05T00:00:00+00:00",
+                "mode": "api",
+                "attacks_total": 1,
+                "blocked": 1,
+                "proceeded": 0,
+                "unknown": 0,
+                "errors": 0,
+                "empty_200_anomalies": 0,
+                "expectation_match_rate": 100.0,
+                "block_rate": 100.0,
+                "categories": {"prompt_injection": {"total": 1, "matches": 1, "blocked": 1, "proceeded": 0, "unknown": 0}},
+                "results": [
+                    {
+                        "id": "A1",
+                        "name": "attack",
+                        "category": "prompt_injection",
+                        "technique": "nested",
+                        "expected_decision": "DENIED",
+                        "actual_decision": "DENIED",
+                        "match": True,
+                        "receipt": {},
+                    }
+                ],
+                "gates": {"pass": True, "violations": []},
+            }
+        )
+    )
+
+    monkeypatch.setattr(runner, "_legacy_cli", lambda argv=None: 0)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "run",
+            "--mode",
+            "api",
+            "--output",
+            str(output),
+            "--artifact-dir",
+            str(artifact_dir),
+            "--cli-only",
+        ],
+    )
+
+    rc = runner.cli()
+    assert rc == 0
+    assert (artifact_dir / "index.json").exists()
