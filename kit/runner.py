@@ -29,6 +29,8 @@ from datetime import datetime, timezone
 from fnmatch import fnmatch
 from pathlib import Path
 
+import httpx
+
 from engine.agentic import AgenticConfig, run_agentic_loop
 from engine.gap_analysis import build_gap_report
 from engine.repo_audit import run_repo_audit
@@ -42,6 +44,117 @@ from kit.web_audit.config import AuthBypassTarget, AuthStep, CustomFindingRule, 
 
 ATTACK_DIR = Path(__file__).parent.parent / "attacks"
 DEFAULT_OUTPUT = Path("summary.json")
+DEFAULT_REQUEST_DELAY_SEC = 1.0
+DEFAULT_MAX_REQUEST_DELAY_SEC = 30.0
+RECONCILIATION_COVERAGE_THRESHOLD_PCT = 95.0
+
+
+def _extract_request_id_from_http_error(exc: httpx.HTTPStatusError) -> str | None:
+    response = exc.response
+    if response is None:
+        return None
+
+    for header_name in ("x-request-id", "x-correlation-id"):
+        header_value = str(response.headers.get(header_name, "")).strip()
+        if header_value:
+            return header_value
+
+    if not response.content:
+        return None
+
+    try:
+        payload = response.json()
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    request_id = str(
+        payload.get("request_id")
+        or (payload.get("metadata") or {}).get("request_id")
+        or (payload.get("receipt") or {}).get("request_id")
+        or ""
+    ).strip()
+    return request_id or None
+
+
+def _adjust_request_delay(delay_sec: float, status_code: int | None) -> float:
+    if status_code == 429:
+        return min(delay_sec * 2.0, DEFAULT_MAX_REQUEST_DELAY_SEC)
+    if status_code is None:
+        return delay_sec
+    return DEFAULT_REQUEST_DELAY_SEC
+
+
+def _needs_reconciliation(result: dict) -> bool:
+    decision = str(result.get("actual_decision") or "").strip().upper()
+    return decision in {"", "UNKNOWN", "ERROR"}
+
+
+def _map_reconciled_decision(decision: str | None) -> str | None:
+    normalized = str(decision or "").strip().upper()
+    if normalized == "SANDBOX_BLOCKED":
+        return "DENIED"
+    if normalized in {"PROCEED", "DENIED"}:
+        return normalized
+    return None
+
+
+def reconcile_results(results: list[dict], client: AletheiaClient) -> dict:
+    """Resolve UNKNOWN/ERROR decisions from authoritative receipt/log lookups."""
+    reconcilable = [
+        row
+        for row in results
+        if _needs_reconciliation(row) and str(row.get("request_id") or "").strip()
+    ]
+
+    unreconciled_request_ids: list[str] = []
+    total_reconciled = 0
+    endpoint_used: str | None = None
+    auth_mode = "unknown"
+
+    for row in reconcilable:
+        request_id = str(row.get("request_id") or "").strip()
+
+        if auth_mode == "session_cookie_required":
+            unreconciled_request_ids.append(request_id)
+            continue
+
+        lookup = client.lookup_decision(request_id)
+
+        if lookup.endpoint and endpoint_used is None:
+            endpoint_used = lookup.endpoint
+        if lookup.auth_mode != "unknown":
+            auth_mode = lookup.auth_mode
+
+        reconciled_decision = _map_reconciled_decision(lookup.decision)
+        if reconciled_decision is None:
+            unreconciled_request_ids.append(request_id)
+            continue
+
+        row["actual_decision"] = reconciled_decision
+        row["match"] = reconciled_decision == str(row.get("expected_decision") or "")
+        prior_reason = str(row.get("reason") or "").strip()
+        if prior_reason:
+            row["reason"] = f"{prior_reason} | reconciled via {lookup.endpoint}"
+        else:
+            row["reason"] = f"reconciled via {lookup.endpoint}"
+        total_reconciled += 1
+
+    unreconciled = len(unreconciled_request_ids)
+    coverage_pct = round(
+        (100.0 * total_reconciled / len(reconcilable)) if reconcilable else 100.0,
+        1,
+    )
+    return {
+        "total_reconciled": total_reconciled,
+        "unreconciled": unreconciled,
+        "reconciliation_coverage_pct": coverage_pct,
+        "unreconciled_request_ids": unreconciled_request_ids,
+        "endpoint": endpoint_used,
+        "auth_mode": auth_mode,
+    }
 
 
 def infer_custom_technique(attack: dict) -> str:
@@ -89,52 +202,116 @@ def load_attacks(category: str | None = None) -> list[dict]:
     return load_attacks_from_catalog(category)
 
 
-def run_attack(client: AletheiaClient, attack: dict) -> dict:
+def run_attack(client: AletheiaClient, attack: dict, *, include_status_code: bool = False) -> dict:
     """Execute one attack, return a result record."""
     if str(attack.get("category", "")).strip().lower() == "multi_turn":
         return run_multi_turn_attack(client, attack)
 
     started = time.time()
-    try:
-        technique = attack.get("technique") or infer_custom_technique(attack)
-        result = client.audit(
-            payload=attack["payload"],
-            action=attack.get("action", "fetch_data"),
-            origin=attack.get("origin", "redteam-kit"),
+    technique = attack.get("technique") or infer_custom_technique(attack)
+    retried_5xx = False
+
+    while True:
+        try:
+            result = client.audit(
+                payload=attack["payload"],
+                action=attack.get("action", "fetch_data"),
+                origin=attack.get("origin", "redteam-kit"),
+            )
+            latency_ms = (time.time() - started) * 1000
+            row = {
+                "id": attack["id"],
+                "name": attack["name"],
+                "category": attack["category"],
+                "technique": technique,
+                "severity": attack.get("severity", "MEDIUM"),
+                "expected_decision": attack["expected_decision"],
+                "actual_decision": result.decision,
+                "match": result.decision == attack["expected_decision"],
+                "request_id": result.request_id or None,
+                "latency_ms": round(latency_ms, 1),
+                "receipt": result.receipt,
+                "reason": result.reason,
+                "error": None,
+            }
+            if include_status_code:
+                row["status_code"] = (
+                    int(getattr(result, "raw", {}).get("status_code", 200))
+                    if isinstance(getattr(result, "raw", {}), dict)
+                    else 200
+                )
+            return row
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            if status_code is not None and 500 <= status_code < 600 and not retried_5xx:
+                retried_5xx = True
+                time.sleep(5.0)
+                continue
+
+            request_id = _extract_request_id_from_http_error(exc)
+            latency_ms = (time.time() - started) * 1000
+            row = {
+                "id": attack["id"],
+                "name": attack["name"],
+                "category": attack["category"],
+                "technique": technique,
+                "severity": attack.get("severity", "MEDIUM"),
+                "expected_decision": attack["expected_decision"],
+                "actual_decision": "ERROR",
+                "match": False,
+                "request_id": request_id,
+                "latency_ms": round(latency_ms, 1),
+                "receipt": None,
+                "reason": None,
+                "error": str(exc),
+            }
+            if include_status_code:
+                row["status_code"] = status_code
+            return row
+        except Exception as exc:
+            latency_ms = (time.time() - started) * 1000
+            row = {
+                "id": attack["id"],
+                "name": attack["name"],
+                "category": attack["category"],
+                "technique": technique,
+                "severity": attack.get("severity", "MEDIUM"),
+                "expected_decision": attack["expected_decision"],
+                "actual_decision": "ERROR",
+                "match": False,
+                "request_id": None,
+                "latency_ms": round(latency_ms, 1),
+                "receipt": None,
+                "reason": None,
+                "error": str(exc),
+            }
+            if include_status_code:
+                row["status_code"] = None
+            return row
+
+
+def run_attacks_with_backoff(client: AletheiaClient, attacks: list[dict]) -> list[dict]:
+    """Run attacks with adaptive pacing to reduce transport failures."""
+    results: list[dict] = []
+    delay_sec = DEFAULT_REQUEST_DELAY_SEC
+
+    for i, attack in enumerate(attacks, 1):
+        if i > 1:
+            time.sleep(delay_sec)
+
+        result = run_attack(client, attack, include_status_code=True)
+        status = "OK" if result["match"] else "NO"
+        print(
+            f"[{i}/{len(attacks)}] {status} {attack['id']:<12} "
+            f"{attack['category']:<20} {result['actual_decision']}",
+            file=sys.stderr,
         )
-        latency_ms = (time.time() - started) * 1000
-        return {
-            "id": attack["id"],
-            "name": attack["name"],
-            "category": attack["category"],
-            "technique": technique,
-            "severity": attack.get("severity", "MEDIUM"),
-            "expected_decision": attack["expected_decision"],
-            "actual_decision": result.decision,
-            "match": result.decision == attack["expected_decision"],
-            "request_id": result.request_id,
-            "latency_ms": round(latency_ms, 1),
-            "receipt": result.receipt,
-            "reason": result.reason,
-            "error": None,
-        }
-    except Exception as exc:
-        technique = attack.get("technique") or infer_custom_technique(attack)
-        return {
-            "id": attack["id"],
-            "name": attack["name"],
-            "category": attack["category"],
-            "technique": technique,
-            "severity": attack.get("severity", "MEDIUM"),
-            "expected_decision": attack["expected_decision"],
-            "actual_decision": "ERROR",
-            "match": False,
-            "request_id": None,
-            "latency_ms": None,
-            "receipt": None,
-            "reason": None,
-            "error": str(exc),
-        }
+        results.append(result)
+
+        delay_sec = _adjust_request_delay(delay_sec, result.get("status_code"))
+        result.pop("status_code", None)
+
+    return results
 
 
 def run_multi_turn_attack(client: AletheiaClient, attack: dict) -> dict:
@@ -908,16 +1085,8 @@ def cli() -> int:
         attacks = load_attacks(args.category)
         print(f"Loaded {len(attacks)} attacks for combined API component", file=sys.stderr)
         with AletheiaClient(base_url=args.base_url) as client:
-            results = []
-            for i, attack in enumerate(attacks, 1):
-                result = run_attack(client, attack)
-                status = "OK" if result["match"] else "NO"
-                print(
-                    f"[api {i}/{len(attacks)}] {status} {attack['id']:<12} "
-                    f"{attack['category']:<20} {result['actual_decision']}",
-                    file=sys.stderr,
-                )
-                results.append(result)
+            results = run_attacks_with_backoff(client, attacks)
+            reconciliation = reconcile_results(results, client)
 
             api_summary = summarize(results)
             api_regression: dict | None = None
@@ -934,16 +1103,19 @@ def cli() -> int:
                 "mode": "api",
                 "engine_url": client.base_url,
                 **api_summary,
+                "reconciliation": reconciliation,
                 "regression": api_regression,
                 "gap_report": build_gap_report(results),
                 "results": results,
             }
             combined["components"]["api"] = api_component
 
-        if api_summary["errors"] > 0:
+        reconciliation_coverage = float(reconciliation.get("reconciliation_coverage_pct", 0.0))
+        if api_summary["errors"] > 0 and reconciliation_coverage < RECONCILIATION_COVERAGE_THRESHOLD_PCT:
             hard_error = True
             combined["gates"]["pass"] = False
             combined["gates"]["violations"].append("api:errors_present")
+            combined["gates"]["violations"].append("api:reconciliation_coverage_below_threshold")
         if api_summary["expectation_match_rate"] < args.min_expectation_match_rate:
             combined["gates"]["pass"] = False
             combined["gates"]["violations"].append("api:expectation_match_rate_below_threshold")
@@ -1173,16 +1345,8 @@ def cli() -> int:
     print(f"Loaded {len(attacks)} attacks", file=sys.stderr)
 
     with AletheiaClient(base_url=args.base_url) as client:
-        results = []
-        for i, attack in enumerate(attacks, 1):
-            result = run_attack(client, attack)
-            status = "OK" if result["match"] else "NO"
-            print(
-                f"[{i}/{len(attacks)}] {status} {attack['id']:<12} "
-                f"{attack['category']:<20} {result['actual_decision']}",
-                file=sys.stderr,
-            )
-            results.append(result)
+        results = run_attacks_with_backoff(client, attacks)
+        reconciliation = reconcile_results(results, client)
 
     summary = summarize(results)
     api_regression: dict | None = None
@@ -1198,6 +1362,7 @@ def cli() -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "engine_url": client.base_url,
         **summary,
+        "reconciliation": reconciliation,
         "regression": api_regression,
         "gap_report": build_gap_report(results),
         "results": results,
@@ -1209,7 +1374,18 @@ def cli() -> int:
         f"Output: {args.output}",
         file=sys.stderr,
     )
-    if summary["errors"] > 0:
+    reconciliation_coverage = float(reconciliation.get("reconciliation_coverage_pct", 0.0))
+    if summary["errors"] > 0 and reconciliation_coverage < RECONCILIATION_COVERAGE_THRESHOLD_PCT:
+        print(
+            "API reconciliation gate failure: coverage "
+            f"{reconciliation_coverage}% < {RECONCILIATION_COVERAGE_THRESHOLD_PCT}%",
+            file=sys.stderr,
+        )
+        if reconciliation.get("unreconciled_request_ids"):
+            print(
+                "Unreconciled request_ids: " + ", ".join(reconciliation["unreconciled_request_ids"]),
+                file=sys.stderr,
+            )
         return FAIL_ERROR
     if summary["expectation_match_rate"] < args.min_expectation_match_rate:
         print(

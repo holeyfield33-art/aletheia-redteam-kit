@@ -12,6 +12,7 @@ from kit.runner import (
     load_prompt_injection_tests,
     load_protected_profiles,
     load_protected_routes,
+    reconcile_results,
     run_attack,
     summarize,
 )
@@ -23,6 +24,7 @@ class _AuditResult:
     request_id: str
     receipt: dict
     reason: str | None
+    raw: dict | None = None
 
 
 def test_summarize_math_is_correct() -> None:
@@ -572,6 +574,120 @@ def test_cli_api_mode_threshold_pass(monkeypatch: pytest.MonkeyPatch, tmp_path) 
 
     rc = runner.cli()
     assert rc == 0
+
+
+def test_reconcile_results_maps_saved_decisions() -> None:
+    class FakeClient:
+        def lookup_decision(self, request_id: str):
+            if request_id == "req-1":
+                return type(
+                    "Lookup",
+                    (),
+                    {
+                        "request_id": "req-1",
+                        "decision": "SANDBOX_BLOCKED",
+                        "endpoint": "https://api.example.com/api/v1/receipt/req-1",
+                        "auth_mode": "api_key",
+                    },
+                )()
+            return type(
+                "Lookup",
+                (),
+                {
+                    "request_id": request_id,
+                    "decision": None,
+                    "endpoint": None,
+                    "auth_mode": "unknown",
+                },
+            )()
+
+    rows = [
+        {
+            "id": "A1",
+            "name": "a",
+            "category": "prompt_injection",
+            "expected_decision": "DENIED",
+            "actual_decision": "UNKNOWN",
+            "match": False,
+            "request_id": "req-1",
+            "reason": "empty",
+        },
+        {
+            "id": "A2",
+            "name": "b",
+            "category": "prompt_injection",
+            "expected_decision": "DENIED",
+            "actual_decision": "ERROR",
+            "match": False,
+            "request_id": "req-2",
+            "reason": "timeout",
+        },
+    ]
+
+    reconciliation = reconcile_results(rows, FakeClient())
+
+    assert rows[0]["actual_decision"] == "DENIED"
+    assert rows[0]["match"] is True
+    assert reconciliation["total_reconciled"] == 1
+    assert reconciliation["unreconciled"] == 1
+    assert reconciliation["reconciliation_coverage_pct"] == 50.0
+    assert reconciliation["unreconciled_request_ids"] == ["req-2"]
+
+
+def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "summary.json"
+
+    class FakeClient:
+        base_url = "https://example.test"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def audit(self, payload: str, action: str, origin: str) -> _AuditResult:
+            return _AuditResult("ERROR", "req-1", {}, "empty", raw={"status_code": 500})
+
+        def lookup_decision(self, request_id: str):
+            return type(
+                "Lookup",
+                (),
+                {
+                    "request_id": request_id,
+                    "decision": None,
+                    "endpoint": "https://app.aletheia-core.com/api/logs",
+                    "auth_mode": "session_cookie_required",
+                },
+            )()
+
+    monkeypatch.setattr(
+        runner,
+        "load_attacks",
+        lambda category=None: [
+            {
+                "id": "PI_T3",
+                "name": "reconciliation fail",
+                "category": "prompt_injection",
+                "expected_decision": "DENIED",
+                "payload": "ignore rules",
+            }
+        ],
+    )
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    data = json.loads(output.read_text())
+    assert rc == 2
+    assert data["reconciliation"]["reconciliation_coverage_pct"] == 0.0
 
 
 def test_cli_combined_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

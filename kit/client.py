@@ -29,6 +29,15 @@ class _RetryableAuditAnomaly(Exception):
     status_code: int
     reason: str
     raw: dict[str, Any]
+    request_id: str
+
+
+@dataclass
+class DecisionLookup:
+    request_id: str
+    decision: str | None
+    endpoint: str | None
+    auth_mode: str
 
 
 class AletheiaClient:
@@ -88,7 +97,7 @@ class AletheiaClient:
         assert last_anomaly is not None
         decision = "DENIED" if last_anomaly.status_code == 403 else "UNKNOWN"
         return AuditResult(
-            request_id="",
+            request_id=last_anomaly.request_id,
             decision=decision,
             reason=f"{last_anomaly.reason}; treated as {decision}",
             receipt={},
@@ -109,6 +118,7 @@ class AletheiaClient:
             )
 
         if not resp.content.strip():
+            request_id = self._extract_request_id(body=None, response=resp)
             raise _RetryableAuditAnomaly(
                 status_code=resp.status_code,
                 reason=self._retry_reason(
@@ -123,11 +133,13 @@ class AletheiaClient:
                     "attempt": attempt,
                     "attempts": attempts,
                 },
+                request_id=request_id,
             )
 
         try:
             body = resp.json()
         except JSONDecodeError as exc:
+            request_id = self._extract_request_id(body=None, response=resp)
             raise _RetryableAuditAnomaly(
                 status_code=resp.status_code,
                 reason=self._retry_reason(
@@ -141,9 +153,11 @@ class AletheiaClient:
                     "attempt": attempt,
                     "attempts": attempts,
                 },
+                request_id=request_id,
             ) from exc
 
         if not isinstance(body, dict):
+            request_id = self._extract_request_id(body=None, response=resp)
             raise _RetryableAuditAnomaly(
                 status_code=resp.status_code,
                 reason=self._retry_reason(
@@ -157,6 +171,7 @@ class AletheiaClient:
                     "attempt": attempt,
                     "attempts": attempts,
                 },
+                request_id=request_id,
             )
 
         decision = body.get("decision")
@@ -164,6 +179,7 @@ class AletheiaClient:
             decision = "DENIED"
 
         if not decision:
+            request_id = self._extract_request_id(body=body, response=resp)
             raise _RetryableAuditAnomaly(
                 status_code=resp.status_code,
                 reason=self._retry_reason(
@@ -178,15 +194,160 @@ class AletheiaClient:
                     "attempts": attempts,
                     "body": body,
                 },
+                request_id=request_id,
             )
 
         return AuditResult(
-            request_id=body.get("request_id") or body.get("metadata", {}).get("request_id", ""),
+            request_id=self._extract_request_id(body=body, response=resp),
             decision=decision,
             reason=body.get("reason") or body.get("error"),
             receipt=body.get("receipt", {}),
             raw=body,
         )
+
+    def lookup_decision(self, request_id: str) -> DecisionLookup:
+        """Resolve authoritative decision for a request_id from available APIs."""
+        normalized_request_id = str(request_id or "").strip()
+        if not normalized_request_id:
+            return DecisionLookup(request_id="", decision=None, endpoint=None, auth_mode="not_applicable")
+
+        receipt_paths = [
+            f"/api/v1/receipt/{normalized_request_id}",
+            f"/v1/receipt/{normalized_request_id}",
+        ]
+        for path in receipt_paths:
+            try:
+                response = self._client.get(path)
+            except httpx.HTTPError:
+                continue
+
+            if response.status_code == 200:
+                decision = self._decision_from_payload(self._safe_json(response), normalized_request_id)
+                if decision:
+                    return DecisionLookup(
+                        request_id=normalized_request_id,
+                        decision=decision,
+                        endpoint=f"{self.base_url}{path}",
+                        auth_mode="api_key",
+                    )
+            if response.status_code in {401, 403}:
+                return DecisionLookup(
+                    request_id=normalized_request_id,
+                    decision=None,
+                    endpoint=f"{self.base_url}{path}",
+                    auth_mode="session_cookie_required",
+                )
+
+        dashboard_base = os.environ.get("ALETHEIA_DASHBOARD_BASE_URL", "https://app.aletheia-core.com").rstrip("/")
+        with httpx.Client(
+            base_url=dashboard_base,
+            headers={
+                "X-API-Key": self.api_key,
+                "Accept": "application/json",
+                "Accept-Encoding": "identity",
+            },
+            timeout=self._client.timeout,
+        ) as dashboard_client:
+            for query_key in ("request_id", "requestId"):
+                try:
+                    response = dashboard_client.get("/api/logs", params={query_key: normalized_request_id})
+                except httpx.HTTPError:
+                    continue
+
+                if response.status_code == 200:
+                    decision = self._decision_from_payload(self._safe_json(response), normalized_request_id)
+                    if decision:
+                        return DecisionLookup(
+                            request_id=normalized_request_id,
+                            decision=decision,
+                            endpoint=f"{dashboard_base}/api/logs",
+                            auth_mode="api_key",
+                        )
+                    continue
+
+                if response.status_code in {401, 403}:
+                    return DecisionLookup(
+                        request_id=normalized_request_id,
+                        decision=None,
+                        endpoint=f"{dashboard_base}/api/logs",
+                        auth_mode="session_cookie_required",
+                    )
+
+        return DecisionLookup(request_id=normalized_request_id, decision=None, endpoint=None, auth_mode="unknown")
+
+    def _extract_request_id(self, *, body: dict[str, Any] | None, response: httpx.Response | None) -> str:
+        if isinstance(body, dict):
+            candidates = [
+                body.get("request_id"),
+                (body.get("metadata") or {}).get("request_id"),
+                (body.get("receipt") or {}).get("request_id"),
+            ]
+            for candidate in candidates:
+                normalized = str(candidate or "").strip()
+                if normalized:
+                    return normalized
+
+        if response is not None:
+            for header_name in ("x-request-id", "x-correlation-id"):
+                normalized = str(response.headers.get(header_name, "")).strip()
+                if normalized:
+                    return normalized
+
+        return ""
+
+    def _safe_json(self, response: httpx.Response) -> Any:
+        try:
+            return response.json()
+        except Exception:
+            return None
+
+    def _decision_from_payload(self, payload: Any, request_id: str) -> str | None:
+        if isinstance(payload, dict):
+            decision = self._normalize_decision(payload.get("decision"))
+            if decision:
+                return decision
+
+            receipt = payload.get("receipt")
+            if isinstance(receipt, dict):
+                decision = self._normalize_decision(receipt.get("decision"))
+                if decision:
+                    return decision
+
+            rows = payload.get("results") or payload.get("logs") or payload.get("items") or []
+            if isinstance(rows, list):
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    row_request_id = str(
+                        row.get("request_id") or row.get("requestId") or (row.get("receipt") or {}).get("request_id") or ""
+                    ).strip()
+                    if row_request_id and row_request_id != request_id:
+                        continue
+                    decision = self._normalize_decision(row.get("decision") or row.get("outcome") or row.get("status"))
+                    if decision:
+                        return decision
+            return None
+
+        if isinstance(payload, list):
+            for row in payload:
+                if not isinstance(row, dict):
+                    continue
+                row_request_id = str(
+                    row.get("request_id") or row.get("requestId") or (row.get("receipt") or {}).get("request_id") or ""
+                ).strip()
+                if row_request_id and row_request_id != request_id:
+                    continue
+                decision = self._normalize_decision(row.get("decision") or row.get("outcome") or row.get("status"))
+                if decision:
+                    return decision
+
+        return None
+
+    def _normalize_decision(self, value: Any) -> str | None:
+        normalized = str(value or "").strip().upper()
+        if normalized in {"PROCEED", "DENIED", "SANDBOX_BLOCKED", "UNKNOWN", "ERROR"}:
+            return normalized
+        return None
 
     def _retry_reason(self, message: str, *, attempt: int, attempts: int) -> str:
         if attempt >= attempts:

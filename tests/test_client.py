@@ -368,3 +368,72 @@ def test_audit_conversation_without_context_uses_raw_turns(monkeypatch: pytest.M
         )
 
     assert payloads == ["a", "b"]
+
+
+def test_extracts_request_id_from_receipt_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+        content = b'{"decision":"DENIED","receipt":{"request_id":"req-from-receipt"}}'
+
+        def json(self) -> dict[str, object]:
+            return {
+                "decision": "DENIED",
+                "receipt": {"request_id": "req-from-receipt"},
+            }
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeHttpxClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def post(self, path: str, json: dict[str, str]) -> FakeResponse:
+            return FakeResponse()
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("kit.client.httpx.Client", FakeHttpxClient)
+
+    with AletheiaClient(api_key="k") as client:
+        result = client.audit("x", "a", "o")
+
+    assert result.request_id == "req-from-receipt"
+
+
+def test_lookup_decision_reads_receipt_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        def __init__(self, status_code: int, payload: dict[str, object] | None = None) -> None:
+            self.status_code = status_code
+            self._payload = payload or {}
+            self.headers = {"content-type": "application/json"}
+            self.content = b"{}"
+
+        def json(self) -> dict[str, object]:
+            return self._payload
+
+    class FakeHttpxClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def post(self, path: str, json: dict[str, str]):
+            return FakeResponse(200, {"request_id": "req-1", "decision": "DENIED", "receipt": {}})
+
+        def get(self, path: str):
+            if path == "/api/v1/receipt/req-lookup":
+                return FakeResponse(200, {"request_id": "req-lookup", "decision": "SANDBOX_BLOCKED"})
+            return FakeResponse(404, {})
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr("kit.client.httpx.Client", FakeHttpxClient)
+
+    with AletheiaClient(api_key="k") as client:
+        lookup = client.lookup_decision("req-lookup")
+
+    assert lookup.request_id == "req-lookup"
+    assert lookup.decision == "SANDBOX_BLOCKED"
+    assert lookup.auth_mode == "api_key"
