@@ -964,3 +964,48 @@ def test_cli_repo_mode_baseline_allows_only_known_violations(monkeypatch: pytest
     assert data["gates"]["pass"] is True
     assert data["baseline"]["enforced_pass"] is True
     assert data["baseline"]["new_violations"] == []
+
+
+def test_cli_repo_mode_fails_when_dependency_high_over_limit(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "repo_summary.json"
+
+    monkeypatch.setattr(
+        runner,
+        "run_repo_audit",
+        lambda path, threat_feed_path=None: {
+            "generated_at": "2026-05-05T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": str(path),
+            "files_scanned": 1,
+            "findings_total": 11,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 11, "LOW": 0},
+            "findings_by_type": {"dependency_vulnerability": 11},
+            "dependencies": {
+                "findings_by_severity": {"CRITICAL": 0, "HIGH": 11, "MEDIUM": 0, "LOW": 0}
+            },
+            "risk_score": 85,
+            "gates": {"pass": True, "violations": []},
+            "findings": [],
+        },
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "repo",
+            "--repo-path",
+            str(tmp_path),
+            "--max-deps-high",
+            "10",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    data = json.loads(output.read_text())
+
+    assert rc == 1
+    assert "deps_high_over_limit" in ((data.get("gates") or {}).get("violations") or [])

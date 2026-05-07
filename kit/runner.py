@@ -445,9 +445,22 @@ def _run_repo_audit_with_cli_options(args: argparse.Namespace) -> dict:
             args.repo_path,
             threat_feed_path=args.threat_feed_file,
             include_test_fixtures=args.repo_include_test_fixtures,
+            deps_scan=args.deps_scan,
         )
     except TypeError as exc:
-        if "include_test_fixtures" not in str(exc):
+        message = str(exc)
+        if "deps_scan" in message:
+            try:
+                return run_repo_audit(
+                    args.repo_path,
+                    threat_feed_path=args.threat_feed_file,
+                    include_test_fixtures=args.repo_include_test_fixtures,
+                )
+            except TypeError as fallback_exc:
+                if "include_test_fixtures" not in str(fallback_exc):
+                    raise
+                return run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
+        if "include_test_fixtures" not in message:
             raise
         return run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
 
@@ -1032,6 +1045,12 @@ def cli() -> int:
     parser.add_argument("--repo-path", default=".", help="Repository root path for --mode repo")
     parser.add_argument("--threat-feed-file", help="Optional threat feed JSON for repo and combined modes")
     parser.add_argument(
+        "--deps-scan",
+        choices=["off", "auto", "full"],
+        default="auto",
+        help="Dependency scan mode for repo/combined: off, auto (manifest-aware), or full",
+    )
+    parser.add_argument(
         "--repo-include-test-fixtures",
         action="store_true",
         help="Include secrets and allowlisted fixture findings from tests/ and test/ in repo scans",
@@ -1057,6 +1076,8 @@ def cli() -> int:
     parser.add_argument("--baseline-expires-at", help="Optional baseline approval expiry (ISO-8601)")
     parser.add_argument("--max-repo-critical", type=int, default=0, help="Fail repo mode if CRITICAL findings exceed this")
     parser.add_argument("--max-repo-high", type=int, default=5, help="Fail repo mode if HIGH findings exceed this")
+    parser.add_argument("--max-deps-critical", type=int, default=0, help="Fail repo mode if dependency CRITICAL findings exceed this")
+    parser.add_argument("--max-deps-high", type=int, default=10, help="Fail repo mode if dependency HIGH findings exceed this")
     parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
     parser.add_argument("--agentic-iterations", type=int, default=4, help="Maximum iterations for agentic mode")
     parser.add_argument("--agentic-seed-size", type=int, default=10, help="Number of seed attacks to initialize agentic mode")
@@ -1179,6 +1200,17 @@ def cli() -> int:
         if high > args.max_repo_high:
             repo_gates["pass"] = False
             repo_gates.setdefault("violations", []).append("high_repo_findings_over_limit")
+
+        dependency_severity = ((repo_summary.get("dependencies") or {}).get("findings_by_severity") or {})
+        deps_critical = int(dependency_severity.get("CRITICAL", 0))
+        deps_high = int(dependency_severity.get("HIGH", 0))
+        if deps_critical > args.max_deps_critical:
+            repo_gates["pass"] = False
+            repo_gates.setdefault("violations", []).append("deps_critical_over_limit")
+        if deps_high > args.max_deps_high:
+            repo_gates["pass"] = False
+            repo_gates.setdefault("violations", []).append("deps_high_over_limit")
+
         repo_summary["gates"] = repo_gates
         combined["components"]["repo"] = repo_summary
         if not repo_gates.get("pass", False):
@@ -1304,6 +1336,9 @@ def cli() -> int:
 
         critical = int((summary.get("findings_by_severity") or {}).get("CRITICAL", 0))
         high = int((summary.get("findings_by_severity") or {}).get("HIGH", 0))
+        dependency_severity = ((summary.get("dependencies") or {}).get("findings_by_severity") or {})
+        deps_critical = int(dependency_severity.get("CRITICAL", 0))
+        deps_high = int(dependency_severity.get("HIGH", 0))
 
         if critical > args.max_repo_critical:
             gates["pass"] = False
@@ -1311,6 +1346,12 @@ def cli() -> int:
         if high > args.max_repo_high:
             gates["pass"] = False
             gates.setdefault("violations", []).append("high_repo_findings_over_limit")
+        if deps_critical > args.max_deps_critical:
+            gates["pass"] = False
+            gates.setdefault("violations", []).append("deps_critical_over_limit")
+        if deps_high > args.max_deps_high:
+            gates["pass"] = False
+            gates.setdefault("violations", []).append("deps_high_over_limit")
 
         summary["gates"] = gates
         summary["gate_exceptions"] = _apply_gate_exceptions("repo", summary["gates"], gate_exceptions_data)
@@ -1332,7 +1373,8 @@ def cli() -> int:
 
         print(
             f"\nDone. Repo findings: {summary['findings_total']} "
-            f"(critical={critical}, high={high}), risk {summary.get('risk_score', 0)}. "
+            f"(critical={critical}, high={high}, deps_critical={deps_critical}, deps_high={deps_high}), "
+            f"risk {summary.get('risk_score', 0)}. "
             f"Output: {args.output}",
             file=sys.stderr,
         )

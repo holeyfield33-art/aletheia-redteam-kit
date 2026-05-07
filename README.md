@@ -82,12 +82,18 @@ Run static repository risk scanning:
 
     python -m kit.runner --mode repo --repo-path . --output repo_summary.json
 
+Run full dependency/supply-chain scan (multi-language when tools are installed):
+
+    python -m kit.runner --mode repo --repo-path . --deps-scan full --output repo_summary.json
+
 Tune repo gate thresholds:
 
     python -m kit.runner --mode repo \
         --repo-path . \
         --max-repo-critical 0 \
         --max-repo-high 5 \
+        --max-deps-critical 0 \
+        --max-deps-high 10 \
         --output repo_summary.json
 
 Repo summary highlights:
@@ -110,11 +116,23 @@ Current repo checks include:
 
 Dependency advisory enrichment:
 
-- If `pip-audit-report.json` exists in repo root, findings are enriched with
-    dependency vulnerability advisories.
-- Generate it with:
+- Repo mode now auto-runs `pip-audit` when Python manifests are detected
+    (unless `--deps-scan off`).
+- If `pip-audit-report.json` exists in repo root, it is ingested as a trusted
+    advisory source first.
+- `--deps-scan auto` also runs `osv-scanner` when non-Python lockfiles are
+    detected (if the binary is available); use `--deps-scan full` to force it.
+- Generate a persistent Python advisory report with:
 
             pip-audit -f json -o pip-audit-report.json
+
+Optional dependency tooling extras:
+
+        pip install -e ".[deps]"
+
+The scanner records dependency findings under `dependencies` in repo/combined
+summary output, including severity, language, reachability, and exploitability
+contribution.
 
 Threat-feed enrichment:
 

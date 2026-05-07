@@ -14,5 +14,13 @@
     "match": "contains",
     "severity": "LOW",
     "expected": "Production pages do not expose staging labels"
+  },
+  {
+    "name": "Exposed dependency manifest",
+    "pattern": "/(package\\.json|package-lock\\.json|yarn\\.lock|pnpm-lock\\.yaml|requirements.*\\.txt|Pipfile\\.lock|poetry\\.lock)$",
+    "target": "url",
+    "match": "regex",
+    "severity": "MEDIUM",
+    "expected": "Public routes should not expose dependency manifests or lockfiles"
   }
 ]

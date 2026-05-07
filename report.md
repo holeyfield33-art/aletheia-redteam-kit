@@ -125,6 +125,14 @@ P1 (1-3 days)
   - Prioritize benign_controls, data_exfiltration, jailbreak, and prompt_injection categories.
   - Add a reconciliation coverage gate (for example: >=95% of API attacks must have either direct decision payload or resolved receipt decision).
 
+P1.5 (1-2 days, parallel)
+- Dependencies & supply-chain hardening:
+  - Integrate automated dependency scanning in repo/combined modes (`pip-audit` + `osv-scanner`) with lockfile auto-detection.
+  - Normalize dependency findings into existing severity model and expose `dependency_vulnerability`/supply-chain finding types.
+  - Add dependency-specific gates (`--max-deps-critical`, `--max-deps-high`) and include supply-chain score contribution in summaries.
+  - Add malware/tampering indicators where available (malicious package and typosquatting signals).
+  - Add dashboard/report dependency section with vulnerable package counts and top advisories.
+
 P2 (This sprint)
 - Harden repo code patterns:
   - Replace SHA1 usage with SHA-256+ where applicable.

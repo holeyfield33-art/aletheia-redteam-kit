@@ -1,0 +1,27 @@
+[
+  {
+    "finding_type": "dependency_vulnerability",
+    "threat": "Known vulnerable dependency",
+    "reference": "https://osv.dev/"
+  },
+  {
+    "finding_type": "dependency_malware_suspect",
+    "threat": "Potential malicious dependency",
+    "reference": "https://pypi.org/security"
+  },
+  {
+    "finding_type": "dependency_tampering_risk",
+    "threat": "Potential dependency confusion or typosquatting",
+    "reference": "https://owasp.org/www-community/attacks/Dependency_Confusion"
+  },
+  {
+    "finding_type": "python_subprocess_shell_true",
+    "threat": "Command injection",
+    "reference": "https://owasp.org/www-community/attacks/Command_Injection"
+  },
+  {
+    "finding_type": "private_key_block",
+    "threat": "Credential/key compromise",
+    "reference": "https://owasp.org/www-project-secrets-management/"
+  }
+]

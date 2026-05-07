@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 
 from engine.repo_audit import run_repo_audit
 from kit import runner
@@ -165,6 +166,44 @@ dependencies = ["httpx>=0.27"]
 
     assert "dependency_vulnerability" in finding_types
     assert any("PYSEC-TEST-1" in (f.get("title") or "") for f in summary["findings"])
+
+
+def test_repo_audit_auto_runs_pip_audit_when_python_manifest_present(monkeypatch, tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+
+    def _fake_run(*args, **kwargs):
+        payload = {
+            "dependencies": [
+                {
+                    "name": "urllib3",
+                    "version": "1.26.4",
+                    "vulns": [
+                        {
+                            "id": "PYSEC-TEST-AUTO",
+                            "description": "Auto scan advisory",
+                            "fix_versions": ["1.26.5"],
+                        }
+                    ],
+                }
+            ]
+        }
+        return subprocess.CompletedProcess(args=args, returncode=1, stdout=json.dumps(payload), stderr="")
+
+    monkeypatch.setattr("engine.repo_audit.scanner.shutil.which", lambda binary: f"/usr/bin/{binary}")
+    monkeypatch.setattr("engine.repo_audit.scanner.subprocess.run", _fake_run)
+
+    summary = run_repo_audit(tmp_path, deps_scan="auto")
+
+    assert summary["dependencies"]["tools"]["pip_audit"]["status"] == "executed"
+    assert summary["dependencies"]["findings_total"] >= 1
+    assert summary["findings_by_type"].get("dependency_vulnerability", 0) >= 1
 
 
 def test_repo_audit_applies_threat_feed_context(tmp_path) -> None:

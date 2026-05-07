@@ -701,10 +701,14 @@
         const generatedRepo = toIsoOrDash(summary.generated_at);
         const repoRoot = summary.repo_root || "(unknown)";
         const filesScanned = Number(summary.files_scanned || 0);
+        const deps = summary.dependencies || {};
+        const depsTotal = Number(deps.findings_total || 0);
+        const depsMode = deps.scan_mode || "auto";
         metaEl.innerHTML = [
           "<div><b>Generated:</b> " + escapeHtml(generatedRepo) + "</div>",
           "<div><b>Repo root:</b> " + escapeHtml(repoRoot) + "</div>",
-          "<div><b>Files scanned:</b> " + escapeHtml(filesScanned) + "</div>"
+          "<div><b>Files scanned:</b> " + escapeHtml(filesScanned) + "</div>",
+          "<div><b>Supply chain findings:</b> " + escapeHtml(depsTotal) + " (mode: " + escapeHtml(depsMode) + ")</div>"
         ].join("");
         return;
       }
@@ -734,6 +738,8 @@
     function renderStats(summary) {
       if (isRepoSummary(summary)) {
         const sev = summary.findings_by_severity || {};
+        const depSev = ((summary.dependencies || {}).findings_by_severity) || {};
+        const depExploitability = Number(((summary.dependencies || {}).exploitability_score) || 0);
         const findingsTotal = Number(summary.findings_total || 0);
         const riskScore = Number(summary.risk_score || 0);
         const cards = [
@@ -741,6 +747,9 @@
           { label: "Findings", value: findingsTotal },
           { label: "Critical", value: Number(sev.CRITICAL || 0) },
           { label: "High", value: Number(sev.HIGH || 0) },
+          { label: "Supply Chain Critical", value: Number(depSev.CRITICAL || 0) },
+          { label: "Supply Chain High", value: Number(depSev.HIGH || 0) },
+          { label: "Supply Chain Score", value: depExploitability },
           { label: "Files Scanned", value: Number(summary.files_scanned || 0) }
         ];
 
