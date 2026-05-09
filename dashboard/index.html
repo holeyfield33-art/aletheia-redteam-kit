@@ -962,6 +962,15 @@
       return summary && Array.isArray(summary.runs) && Array.isArray(summary.findings) && Array.isArray(summary.metrics);
     }
 
+    function isDashboardRenderableSummary(summary) {
+      return (
+        isApiSummary(summary) ||
+        isWebsiteSummary(summary) ||
+        isRepoSummary(summary) ||
+        isCombinedSummary(summary)
+      );
+    }
+
     function commandCenterToSummary(model) {
       const runs = model.runs || [];
       const findings = model.findings || [];
@@ -2223,7 +2232,7 @@
       for (const path of paths) {
         try {
           const summary = await fetchJson(path);
-          if (isApiSummary(summary)) {
+          if (isDashboardRenderableSummary(summary)) {
             summaries.push(summary);
           } else if (isCommandCenterModel(summary)) {
             summaries.push(commandCenterToSummary(summary));
