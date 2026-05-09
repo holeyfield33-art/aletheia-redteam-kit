@@ -324,6 +324,36 @@ Dashboard views now include:
 
 For command-center usage details, see [docs/command-center.md](docs/command-center.md).
 
+## Sovereign Command Center (Next.js)
+
+The repository also includes an operator-focused Next.js dashboard at
+`dashboard/sovereign-command-center`.
+
+Start it locally:
+
+        cd dashboard/sovereign-command-center
+        npm install
+        npm run dev
+
+Open `http://localhost:3000`.
+
+Sovereign features:
+
+- Combined mode selector: choose API, website, repo per run.
+- API endpoint adversarial testing:
+    - single endpoint URL
+    - batch endpoints (one URL per line)
+    - JSON target import
+    - method fuzzing + parameter injection
+    - payload category filters from `attacks/*.json`
+    - result export and clear controls
+
+Build checks:
+
+        cd dashboard/sovereign-command-center
+        npm run lint
+        npm run build
+
 If you want a single run only, use `Load ./summary.json` or drag in a JSON file.
 
 ## Running against a self-hosted Aletheia

@@ -162,6 +162,7 @@ export default function Home() {
   const [apiParameterInjection, setApiParameterInjection] = useState(true);
   const [apiResults, setApiResults] = useState<ApiTestResult[]>([]);
   const [apiLoading, setApiLoading] = useState(false);
+  const [selectedPayloadCategories, setSelectedPayloadCategories] = useState<string[]>([]);
 
   const selectedProject = useMemo(() => {
     return PROJECTS.find((project) => project.id === projectId) ?? PROJECTS[0];
@@ -181,6 +182,11 @@ export default function Home() {
       baselineVulns: report.adversarial.baselineVulnerabilities.length,
     };
   }, [report]);
+
+  const payloadCategories = useMemo(() => {
+    const categories = Array.from(new Set(payloads.map((payload) => payload.category))).sort();
+    return categories;
+  }, [payloads]);
 
   async function runAudit(runMode: RuntimeMode, reason: string): Promise<void> {
     if (!modeSelection.api && !modeSelection.website && !modeSelection.repo) {
@@ -247,26 +253,32 @@ export default function Home() {
   }
 
   async function runApiEndpointTests(): Promise<void> {
-    setApiLoading(true);
-    setStatus("Running adversarial API endpoint tests...");
-
+    const single = apiSingleUrl.trim();
     const batchTargets = apiBatchText
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
       .map((url) => ({ url, method: apiMethod }));
 
+    if (!single && !batchTargets.length && !apiJsonTargets.length) {
+      setStatus("Provide at least one endpoint target: single URL, batch URLs, or JSON targets.");
+      return;
+    }
+
+    setApiLoading(true);
+    setStatus("Running adversarial API endpoint tests...");
+
     try {
       const response = await fetch("/api/test-endpoint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          singleTarget: apiSingleUrl.trim() ? { url: apiSingleUrl.trim(), method: apiMethod } : undefined,
+          singleTarget: single ? { url: single, method: apiMethod } : undefined,
           batchTargets,
           jsonTargets: apiJsonTargets,
           enableMethodFuzzing: apiMethodFuzzing,
           enableParameterInjection: apiParameterInjection,
-          payloadCategoryFilter: [],
+          payloadCategoryFilter: selectedPayloadCategories.length ? selectedPayloadCategories : undefined,
         }),
       });
       if (!response.ok) {
@@ -280,6 +292,36 @@ export default function Home() {
     } finally {
       setApiLoading(false);
     }
+  }
+
+  function togglePayloadCategory(category: string): void {
+    setSelectedPayloadCategories((prev) => {
+      if (prev.includes(category)) {
+        return prev.filter((item) => item !== category);
+      }
+      return [...prev, category];
+    });
+  }
+
+  function clearApiTestResults(): void {
+    setApiResults([]);
+    setStatus("Cleared API endpoint test results.");
+  }
+
+  function exportApiResults(): void {
+    if (!apiResults.length) {
+      setStatus("No API endpoint results available to export.");
+      return;
+    }
+    const blob = new Blob([JSON.stringify(apiResults, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `api-endpoint-results-${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   function downloadMnemeBundle(): void {
@@ -677,14 +719,63 @@ export default function Home() {
                 </label>
               </div>
 
-              <button
-                type="button"
-                onClick={() => void runApiEndpointTests()}
-                disabled={apiLoading}
-                className="mt-4 rounded-md border border-red-700 bg-red-950/30 px-4 py-2 text-sm text-red-200 hover:bg-red-950/50 disabled:opacity-50"
-              >
-                {apiLoading ? "Running endpoint tests..." : "Run API Endpoint Adversarial Tests"}
-              </button>
+              <div className="mt-4">
+                <div className="mb-2 flex flex-wrap items-center gap-3 text-xs">
+                  <span className="text-zinc-500">Payload Categories</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPayloadCategories(payloadCategories)}
+                    className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 hover:border-zinc-500"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPayloadCategories([])}
+                    className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 hover:border-zinc-500"
+                  >
+                    Use all by default
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs text-zinc-300">
+                  {payloadCategories.map((category) => (
+                    <label key={category} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedPayloadCategories.includes(category)}
+                        onChange={() => togglePayloadCategory(category)}
+                      />
+                      {category}
+                    </label>
+                  ))}
+                  {!payloadCategories.length && <span className="text-zinc-500">Initialize workspace to load categories.</span>}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void runApiEndpointTests()}
+                  disabled={apiLoading}
+                  className="rounded-md border border-red-700 bg-red-950/30 px-4 py-2 text-sm text-red-200 hover:bg-red-950/50 disabled:opacity-50"
+                >
+                  {apiLoading ? "Running endpoint tests..." : "Run API Endpoint Adversarial Tests"}
+                </button>
+                <button
+                  type="button"
+                  onClick={clearApiTestResults}
+                  className="rounded-md border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500"
+                >
+                  Clear Results
+                </button>
+                <button
+                  type="button"
+                  onClick={exportApiResults}
+                  className="rounded-md border border-emerald-700 bg-emerald-950/30 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-950/50"
+                >
+                  Export API Test Results
+                </button>
+              </div>
             </div>
 
             <div className="panel overflow-x-auto p-4">

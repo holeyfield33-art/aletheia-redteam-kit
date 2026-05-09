@@ -44,6 +44,7 @@ aletheia-redteam-kit/
 │   ├── agentic.py         # Agentic attack engine
 │   └── tests/             # Probing strategies
 ├── dashboard/             # Static HTML/JS UI
+├── dashboard/sovereign-command-center/ # Next.js operator dashboard
 ├── attacks/               # Attack catalogs (JSON)
 ├── tests/                 # Test suite (pytest)
 ├── docs/                  # Documentation
@@ -86,6 +87,11 @@ python -m pytest tests/test_runner.py -v
 
 # Run with coverage
 python -m pytest tests/ --cov=kit --cov=engine
+
+# Sovereign dashboard checks (if frontend changes were made)
+cd dashboard/sovereign-command-center
+npm run lint
+npm run build
 ```
 
 ### 5. Commit and Push
@@ -177,6 +183,12 @@ python -m pytest tests/ -x
 - Pure JavaScript, no framework
 - Loads JSON or SQLite artifacts
 - Hosted server in `kit/dashboard_server.py`
+
+### Sovereign Dashboard
+- **Path**: `dashboard/sovereign-command-center`
+- Next.js application for command-and-control workflows and endpoint adversarial testing
+- API routes under `src/app/api/*`
+- Validate with `npm run lint` and `npm run build`
 
 ## Common Tasks
 

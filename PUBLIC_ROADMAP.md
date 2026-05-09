@@ -12,6 +12,7 @@
 - Command-center CLI with subcommands: `run`, `dashboard`, `compare`, `export`, `gate`
 - Hosted dashboard server with auto-discovery (v0.3)
 - Normalized SQLite artifacts alongside JSON (v0.3)
+- Sovereign Next.js dashboard with selectable combined modes and adversarial API endpoint testing
 
 ## Near-term Priorities
 
@@ -26,6 +27,8 @@
 - [ ] Reduce website HIGH auth bypass findings to gate threshold (≤3)
 - [ ] Add malware/typosquatting signals to dependency findings
 - [ ] Improve code pattern detection (SHA1, CORS wildcard)
+- [x] Add operator endpoint testing controls (single/batch/JSON target inputs)
+- [x] Add payload category filtering in sovereign endpoint testing flow
 
 ### P1.5: Supply-Chain Hardening (May 2026)
 - [x] Multi-language dependency scanning (`pip-audit`, `osv-scanner`)
@@ -43,6 +46,7 @@
 
 - **Authentication**: Add reverse-proxy auth (basic auth, OIDC, SSO) for hosted dashboard
 - **Deployment**: Docker compose and systemd service templates
+- **Sovereign UX**: extend endpoint testing with replay presets and saved target profiles
 - **Agentic expansion**: Add mutation-based attacks and iterative bypass strategies
 - **Dashboard querying**: Browser-side SQLite query engine or server-backed `/api/query` endpoint
 - **Reporting**: PDF/HTML report generation for audit findings

@@ -15,6 +15,28 @@ The hosted dashboard automatically reads the latest run catalog from `/api/runs`
 
 Combined artifacts (`mode = combined`) can be loaded directly and switched between API/website/repo components using the Component filter.
 
+## Sovereign Command Center (Next.js)
+
+An additional operator UI exists at `dashboard/sovereign-command-center`.
+
+Launch:
+
+  cd dashboard/sovereign-command-center
+  npm install
+  npm run dev
+
+Then open `http://localhost:3000`.
+
+Sovereign API testing workflow:
+
+1. Initialize workspace so payload categories are loaded.
+2. Go to `API Testing` in the sidebar.
+3. Set either single endpoint URL, batch URLs, or import JSON targets.
+4. Toggle method fuzzing and parameter injection as needed.
+5. Select payload categories to scope attack families, or keep default to use all.
+6. Run tests and inspect result severity, status, and response signal.
+7. Export endpoint test results as JSON for handoff.
+
 ## Primary Operator Workflow
 
 1. Run one or more API scans with `python -m kit.runner`.
