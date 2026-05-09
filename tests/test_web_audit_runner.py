@@ -49,6 +49,11 @@ def test_extract_hrefs_filters_non_navigable_targets() -> None:
     assert _extract_hrefs(html) == ["/docs"]
 
 
+def test_extract_hrefs_supports_single_quoted_attributes() -> None:
+    html = "<a href='/pricing'>Pricing</a><a HREF = '/docs'>Docs</a>"
+    assert _extract_hrefs(html) == ["/pricing", "/docs"]
+
+
 def test_run_website_audit_falls_back_when_browser_backend_fails(monkeypatch) -> None:
     config = WebAuditConfig(base_url="https://example.com", allow_http_fallback=True)
 

@@ -569,20 +569,10 @@ def _normalize_auth_seed_urls(base_url: str, seeds: list[str] | None) -> list[st
 
 def _extract_hrefs(html: str) -> list[str]:
     hrefs: list[str] = []
-    marker = 'href="'
-    start = 0
-    while True:
-        idx = html.find(marker, start)
-        if idx == -1:
-            break
-        begin = idx + len(marker)
-        end = html.find('"', begin)
-        if end == -1:
-            break
-        href = html[begin:end].strip()
+    for match in re.finditer(r"href\s*=\s*(['\"])(.*?)\1", html, flags=re.IGNORECASE):
+        href = match.group(2).strip()
         if href and not href.startswith("#") and not href.startswith("javascript:"):
             hrefs.append(href)
-        start = end + 1
     return hrefs
 
 

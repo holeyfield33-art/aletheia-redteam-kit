@@ -147,6 +147,17 @@
       background: #4e282d;
     }
 
+    .button-row input[type="text"] {
+      border: 1px solid color-mix(in srgb, var(--silver) 70%, transparent);
+      background: #150f10;
+      color: #efe6e8;
+      border-radius: 10px;
+      padding: 0.5rem 0.8rem;
+      font: inherit;
+      min-width: min(420px, 100%);
+      flex: 1 1 280px;
+    }
+
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -521,6 +532,9 @@
         <button id="loadDefaultBtn" type="button">Load ./summary.json</button>
         <button id="loadWebsiteBtn" type="button">Load ./website_summary.json</button>
         <button id="autoScanBtn" type="button">Auto-scan ./runs History</button>
+        <input id="repoUrlInput" type="text" placeholder="Public GitHub repo URL or owner/repo">
+        <button id="launchRepoBtn" type="button">Launch Repo Audit</button>
+        <button id="refreshRunsBtn" type="button">Refresh Run Catalog</button>
         <button id="verifyAllBtn" type="button">Verify All Signatures</button>
       </div>
     </div>
@@ -716,6 +730,9 @@
     const verifyBtnEl = document.getElementById("verifyBtn");
     const verifyAllBtnEl = document.getElementById("verifyAllBtn");
     const autoScanBtnEl = document.getElementById("autoScanBtn");
+    const repoUrlInputEl = document.getElementById("repoUrlInput");
+    const launchRepoBtnEl = document.getElementById("launchRepoBtn");
+    const refreshRunsBtnEl = document.getElementById("refreshRunsBtn");
     const barsTitleEl = document.getElementById("barsTitle");
     const tableTitleEl = document.getElementById("tableTitle");
     const tableHeadRowEl = document.getElementById("tableHeadRow");
@@ -2234,6 +2251,32 @@
       return true;
     }
 
+    async function launchRepoAudit() {
+      const repoUrl = String(repoUrlInputEl.value || "").trim();
+      if (!repoUrl) {
+        setStatus("Enter a public GitHub repo URL or owner/repo first.");
+        return;
+      }
+
+      setStatus("Starting public GitHub repo audit for " + repoUrl + "...");
+      const resp = await fetch("/api/repo-audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_url: repoUrl }),
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error("HTTP " + resp.status + " at /api/repo-audit: " + text);
+      }
+
+      const payload = await resp.json();
+      setStatus(
+        "Repo audit queued for " + repoUrl + ". Launch id " + String(payload.launch_id || "unknown") + ". Refresh run catalog after it completes."
+      );
+      await autoScanRuns();
+    }
+
     async function loadFromText(text, label) {
       try {
         const parsed = JSON.parse(text);
@@ -2309,6 +2352,20 @@
     document.getElementById("loadDefaultBtn").addEventListener("click", loadDefault);
     document.getElementById("loadWebsiteBtn").addEventListener("click", loadWebsiteDefault);
     autoScanBtnEl.addEventListener("click", autoScanRuns);
+    launchRepoBtnEl.addEventListener("click", async function () {
+      try {
+        await launchRepoAudit();
+      } catch (err) {
+        setStatus("Repo launch failed: " + (err && err.message ? err.message : String(err)));
+      }
+    });
+    refreshRunsBtnEl.addEventListener("click", async function () {
+      try {
+        await autoScanRuns();
+      } catch (err) {
+        setStatus("Run catalog refresh failed: " + (err && err.message ? err.message : String(err)));
+      }
+    });
     copyReceiptBtnEl.addEventListener("click", copySelectedReceipt);
     verifyBtnEl.addEventListener("click", verifySelected);
     verifyAllBtnEl.addEventListener("click", verifyAll);

@@ -19,15 +19,18 @@ Combined artifacts (`mode = combined`) can be loaded directly and switched betwe
 
 1. Run one or more API scans with `python -m kit.runner`.
 2. Run repository scan with `python -m kit.runner --mode repo --repo-path . --output repo_summary.json`.
-3. Optionally run unified sweep with `python -m kit.runner --mode combined --target-url https://example.com --repo-path . --output combined_summary.json`.
-4. Write artifacts into `runs/` so the hosted dashboard can discover them automatically.
-5. Start the hosted dashboard server and share the browser URL with the operator.
-6. Optionally attach a threat feed with `--threat-feed-file threat_feed.json` to enrich repo findings.
-7. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
-8. Triage weak categories using the Mission Priority Board.
-9. Filter to actionable rows using Command Filters and Quick Actions.
-10. Export filtered rows to hand off incidents or create follow-up attack expansions.
-11. Review API reconciliation coverage before closing transport/anomaly incidents.
+3. Audit a public GitHub repo with `python -m kit.runner --mode repo --repo-url https://github.com/example/public-repo --output repo_summary.json`.
+4. Optionally run unified sweep with `python -m kit.runner --mode combined --target-url https://example.com --repo-path . --output combined_summary.json`.
+5. Write artifacts into `runs/` so the hosted dashboard can discover them automatically.
+6. Start the hosted dashboard server and share the browser URL with the operator.
+7. From the dashboard, paste a public GitHub repo URL into the launch field to queue a repo audit without leaving the browser.
+8. To require a password, set `ALETHEIA_DASHBOARD_USERNAME` and `ALETHEIA_DASHBOARD_PASSWORD` before launching the hosted dashboard server.
+9. Optionally attach a threat feed with `--threat-feed-file threat_feed.json` to enrich repo findings.
+10. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
+11. Triage weak categories using the Mission Priority Board.
+12. Filter to actionable rows using Command Filters and Quick Actions.
+13. Export filtered rows to hand off incidents or create follow-up attack expansions.
+14. Review API reconciliation coverage before closing transport/anomaly incidents.
 
 ## Command Filters
 

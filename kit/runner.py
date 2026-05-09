@@ -202,6 +202,7 @@ def _command_center_cli(argv: list[str]) -> int:
     run_parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Summary output path")
     run_parser.add_argument("--target-url")
     run_parser.add_argument("--repo-path", default=".")
+    run_parser.add_argument("--repo-url")
 
     dashboard_parser = subparsers.add_parser("dashboard", help="Prepare/open dashboard from artifacts")
     dashboard_parser.add_argument("--artifact-dir", default="runs")
@@ -232,6 +233,8 @@ def _command_center_cli(argv: list[str]) -> int:
 
     if args.command == "run":
         legacy_args: list[str] = ["--mode", args.mode, "--output", args.output, "--repo-path", args.repo_path]
+        if args.repo_url:
+            legacy_args.extend(["--repo-url", args.repo_url])
         if args.target_url:
             legacy_args.extend(["--target-url", args.target_url])
         if args.baseline:
@@ -717,26 +720,46 @@ def _run_repo_audit_with_cli_options(args: argparse.Namespace) -> dict:
     try:
         return run_repo_audit(
             args.repo_path,
+            repo_url=args.repo_url,
             threat_feed_path=args.threat_feed_file,
             include_test_fixtures=args.repo_include_test_fixtures,
             deps_scan=args.deps_scan,
         )
     except TypeError as exc:
         message = str(exc)
+        if "repo_url" in message:
+            try:
+                return run_repo_audit(
+                    args.repo_path,
+                    threat_feed_path=args.threat_feed_file,
+                    include_test_fixtures=args.repo_include_test_fixtures,
+                    deps_scan=args.deps_scan,
+                )
+            except TypeError:
+                return run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
         if "deps_scan" in message:
             try:
                 return run_repo_audit(
                     args.repo_path,
+                    repo_url=args.repo_url,
                     threat_feed_path=args.threat_feed_file,
                     include_test_fixtures=args.repo_include_test_fixtures,
                 )
             except TypeError as fallback_exc:
                 if "include_test_fixtures" not in str(fallback_exc):
                     raise
-                return run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
+                return run_repo_audit(
+                    args.repo_path,
+                    repo_url=args.repo_url,
+                    threat_feed_path=args.threat_feed_file,
+                )
         if "include_test_fixtures" not in message:
             raise
-        return run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
+        return run_repo_audit(
+            args.repo_path,
+            repo_url=args.repo_url,
+            threat_feed_path=args.threat_feed_file,
+        )
 
 
 def _api_exploitability_score(results: list[dict]) -> int:
@@ -1317,6 +1340,10 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--warning-min-trust", type=int, default=50, help="Minimum trust score for WARNING verdict")
     parser.add_argument("--warning-max-exploitability", type=int, default=60, help="Maximum exploitability score for WARNING verdict")
     parser.add_argument("--repo-path", default=".", help="Repository root path for --mode repo")
+    parser.add_argument(
+        "--repo-url",
+        help="Public GitHub repository URL or owner/repo shorthand for --mode repo",
+    )
     parser.add_argument("--threat-feed-file", help="Optional threat feed JSON for repo and combined modes")
     parser.add_argument(
         "--deps-scan",

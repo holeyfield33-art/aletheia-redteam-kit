@@ -857,6 +857,101 @@ def test_cli_repo_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatch, t
     assert len(data["gate_exceptions"]["applied"]) == 1
 
 
+def test_cli_repo_mode_accepts_repo_url(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "repo_summary.json"
+    captured = {}
+
+    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto"):
+        captured["repo_path"] = repo_path
+        captured["repo_url"] = repo_url
+        return {
+            "generated_at": "2026-05-05T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": "/tmp/public-repo",
+            "source": {"kind": "github_public", "value": repo_url, "resolved": "https://github.com/example/public-sample.git"},
+            "files_scanned": 0,
+            "secret_scan": {"include_test_fixtures": False, "excluded_globs": [], "allowlist_marker": "aletheia-redteam:allowed-test-fixture"},
+            "ignored_artifacts": [],
+            "dependencies": {"findings_total": 0, "findings_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}, "tools": {}},
+            "findings_total": 0,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+            "findings_by_type": {},
+            "risk_score": 0,
+            "threat_feed": {"source": None, "matches_total": 0, "matches_by_type": {}},
+            "gates": {"pass": True, "violations": []},
+            "findings": [],
+        }
+
+    monkeypatch.setattr(runner, "run_repo_audit", _fake_run_repo_audit)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "repo",
+            "--repo-url",
+            "https://github.com/example/public-sample",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    data = json.loads(output.read_text())
+
+    assert rc == 0
+    assert captured["repo_url"] == "https://github.com/example/public-sample"
+    assert data["source"]["kind"] == "github_public"
+
+
+def test_command_center_run_subcommand_accepts_repo_url(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "repo_summary.json"
+    captured = {}
+
+    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto"):
+        captured["repo_path"] = repo_path
+        captured["repo_url"] = repo_url
+        return {
+            "generated_at": "2026-05-05T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": "/tmp/public-repo",
+            "source": {"kind": "github_public", "value": repo_url, "resolved": "https://github.com/example/public-sample.git"},
+            "files_scanned": 0,
+            "secret_scan": {"include_test_fixtures": False, "excluded_globs": [], "allowlist_marker": "aletheia-redteam:allowed-test-fixture"},
+            "ignored_artifacts": [],
+            "dependencies": {"findings_total": 0, "findings_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}, "tools": {}},
+            "findings_total": 0,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+            "findings_by_type": {},
+            "risk_score": 0,
+            "threat_feed": {"source": None, "matches_total": 0, "matches_by_type": {}},
+            "gates": {"pass": True, "violations": []},
+            "findings": [],
+        }
+
+    monkeypatch.setattr(runner, "run_repo_audit", _fake_run_repo_audit)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "run",
+            "--mode",
+            "repo",
+            "--repo-url",
+            "https://github.com/example/public-sample",
+            "--artifact-dir",
+            str(tmp_path / "runs"),
+            "--output",
+            str(output),
+            "--cli-only",
+        ],
+    )
+
+    rc = runner.cli()
+    assert rc == 0
+    assert captured["repo_url"] == "https://github.com/example/public-sample"
+
+
 def test_cli_repo_mode_baseline_approve_writes_state(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     output = tmp_path / "repo_summary.json"
     baseline_state = tmp_path / "baseline_state.json"

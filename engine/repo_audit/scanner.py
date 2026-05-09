@@ -6,12 +6,14 @@ from datetime import datetime, timezone
 from fnmatch import fnmatch
 from math import log2
 from pathlib import Path
+import tempfile
 import shutil
 import subprocess
 import re
 import tomllib
 import json
 from collections import defaultdict
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
@@ -919,15 +921,62 @@ def _serialize_finding(finding: Finding, threat_index: dict[str, list[dict[str, 
     return data
 
 
-def run_repo_audit(
-    repo_path: str | Path = ".",
-    threat_feed_path: str | None = None,
+def _normalize_public_github_repo_url(repo_url: str) -> str:
+    raw = str(repo_url or "").strip()
+    if not raw:
+        raise ValueError("repo_url is required")
+    if raw.startswith("git@"):
+        raise ValueError("SSH clone URLs are not supported for public GitHub repo audits")
+
+    if "://" not in raw:
+        raw = f"https://github.com/{raw.lstrip('/')}"
+
+    parsed = urlparse(raw)
+    host = parsed.netloc.lower()
+    if host not in {"github.com", "www.github.com"}:
+        raise ValueError("Only public github.com repository URLs are supported in this phase")
+
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        raise ValueError("GitHub repository URL must include owner and repo name")
+
+    owner = parts[0]
+    repo = parts[1]
+    if repo.endswith(".git"):
+        repo = repo[:-4]
+    return f"https://github.com/{owner}/{repo}.git"
+
+
+def _clone_public_github_repo(repo_url: str, clone_root: Path) -> Path:
+    canonical_url = _normalize_public_github_repo_url(repo_url)
+    clone_root.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        [
+            "git",
+            "clone",
+            "--depth",
+            "1",
+            "--single-branch",
+            canonical_url,
+            str(clone_root),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "unknown clone failure").strip()
+        raise RuntimeError(f"Unable to clone public GitHub repository {canonical_url}: {details}")
+    return clone_root
+
+
+def _audit_repo_root(
+    root: Path,
     *,
-    include_test_fixtures: bool = False,
-    deps_scan: str = "auto",
+    threat_feed_path: str | None,
+    include_test_fixtures: bool,
+    deps_scan: str,
 ) -> dict:
-    """Run static repository checks and return summary dictionary."""
-    root = Path(repo_path).resolve()
     files = _iter_source_files(root)
 
     findings: list[Finding] = []
@@ -969,6 +1018,10 @@ def run_repo_audit(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "mode": "repo",
         "repo_root": str(root),
+        "source": {
+            "kind": "local_path",
+            "value": str(root),
+        },
         "files_scanned": len(files),
         "secret_scan": {
             "include_test_fixtures": include_test_fixtures,
@@ -992,3 +1045,37 @@ def run_repo_audit(
             for finding in sorted(unique_findings, key=lambda item: (item.severity, item.file, item.line or 0))
         ],
     }
+
+
+def run_repo_audit(
+    repo_path: str | Path = ".",
+    repo_url: str | None = None,
+    threat_feed_path: str | None = None,
+    *,
+    include_test_fixtures: bool = False,
+    deps_scan: str = "auto",
+) -> dict:
+    """Run static repository checks and return summary dictionary."""
+    if repo_url:
+        with tempfile.TemporaryDirectory(prefix="aletheia-github-repo-") as temp_dir:
+            root = _clone_public_github_repo(repo_url, Path(temp_dir))
+            summary = _audit_repo_root(
+                root,
+                threat_feed_path=threat_feed_path,
+                include_test_fixtures=include_test_fixtures,
+                deps_scan=deps_scan,
+            )
+            summary["source"] = {
+                "kind": "github_public",
+                "value": repo_url,
+                "resolved": _normalize_public_github_repo_url(repo_url),
+            }
+            return summary
+
+    root = Path(repo_path).resolve()
+    return _audit_repo_root(
+        root,
+        threat_feed_path=threat_feed_path,
+        include_test_fixtures=include_test_fixtures,
+        deps_scan=deps_scan,
+    )

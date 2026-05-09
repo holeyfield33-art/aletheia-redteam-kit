@@ -120,6 +120,14 @@ Run static repository risk scanning:
 
     python -m kit.runner --mode repo --repo-path . --output repo_summary.json
 
+Audit a public GitHub repo:
+
+    python -m kit.runner --mode repo --repo-url https://github.com/example/public-repo --output repo_summary.json
+
+If you are using the hosted dashboard, paste the GitHub repo URL into the launch field and start the audit from the browser. The dashboard queues the job, writes the run into `runs/`, and refreshes from the same catalog used for combined audits.
+
+To password-protect the hosted dashboard, set `ALETHEIA_DASHBOARD_USERNAME` and `ALETHEIA_DASHBOARD_PASSWORD` before starting the server.
+
 Run full dependency/supply-chain scan (multi-language when tools are installed):
 
     python -m kit.runner --mode repo --repo-path . --deps-scan full --output repo_summary.json
@@ -151,6 +159,8 @@ Current repo checks include:
 - language-aware risky code patterns (Python/JS)
 - weak crypto primitive usage checks
 - config/policy drift patterns (TLS verify disabled, wildcard CORS, JWT none)
+
+GitHub repo audit support is public-repo first: `--repo-url` clones a public GitHub repository into a temporary workspace and reuses the same static scanner. Private repo support is planned for a later phase.
 
 Dependency advisory enrichment:
 

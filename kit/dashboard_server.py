@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import base64
 import json
 import mimetypes
 import os
+import subprocess
+import sys
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
+
+from engine.repo_audit.scanner import _normalize_public_github_repo_url
 
 
 @dataclass(frozen=True)
@@ -58,6 +65,79 @@ def _normalize_run_entries(config: DashboardServerConfig) -> list[dict[str, obje
     return normalized
 
 
+def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> dict[str, object]:
+    normalized_repo_url = _normalize_public_github_repo_url(repo_url)
+    artifact_root = config.artifact_dir.resolve()
+    repo_root = config.repo_root.resolve()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    launch_id = f"github-{stamp}-{uuid4().hex[:8]}"
+    launch_root = artifact_root / ".launches" / launch_id
+    launch_root.mkdir(parents=True, exist_ok=True)
+
+    output_path = launch_root / "summary.json"
+    log_path = launch_root / "launch.log"
+    command = [
+        sys.executable,
+        "-m",
+        "kit.runner",
+        "run",
+        "--mode",
+        "repo",
+        "--repo-url",
+        normalized_repo_url,
+        "--artifact-dir",
+        str(artifact_root),
+        "--output",
+        str(output_path),
+        "--cli-only",
+    ]
+
+    with open(log_path, "ab") as log_file:
+        process = subprocess.Popen(
+            command,
+            cwd=str(repo_root),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+        )
+
+    return {
+        "ok": True,
+        "status": "started",
+        "launch_id": launch_id,
+        "repo_url": repo_url,
+        "resolved_repo_url": normalized_repo_url,
+        "output_path": str(output_path.relative_to(artifact_root)),
+        "log_path": str(log_path.relative_to(artifact_root)),
+        "pid": process.pid,
+        "dashboard": "/dashboard/",
+    }
+
+
+def _dashboard_auth_settings() -> tuple[str, str] | None:
+    password = os.environ.get("ALETHEIA_DASHBOARD_PASSWORD")
+    if not password:
+                return None
+    username = os.environ.get("ALETHEIA_DASHBOARD_USERNAME", "aletheia")
+    return username, password
+
+
+def _parse_basic_auth_header(value: str) -> tuple[str, str] | None:
+    raw = str(value or "").strip()
+    if not raw.lower().startswith("basic "):
+        return None
+    token = raw.split(None, 1)[1].strip() if " " in raw else ""
+    if not token:
+        return None
+    try:
+        decoded = base64.b64decode(token).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if ":" not in decoded:
+        return None
+    username, password = decoded.split(":", 1)
+    return username, password
+
+
 def create_dashboard_handler(config: DashboardServerConfig):
     repo_root = config.repo_root.resolve()
     artifact_root = config.artifact_dir.resolve()
@@ -66,6 +146,23 @@ def create_dashboard_handler(config: DashboardServerConfig):
     class DashboardHandler(SimpleHTTPRequestHandler):
         def log_message(self, format: str, *args) -> None:
             return
+
+        def _require_auth(self) -> bool:
+            settings = _dashboard_auth_settings()
+            if settings is None:
+                return True
+            expected_username, expected_password = settings
+            provided = _parse_basic_auth_header(self.headers.get("Authorization", ""))
+            if provided == (expected_username, expected_password):
+                return True
+            body = b"Authentication required"
+            self.send_response(HTTPStatus.UNAUTHORIZED)
+            self.send_header("WWW-Authenticate", 'Basic realm="Aletheia Dashboard"')
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return False
 
         def _send_json(self, payload: object, status: int = HTTPStatus.OK) -> None:
             encoded = json.dumps(payload, indent=2).encode("utf-8")
@@ -95,6 +192,8 @@ def create_dashboard_handler(config: DashboardServerConfig):
             return requested
 
         def do_GET(self) -> None:
+            if not self._require_auth():
+                return
             parsed = urlparse(self.path)
             if parsed.path in {"/", "/dashboard", "/dashboard/"}:
                 self._send_file(dashboard_file)
@@ -130,6 +229,38 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 return
 
             self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+
+        def do_POST(self) -> None:
+            if not self._require_auth():
+                return
+            parsed = urlparse(self.path)
+            if parsed.path != "/api/repo-audit":
+                self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+                return
+
+            content_length = int(self.headers.get("Content-Length") or 0)
+            raw_body = self.rfile.read(content_length) if content_length else b"{}"
+            try:
+                payload = json.loads(raw_body.decode("utf-8") or "{}")
+            except json.JSONDecodeError:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON body")
+                return
+
+            repo_url = str((payload or {}).get("repo_url") or "").strip()
+            if not repo_url:
+                self.send_error(HTTPStatus.BAD_REQUEST, "repo_url is required")
+                return
+
+            try:
+                result = _launch_public_repo_audit(config, repo_url)
+            except ValueError as exc:
+                self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                return
+            except Exception as exc:  # pragma: no cover - defensive server path
+                self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
+                return
+
+            self._send_json(result, status=HTTPStatus.ACCEPTED)
 
     return DashboardHandler
 
