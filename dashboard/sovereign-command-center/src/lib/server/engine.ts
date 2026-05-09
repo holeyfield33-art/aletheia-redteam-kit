@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { ProjectId, RuntimeMode, SovereignAuditReport } from "@/lib/types";
+import { AuditModeSelection, ProjectId, RuntimeMode, SovereignAuditReport } from "@/lib/types";
 import { resolveProjectRoot } from "@/lib/server/repo";
 import { runIntegrityAudit } from "@/lib/server/integrity";
 import { runSupplyChainAudit } from "@/lib/server/scanners";
@@ -31,7 +31,11 @@ function buildGueK1Series(runtimeMode: RuntimeMode, confidence: number): number[
   return values;
 }
 
-export function runSovereignAudit(projectId: ProjectId, runtimeMode: RuntimeMode): SovereignAuditReport {
+export function runSovereignAudit(
+  projectId: ProjectId,
+  runtimeMode: RuntimeMode,
+  modeSelection: AuditModeSelection = { api: true, website: true, repo: true },
+): SovereignAuditReport {
   const projectRoot = resolveProjectRoot(projectId);
 
   const logs = [
@@ -95,38 +99,72 @@ export function runSovereignAudit(projectId: ProjectId, runtimeMode: RuntimeMode
     return emptyReport;
   }
 
-  const integrity = runIntegrityAudit(projectRoot);
-  logs.push(
-    createAuditLog(projectId, runtimeMode, "audit.integrity", integrity.structuralScore >= 85 ? "PASS" : "WARN", {
-      structuralScore: integrity.structuralScore,
-      missingArtifacts: integrity.missingArtifacts,
-    }),
-  );
+  const integrity = modeSelection.repo
+    ? runIntegrityAudit(projectRoot)
+    : {
+        structuralScore: 100,
+        missingArtifacts: [],
+        scoutLogSummary: "Skipped (repo mode disabled)",
+        judgeLogSummary: "Skipped (repo mode disabled)",
+        cards: [],
+      };
+  if (modeSelection.repo) {
+    logs.push(
+      createAuditLog(projectId, runtimeMode, "audit.integrity", integrity.structuralScore >= 85 ? "PASS" : "WARN", {
+        structuralScore: integrity.structuralScore,
+        missingArtifacts: integrity.missingArtifacts,
+      }),
+    );
+  }
 
-  const supplyChain = runSupplyChainAudit(projectRoot);
-  logs.push(
-    createAuditLog(projectId, runtimeMode, "audit.supply_chain", supplyChain.findings.length ? "WARN" : "PASS", {
-      findingCount: supplyChain.findings.length,
-      workerStatus: supplyChain.workerStatus,
-    }),
-  );
+  const supplyChain = modeSelection.repo
+    ? runSupplyChainAudit(projectRoot)
+    : {
+        workerStatus: { semgrep: "missing" as const, trufflehog: "missing" as const },
+        findings: [],
+        cards: [],
+      };
+  if (modeSelection.repo) {
+    logs.push(
+      createAuditLog(projectId, runtimeMode, "audit.supply_chain", supplyChain.findings.length ? "WARN" : "PASS", {
+        findingCount: supplyChain.findings.length,
+        workerStatus: supplyChain.workerStatus,
+      }),
+    );
+  }
 
-  const narrative = runNarrativeAudit(projectRoot);
-  logs.push(
-    createAuditLog(projectId, runtimeMode, "audit.narrative", narrative.findings.length ? "WARN" : "PASS", {
-      parityScore: narrative.parityScore,
-      findingCount: narrative.findings.length,
-    }),
-  );
+  const narrative = modeSelection.repo
+    ? runNarrativeAudit(projectRoot)
+    : {
+        parityScore: 100,
+        findings: [],
+        cards: [],
+      };
+  if (modeSelection.repo) {
+    logs.push(
+      createAuditLog(projectId, runtimeMode, "audit.narrative", narrative.findings.length ? "WARN" : "PASS", {
+        parityScore: narrative.parityScore,
+        findingCount: narrative.findings.length,
+      }),
+    );
+  }
 
-  const adversarial = runAdversarialSimulation(runtimeMode);
+  const adversarial = modeSelection.api
+    ? runAdversarialSimulation(runtimeMode)
+    : {
+        outcomes: [],
+        baselineVulnerabilities: [],
+        cards: [],
+      };
   const baselineVulnerabilities = adversarial.baselineVulnerabilities.length;
-  logs.push(
-    createAuditLog(projectId, runtimeMode, "audit.adversarial.pre_connection", baselineVulnerabilities ? "FAIL" : "PASS", {
-      outcomes: adversarial.outcomes.length,
-      baselineVulnerabilities,
-    }),
-  );
+  if (modeSelection.api) {
+    logs.push(
+      createAuditLog(projectId, runtimeMode, "audit.adversarial.pre_connection", baselineVulnerabilities ? "FAIL" : "PASS", {
+        outcomes: adversarial.outcomes.length,
+        baselineVulnerabilities,
+      }),
+    );
+  }
 
   for (const outcome of adversarial.outcomes.slice(0, 40)) {
     logs.push(
@@ -144,6 +182,14 @@ export function runSovereignAudit(projectId: ProjectId, runtimeMode: RuntimeMode
           baselineVulnerability: outcome.baselineVulnerability,
         },
       ),
+    );
+  }
+
+  if (modeSelection.website) {
+    logs.push(
+      createAuditLog(projectId, runtimeMode, "audit.website.placeholder", "PASS", {
+        message: "Website mode selected. Dedicated website sweep engine not yet wired in sovereign dashboard.",
+      }),
     );
   }
 

@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { PROJECTS } from "@/lib/projects";
 import {
+  ApiTestResult,
+  AuditModeSelection,
   AuditLog,
   ProjectId,
   RuntimeMode,
@@ -15,6 +17,7 @@ const SIDEBAR_ITEMS: Array<{ key: SidebarView; label: string; icon: string }> = 
   { key: "Command", label: "Command", icon: "CMD" },
   { key: "Inspector", label: "Inspector", icon: "AUD" },
   { key: "Adversary", label: "Adversary", icon: "RED" },
+  { key: "ApiTesting", label: "API Testing", icon: "API" },
   { key: "Mneme", label: "Mneme", icon: "VAU" },
 ];
 
@@ -150,6 +153,15 @@ export default function Home() {
   const [status, setStatus] = useState("Idle");
   const [loading, setLoading] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
+  const [modeSelection, setModeSelection] = useState<AuditModeSelection>({ api: true, website: true, repo: true });
+  const [apiSingleUrl, setApiSingleUrl] = useState("");
+  const [apiMethod, setApiMethod] = useState("POST");
+  const [apiBatchText, setApiBatchText] = useState("");
+  const [apiJsonTargets, setApiJsonTargets] = useState<Array<{ url: string; method?: string }>>([]);
+  const [apiMethodFuzzing, setApiMethodFuzzing] = useState(true);
+  const [apiParameterInjection, setApiParameterInjection] = useState(true);
+  const [apiResults, setApiResults] = useState<ApiTestResult[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
 
   const selectedProject = useMemo(() => {
     return PROJECTS.find((project) => project.id === projectId) ?? PROJECTS[0];
@@ -171,6 +183,11 @@ export default function Home() {
   }, [report]);
 
   async function runAudit(runMode: RuntimeMode, reason: string): Promise<void> {
+    if (!modeSelection.api && !modeSelection.website && !modeSelection.repo) {
+      setStatus("Select at least one combined mode: api, website, or repo.");
+      return;
+    }
+
     setLoading(true);
     setStatus(`Running ${reason} audit for ${projectId} in ${runMode} mode...`);
 
@@ -178,7 +195,7 @@ export default function Home() {
       const response = await fetch("/api/engine", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, runtimeMode: runMode }),
+        body: JSON.stringify({ projectId, runtimeMode: runMode, modeSelection }),
       });
       if (!response.ok) {
         throw new Error(`Engine request failed with HTTP ${response.status}`);
@@ -206,6 +223,63 @@ export default function Home() {
     }
     const data = await response.json();
     setPayloads(data.payloads ?? []);
+  }
+
+  async function importJsonTargets(file: File): Promise<void> {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) {
+        setStatus("JSON target file must be an array of { url, method? }.");
+        return;
+      }
+      const normalized = parsed
+        .filter((item) => item && typeof item.url === "string")
+        .map((item) => ({
+          url: String(item.url),
+          method: typeof item.method === "string" ? String(item.method).toUpperCase() : undefined,
+        }));
+      setApiJsonTargets(normalized);
+      setStatus(`Imported ${normalized.length} API targets from JSON.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function runApiEndpointTests(): Promise<void> {
+    setApiLoading(true);
+    setStatus("Running adversarial API endpoint tests...");
+
+    const batchTargets = apiBatchText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((url) => ({ url, method: apiMethod }));
+
+    try {
+      const response = await fetch("/api/test-endpoint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          singleTarget: apiSingleUrl.trim() ? { url: apiSingleUrl.trim(), method: apiMethod } : undefined,
+          batchTargets,
+          jsonTargets: apiJsonTargets,
+          enableMethodFuzzing: apiMethodFuzzing,
+          enableParameterInjection: apiParameterInjection,
+          payloadCategoryFilter: [],
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`API test failed with HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      setApiResults((data.results ?? []) as ApiTestResult[]);
+      setStatus(`API endpoint testing completed: ${(data.results ?? []).length} test results.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setApiLoading(false);
+    }
   }
 
   function downloadMnemeBundle(): void {
@@ -325,6 +399,27 @@ export default function Home() {
               Run Pre-Connection Simulation
             </button>
             <span className="self-center text-xs text-zinc-500">{status}</span>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <span className="text-xs uppercase tracking-wide text-zinc-500">Combined Mode Selection</span>
+            {([
+              ["api", "API"],
+              ["website", "Website"],
+              ["repo", "Repo"],
+            ] as const).map(([key, label]) => (
+              <label key={key} className="flex items-center gap-2 text-xs text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={modeSelection[key]}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setModeSelection((prev) => ({ ...prev, [key]: checked }));
+                  }}
+                />
+                {label}
+              </label>
+            ))}
           </div>
         </header>
 
@@ -498,6 +593,128 @@ export default function Home() {
                   ))}
                 </ul>
               </div>
+            </div>
+          </section>
+        )}
+
+        {activeView === "ApiTesting" && (
+          <section className="space-y-4">
+            <div className="panel p-4">
+              <h2 className="text-sm font-semibold">Adversarial API Endpoint Testing</h2>
+              <p className="mt-1 text-xs text-zinc-500">
+                Run endpoint attacks with method fuzzing and parameter injection using payload corpus from attacks/*.json.
+              </p>
+
+              <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                <div>
+                  <label className="text-xs text-zinc-500">Single Endpoint URL</label>
+                  <input
+                    type="text"
+                    value={apiSingleUrl}
+                    onChange={(event) => setApiSingleUrl(event.target.value)}
+                    placeholder="https://localhost:8000/v1/chat/completions"
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-black/40 px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-zinc-500">Method</label>
+                  <select
+                    value={apiMethod}
+                    onChange={(event) => setApiMethod(event.target.value)}
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-black/40 px-3 py-2 text-sm"
+                  >
+                    {["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => (
+                      <option key={method} value={method}>{method}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-zinc-500">JSON Config Upload</label>
+                  <input
+                    type="file"
+                    accept="application/json"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        void importJsonTargets(file);
+                      }
+                    }}
+                    className="mt-1 w-full rounded-md border border-zinc-700 bg-black/40 px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-[11px] text-zinc-500">Loaded JSON targets: {apiJsonTargets.length}</p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="text-xs text-zinc-500">Batch Endpoints (one URL per line)</label>
+                <textarea
+                  value={apiBatchText}
+                  onChange={(event) => setApiBatchText(event.target.value)}
+                  rows={5}
+                  placeholder={"https://localhost:8000/v1/chat/completions\nhttps://localhost:8000/v1/moderations"}
+                  className="mt-1 w-full rounded-md border border-zinc-700 bg-black/40 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-4 text-xs">
+                <label className="flex items-center gap-2 text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={apiMethodFuzzing}
+                    onChange={(event) => setApiMethodFuzzing(event.target.checked)}
+                  />
+                  Method fuzzing
+                </label>
+                <label className="flex items-center gap-2 text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={apiParameterInjection}
+                    onChange={(event) => setApiParameterInjection(event.target.checked)}
+                  />
+                  Parameter injection (query/header/body)
+                </label>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void runApiEndpointTests()}
+                disabled={apiLoading}
+                className="mt-4 rounded-md border border-red-700 bg-red-950/30 px-4 py-2 text-sm text-red-200 hover:bg-red-950/50 disabled:opacity-50"
+              >
+                {apiLoading ? "Running endpoint tests..." : "Run API Endpoint Adversarial Tests"}
+              </button>
+            </div>
+
+            <div className="panel overflow-x-auto p-4">
+              <h3 className="mb-3 text-sm font-semibold">API Test Results</h3>
+              <table className="min-w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-zinc-500">
+                    <th className="px-2 py-2">Target</th>
+                    <th className="px-2 py-2">Method</th>
+                    <th className="px-2 py-2">Injection</th>
+                    <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2">Duration</th>
+                    <th className="px-2 py-2">Severity</th>
+                    <th className="px-2 py-2">Signal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {apiResults.slice(0, 300).map((result) => (
+                    <tr key={result.id} className="border-b border-zinc-900 text-zinc-300">
+                      <td className="px-2 py-2">{result.targetUrl}</td>
+                      <td className="px-2 py-2">{result.method}</td>
+                      <td className="px-2 py-2">{result.injectionMode}</td>
+                      <td className="px-2 py-2">{result.statusCode || "ERR"}</td>
+                      <td className="px-2 py-2">{result.durationMs}ms</td>
+                      <td className={`px-2 py-2 ${severityClass(result.severity)}`}>{result.severity}</td>
+                      <td className="px-2 py-2">{result.signal}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
         )}

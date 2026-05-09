@@ -2,9 +2,11 @@ export type ProjectId = "aletheia-core" | "unitarity-lab" | "revenueforge";
 
 export type RuntimeMode = "CONNECTED" | "OFFLINE";
 
+export type AuditMode = "api" | "website" | "repo";
+
 export type WorkspaceTab = "Integrity" | "Supply Chain" | "Narrative" | "Adversarial";
 
-export type SidebarView = "Command" | "Inspector" | "Adversary" | "Mneme";
+export type SidebarView = "Command" | "Inspector" | "Adversary" | "ApiTesting" | "Mneme";
 
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 
@@ -117,4 +119,37 @@ export interface SovereignAuditReport {
   gueK1Series: number[];
   confidenceScore: number;
   logs: AuditLog[];
+}
+
+export interface AuditModeSelection {
+  api: boolean;
+  website: boolean;
+  repo: boolean;
+}
+
+export interface ApiTestTarget {
+  url: string;
+  method?: string;
+}
+
+export interface ApiTestRequest {
+  singleTarget?: ApiTestTarget;
+  batchTargets?: ApiTestTarget[];
+  jsonTargets?: ApiTestTarget[];
+  enableMethodFuzzing: boolean;
+  enableParameterInjection: boolean;
+  payloadCategoryFilter?: string[];
+}
+
+export interface ApiTestResult {
+  id: string;
+  targetUrl: string;
+  method: string;
+  injectionMode: "raw" | "query" | "header" | "body";
+  statusCode: number;
+  ok: boolean;
+  durationMs: number;
+  severity: Severity;
+  signal: string;
+  payloadId: string;
 }
