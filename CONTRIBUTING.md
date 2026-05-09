@@ -29,6 +29,13 @@ Thank you for your interest in contributing! This guide will help you get starte
    python -m pytest tests/ -v
    ```
 
+Alternative one-command setup (recommended):
+
+```bash
+./scripts/bootstrap.sh
+./scripts/verify.sh
+```
+
 ### Project Structure
 
 ```

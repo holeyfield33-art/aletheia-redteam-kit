@@ -40,6 +40,26 @@ API call is logged on the engine side under your tenant.
     # edit .env, paste your API key from https://app.aletheia-core.com/keys
     export $(cat .env | xargs)
 
+## Reproducible Environment (One-Command)
+
+Bootstrap all required dependencies for CLI + dashboard:
+
+    ./scripts/bootstrap.sh
+
+What this installs:
+
+- Python virtualenv at `.venv`
+- Python package with extras: `dev`, `verify`, `web`, `deps`
+- Playwright Chromium runtime for website mode
+- Dashboard Node dependencies via `npm ci` in `dashboard/sovereign-command-center`
+- `.env` file from `.env.example` if missing
+
+Verify environment on any machine:
+
+    ./scripts/verify.sh
+
+This runs representative backend tests plus dashboard lint/build checks.
+
 ## API red-team quick start
 
 Command-center control plane (single entry point):
