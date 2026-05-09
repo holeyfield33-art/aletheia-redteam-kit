@@ -14,6 +14,7 @@ Next.js operator dashboard for local audit execution and adversarial endpoint te
 	- HTTP method fuzzing
 	- parameter injection modes (query/header/body)
 	- payload category filtering sourced from `attacks/*.json`
+	- saved test profiles (save/load/delete)
 	- result export and clear actions
 
 ## Local Development

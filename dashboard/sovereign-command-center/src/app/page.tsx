@@ -22,6 +22,20 @@ const SIDEBAR_ITEMS: Array<{ key: SidebarView; label: string; icon: string }> = 
 ];
 
 const WORKSPACE_TABS: WorkspaceTab[] = ["Integrity", "Supply Chain", "Narrative", "Adversarial"];
+const API_PROFILE_STORAGE_KEY = "aletheia.apiTestProfiles.v1";
+
+interface ApiTestProfile {
+  id: string;
+  name: string;
+  singleUrl: string;
+  method: string;
+  batchText: string;
+  jsonTargets: Array<{ url: string; method?: string }>;
+  methodFuzzing: boolean;
+  parameterInjection: boolean;
+  selectedPayloadCategories: string[];
+  updatedAt: string;
+}
 
 function severityClass(severity: string): string {
   switch (severity.toUpperCase()) {
@@ -163,6 +177,25 @@ export default function Home() {
   const [apiResults, setApiResults] = useState<ApiTestResult[]>([]);
   const [apiLoading, setApiLoading] = useState(false);
   const [selectedPayloadCategories, setSelectedPayloadCategories] = useState<string[]>([]);
+  const [apiProfileName, setApiProfileName] = useState("");
+  const [apiProfiles, setApiProfiles] = useState<ApiTestProfile[]>(() => {
+    if (typeof window === "undefined") {
+      return [];
+    }
+    try {
+      const raw = localStorage.getItem(API_PROFILE_STORAGE_KEY);
+      if (!raw) {
+        return [];
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed.filter((profile) => profile && typeof profile.name === "string");
+    } catch {
+      return [];
+    }
+  });
 
   const selectedProject = useMemo(() => {
     return PROJECTS.find((project) => project.id === projectId) ?? PROJECTS[0];
@@ -187,6 +220,80 @@ export default function Home() {
     const categories = Array.from(new Set(payloads.map((payload) => payload.category))).sort();
     return categories;
   }, [payloads]);
+
+  function persistApiProfiles(nextProfiles: ApiTestProfile[]): void {
+    setApiProfiles(nextProfiles);
+    localStorage.setItem(API_PROFILE_STORAGE_KEY, JSON.stringify(nextProfiles));
+  }
+
+  function createApiProfileSnapshot(name: string): ApiTestProfile {
+    return {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
+      name,
+      singleUrl: apiSingleUrl,
+      method: apiMethod,
+      batchText: apiBatchText,
+      jsonTargets: apiJsonTargets,
+      methodFuzzing: apiMethodFuzzing,
+      parameterInjection: apiParameterInjection,
+      selectedPayloadCategories,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  function saveApiProfile(): void {
+    const name = apiProfileName.trim();
+    if (!name) {
+      setStatus("Enter a profile name before saving.");
+      return;
+    }
+
+    const snapshot = createApiProfileSnapshot(name);
+    const existing = apiProfiles.find((profile) => profile.name.toLowerCase() === name.toLowerCase());
+
+    if (existing) {
+      const updated = apiProfiles.map((profile) =>
+        profile.id === existing.id
+          ? {
+              ...snapshot,
+              id: existing.id,
+            }
+          : profile,
+      );
+      persistApiProfiles(updated);
+      setStatus(`Updated API test profile: ${name}`);
+      return;
+    }
+
+    persistApiProfiles([snapshot, ...apiProfiles].slice(0, 25));
+    setStatus(`Saved API test profile: ${name}`);
+  }
+
+  function loadApiProfile(profile: ApiTestProfile): void {
+    setApiProfileName(profile.name);
+    setApiSingleUrl(profile.singleUrl);
+    setApiMethod(profile.method);
+    setApiBatchText(profile.batchText);
+    setApiJsonTargets(profile.jsonTargets ?? []);
+    setApiMethodFuzzing(profile.methodFuzzing);
+    setApiParameterInjection(profile.parameterInjection);
+    setSelectedPayloadCategories(profile.selectedPayloadCategories ?? []);
+    setStatus(`Loaded API test profile: ${profile.name}`);
+  }
+
+  function deleteApiProfile(profileId: string): void {
+    const profile = apiProfiles.find((item) => item.id === profileId);
+    const nextProfiles = apiProfiles.filter((item) => item.id !== profileId);
+    persistApiProfiles(nextProfiles);
+    setStatus(`Deleted API test profile: ${profile?.name ?? profileId}`);
+  }
+
+  function clearApiTargets(): void {
+    setApiSingleUrl("");
+    setApiBatchText("");
+    setApiJsonTargets([]);
+    setStatus("Cleared endpoint target inputs.");
+  }
 
   async function runAudit(runMode: RuntimeMode, reason: string): Promise<void> {
     if (!modeSelection.api && !modeSelection.website && !modeSelection.repo) {
@@ -648,6 +755,62 @@ export default function Home() {
               </p>
 
               <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                <div className="lg:col-span-3 rounded-md border border-zinc-800 bg-black/30 p-3">
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="min-w-[220px] flex-1">
+                      <label className="text-xs text-zinc-500">Saved Test Profile Name</label>
+                      <input
+                        type="text"
+                        value={apiProfileName}
+                        onChange={(event) => setApiProfileName(event.target.value)}
+                        placeholder="production-gateway-smoke"
+                        className="mt-1 w-full rounded-md border border-zinc-700 bg-black/40 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={saveApiProfile}
+                      className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+                    >
+                      Save Profile
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearApiTargets}
+                      className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+                    >
+                      Clear Targets
+                    </button>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                    {apiProfiles.map((profile) => (
+                      <div key={profile.id} className="rounded border border-zinc-800 bg-black/40 p-2 text-xs">
+                        <p className="font-semibold text-zinc-200">{profile.name}</p>
+                        <p className="mt-1 text-zinc-500">{new Date(profile.updatedAt).toLocaleString()}</p>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => loadApiProfile(profile)}
+                            className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 hover:border-zinc-500"
+                          >
+                            Load
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteApiProfile(profile.id)}
+                            className="rounded border border-red-800 px-2 py-1 text-red-300 hover:border-red-600"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {!apiProfiles.length && (
+                      <p className="text-zinc-500">No saved profiles yet. Configure a test setup and click Save Profile.</p>
+                    )}
+                  </div>
+                </div>
+
                 <div>
                   <label className="text-xs text-zinc-500">Single Endpoint URL</label>
                   <input

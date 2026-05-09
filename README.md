@@ -344,6 +344,7 @@ Sovereign features:
     - single endpoint URL
     - batch endpoints (one URL per line)
     - JSON target import
+    - saved test profiles (save/load/delete)
     - method fuzzing + parameter injection
     - payload category filters from `attacks/*.json`
     - result export and clear controls
