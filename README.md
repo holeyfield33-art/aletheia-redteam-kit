@@ -7,7 +7,7 @@ Current release: `v0.2.1`
 
 ## What it does
 
-1. Loads ~100 adversarial payloads from `attacks/*.json`
+1. Loads ~100 adversarial payloads from recursive JSON catalogs under `attacks/`
     (prompt injection, data exfiltration, tool abuse, jailbreak, policy evasion,
     plus benign controls).
 2. Sends each payload to `https://api.aletheia-core.com/v1/audit`.
@@ -371,7 +371,7 @@ Sovereign features:
     - JSON target import
     - saved test profiles (save/load/delete)
     - method fuzzing + parameter injection
-    - payload category filters from `attacks/*.json`
+    - payload category filters from recursive JSON catalogs under `attacks/`
     - result export and clear controls
 
 Build checks:

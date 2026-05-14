@@ -1,0 +1,13 @@
+[
+  {
+    "id": "VS_001",
+    "name": "Visual placeholder payload",
+    "category": "visual_renderer",
+    "payload": "TEST_PROMPT_PLACEHOLDER",
+    "action": "fetch_data",
+    "origin": "redteam-kit",
+    "expected_decision": "DENIED",
+    "severity": "MEDIUM",
+    "notes": "Placeholder visual-channel payload. Replace with a renderer-specific test prompt when extending this catalog."
+  }
+]

@@ -104,16 +104,21 @@ class FileSystemCatalogProvider(CatalogProvider):
     def __init__(self, attack_dir: Path = DEFAULT_ATTACK_DIR) -> None:
         self.attack_dir = attack_dir
 
+    def _resolve_files(self, category: str | None = None) -> list[Path]:
+        if category:
+            matches = sorted(self.attack_dir.glob(f"**/{category}.json"))
+            if not matches:
+                raise FileNotFoundError(f"Attack catalog not found for category: {category}")
+            return matches
+        return sorted(path for path in self.attack_dir.glob("**/*.json") if path.is_file())
+
     def fetch_attacks(self, category: str | None = None) -> list[AttackSpec]:
-        files = [self.attack_dir / f"{category}.json"] if category else sorted(self.attack_dir.glob("*.json"))
+        files = self._resolve_files(category)
         attacks: list[AttackSpec] = []
 
         for path in files:
-            if not path.exists():
-                raise FileNotFoundError(f"Attack catalog not found: {path}")
-
             category_name = path.stem
-            raw = json.loads(path.read_text())
+            raw = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(raw, list):
                 raise ValueError(f"Attack catalog must contain a JSON array: {path}")
 
