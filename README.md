@@ -154,9 +154,11 @@ Important API outputs:
 - `unknown`: count of requests classified as unknown decisions
 - `empty_200_anomalies`: count of empty JSON HTTP 200 responses
 - `reconciliation.total_reconciled`: `UNKNOWN`/`ERROR` rows resolved from saved decisions
+- `reconciliation.reconcilable_total`: rows eligible for automated receipt/log reconciliation
 - `reconciliation.unreconciled`: unresolved rows with request IDs
 - `reconciliation.reconciliation_coverage_pct`: reconciliation coverage percentage
 - `reconciliation.unreconciled_request_ids`: IDs surfaced when coverage is low
+- `reconciliation.skipped_request_ids`: IDs skipped from automated coverage because lookup requires operator auth
 
 API pacing and retry behavior:
 
@@ -390,14 +392,13 @@ Open `http://localhost:3000`.
 Sovereign features:
 
 - Combined mode selector: choose API, website, repo per run.
-- API endpoint adversarial testing:
-    - single endpoint URL
-    - batch endpoints (one URL per line)
-    - JSON target import
-    - saved test profiles (save/load/delete)
-    - method fuzzing + parameter injection
-    - payload category filters from recursive JSON catalogs under `attacks/`
-    - result export and clear controls
+- API endpoint adversarial testing: single endpoint URL
+- API endpoint adversarial testing: batch endpoints (one URL per line)
+- API endpoint adversarial testing: JSON target import
+- API endpoint adversarial testing: saved test profiles (save/load/delete)
+- API endpoint adversarial testing: method fuzzing + parameter injection
+- API endpoint adversarial testing: payload category filters from recursive JSON catalogs under `attacks/`
+- API endpoint adversarial testing: result export and clear controls
 
 Build checks:
 

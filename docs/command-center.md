@@ -101,13 +101,16 @@ before lower-risk or already-stable families.
 For API and combined artifacts, review the `reconciliation` object:
 
 - `total_reconciled`: count of previously `UNKNOWN`/`ERROR` rows resolved from saved decisions
+- `reconcilable_total`: rows eligible for automated reconciliation from receipts/log APIs
 - `unreconciled`: unresolved rows that still need operator investigation
 - `reconciliation_coverage_pct`: coverage percentage for reconcilable rows
 - `unreconciled_request_ids`: concrete IDs for escalation and dashboard traceability
+- `skipped_request_ids`: IDs that require operator-authenticated lookup and are excluded from automated coverage
 
 Coverage policy:
 
 - API runs enforce reconciliation coverage when errors are present.
+- Auth-gated receipt endpoints do not count against automated coverage; they are surfaced in `skipped_request_ids`.
 - Coverage below 95% surfaces `api:reconciliation_coverage_below_threshold`.
 
 ## Interpretation Guidance
