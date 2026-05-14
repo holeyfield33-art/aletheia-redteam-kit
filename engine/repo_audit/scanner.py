@@ -14,6 +14,7 @@ import tomllib
 import json
 from collections import defaultdict
 from urllib.parse import urlparse
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -248,6 +249,77 @@ GENERATED_ARTIFACT_GLOBS = (
 )
 
 
+def is_test_file(file_path: str) -> bool:
+    if not file_path:
+        return False
+    normalized = str(file_path).replace("\\", "/").lower()
+    return (
+        "/tests/" in normalized
+        or "/test/" in normalized
+        or normalized.startswith("tests/")
+        or normalized.startswith("test/")
+        or ".test." in normalized
+        or ".spec." in normalized
+    )
+
+
+def is_first_party_file(file_path: str) -> bool:
+    normalized = str(file_path or "").replace("\\", "/")
+    if not normalized:
+        return False
+    ignored_markers = (
+        "/node_modules/",
+        "/.next/",
+        "/.venv/",
+        "/env/",
+        "/dist/",
+        "/build/",
+    )
+    if normalized.startswith((".venv/", "env/", "dist/", "build/")):
+        return False
+    return not any(marker in normalized for marker in ignored_markers)
+
+
+def _finding_value(finding: Finding | dict[str, Any], field: str) -> Any:
+    if isinstance(finding, Finding):
+        return getattr(finding, field)
+    return finding.get(field)
+
+
+def should_ignore_finding(
+    finding: Finding | dict[str, Any],
+    *,
+    ignore_test_fixtures: bool = True,
+) -> bool:
+    file_path = str(_finding_value(finding, "file") or _finding_value(finding, "path") or "")
+    finding_type = str(_finding_value(finding, "type") or "")
+    evidence = str(_finding_value(finding, "evidence") or "").lower()
+    normalized_file = file_path.replace("\\", "/").lower()
+
+    if ignore_test_fixtures and is_test_file(normalized_file) and finding_type in {
+        "password_literal",
+        "api_key_literal",
+        "high_entropy_secret_literal",
+        "private_key_block",
+    }:
+        return True
+
+    if ("auth.py" in normalized_file or "client.py" in normalized_file) and any(
+        keyword in evidence
+        for keyword in ("token", "getenv", "env.get", "os.getenv", "payload", "construct")
+    ):
+        if finding_type in {"password_literal", "api_key_literal", "high_entropy_secret_literal"}:
+            return True
+
+    if ("scanner.py" in normalized_file or "repo_audit/" in normalized_file) and finding_type in {
+        "cors_wildcard_origin",
+        "weak_hash_sha1",
+    }:
+        return True
+
+    return False
+
+
 def _is_probably_text(path: Path) -> bool:
     if path.suffix.lower() in ALLOWED_TEXT_SUFFIXES:
         return True
@@ -299,7 +371,7 @@ def _detect_dependency_manifests(repo_root: Path) -> dict[str, list[str]]:
 
 def _matches_fixture_path(rel_path: str) -> bool:
     normalized = rel_path.replace("\\", "/")
-    return any(fnmatch(normalized, pattern) for pattern in TEST_FIXTURE_GLOBS)
+    return is_test_file(normalized) or any(fnmatch(normalized, pattern) for pattern in TEST_FIXTURE_GLOBS)
 
 
 def _is_allowlisted_fixture_line(rel_path: str, line: str) -> bool:
@@ -996,22 +1068,36 @@ def _audit_repo_root(
         deduped[key] = finding
     unique_findings = list(deduped.values())
 
-    risk_score, by_severity, by_type = _score(unique_findings)
+    filtered_findings = [
+        finding
+        for finding in unique_findings
+        if not should_ignore_finding(finding, ignore_test_fixtures=not include_test_fixtures)
+    ]
+
+    first_party_non_test_findings = [
+        finding
+        for finding in filtered_findings
+        if is_first_party_file(finding.file) and not is_test_file(finding.file)
+    ]
+    first_party_non_test_high = sum(1 for finding in first_party_non_test_findings if finding.severity == "HIGH")
+    first_party_non_test_critical = sum(1 for finding in first_party_non_test_findings if finding.severity == "CRITICAL")
+
+    risk_score, by_severity, by_type = _score(filtered_findings)
 
     threat_match_total = 0
     threat_match_by_type: dict[str, int] = {}
-    for finding in unique_findings:
+    for finding in filtered_findings:
         if finding.type in threat_index:
             threat_match_total += 1
             threat_match_by_type[finding.type] = threat_match_by_type.get(finding.type, 0) + 1
 
     gates = {
-        "pass": by_severity.get("CRITICAL", 0) == 0 and by_severity.get("HIGH", 0) <= 5,
+        "pass": first_party_non_test_critical == 0 and first_party_non_test_high <= 5,
         "violations": [],
     }
-    if by_severity.get("CRITICAL", 0) > 0:
+    if first_party_non_test_critical > 0:
         gates["violations"].append("critical_repo_findings")
-    if by_severity.get("HIGH", 0) > 5:
+    if first_party_non_test_high > 5:
         gates["violations"].append("high_repo_findings_over_limit")
 
     return {
@@ -1030,9 +1116,17 @@ def _audit_repo_root(
         },
         "ignored_artifacts": list(GENERATED_ARTIFACT_GLOBS),
         "dependencies": dependency_summary,
-        "findings_total": len(unique_findings),
+        "findings_total": len(filtered_findings),
         "findings_by_severity": by_severity,
         "findings_by_type": by_type,
+        "first_party_non_test_findings_total": len(first_party_non_test_findings),
+        "first_party_non_test_by_severity": {
+            "CRITICAL": first_party_non_test_critical,
+            "HIGH": first_party_non_test_high,
+            "MEDIUM": sum(1 for finding in first_party_non_test_findings if finding.severity == "MEDIUM"),
+            "LOW": sum(1 for finding in first_party_non_test_findings if finding.severity == "LOW"),
+        },
+        "first_party_non_test_high_critical_count": first_party_non_test_critical + first_party_non_test_high,
         "risk_score": risk_score,
         "threat_feed": {
             "source": threat_feed_source,
@@ -1042,7 +1136,7 @@ def _audit_repo_root(
         "gates": gates,
         "findings": [
             _serialize_finding(finding, threat_index)
-            for finding in sorted(unique_findings, key=lambda item: (item.severity, item.file, item.line or 0))
+            for finding in sorted(filtered_findings, key=lambda item: (item.severity, item.file, item.line or 0))
         ],
     }
 

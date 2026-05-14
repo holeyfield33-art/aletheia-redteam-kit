@@ -1,0 +1,13 @@
+title = "Aletheia gitleaks config"
+
+[allowlist]
+description = "Allow intentional test fixtures and known synthetic secrets"
+paths = [
+  '''tests/''',
+  '''test/''',
+  '''dashboard/sovereign-command-center/src/lib/server/.*\.test\..*''',
+  '''runs/''',
+]
+regexes = [
+  '''aletheia-redteam:allowed-test-fixture''',
+]

@@ -87,7 +87,7 @@ const crypto = require('crypto');
 const { exec } = require('child_process');
 function run(req) {
   exec(req.query.cmd);
-  return crypto.createHash('sha1').update('x').digest('hex');
+    return crypto.createHash('sha1').update('x').digest('hex'); // nosec aletheia-redteam:allowed-test-fixture intentional weak hash fixture
 }
 """.strip()
     )

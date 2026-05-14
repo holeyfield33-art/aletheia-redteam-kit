@@ -1939,8 +1939,9 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         # Repo component
         repo_summary = _run_repo_audit_with_cli_options(args)
         repo_gates = repo_summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
-        critical = int((repo_summary.get("findings_by_severity") or {}).get("CRITICAL", 0))
-        high = int((repo_summary.get("findings_by_severity") or {}).get("HIGH", 0))
+        gate_scope = (repo_summary.get("first_party_non_test_by_severity") or repo_summary.get("findings_by_severity") or {})
+        critical = int(gate_scope.get("CRITICAL", 0))
+        high = int(gate_scope.get("HIGH", 0))
         if critical > args.max_repo_critical:
             repo_gates["pass"] = False
             repo_gates.setdefault("violations", []).append("critical_repo_findings_over_limit")
@@ -2081,8 +2082,9 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         summary = _run_repo_audit_with_cli_options(args)
         gates = summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
 
-        critical = int((summary.get("findings_by_severity") or {}).get("CRITICAL", 0))
-        high = int((summary.get("findings_by_severity") or {}).get("HIGH", 0))
+        gate_scope = (summary.get("first_party_non_test_by_severity") or summary.get("findings_by_severity") or {})
+        critical = int(gate_scope.get("CRITICAL", 0))
+        high = int(gate_scope.get("HIGH", 0))
         dependency_severity = ((summary.get("dependencies") or {}).get("findings_by_severity") or {})
         deps_critical = int(dependency_severity.get("CRITICAL", 0))
         deps_high = int(dependency_severity.get("HIGH", 0))

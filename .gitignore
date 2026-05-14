@@ -19,6 +19,8 @@ env/
 
 # Environment files
 .env
+.env.*
+!.env.example
 
 # Project outputs
 summary.json

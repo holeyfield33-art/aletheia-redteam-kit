@@ -1,6 +1,11 @@
 # Command Center Dashboard
 
-This project dashboard is designed as an operator command center for API, website, repo, and combined security runs.
+This project dashboard is the operator command center for API, website, repo, and combined security runs.
+
+The UI is currently split into two frontends:
+
+- `dashboard/index.html` - static, fast-loading overview for quick triage and run history.
+- `dashboard/sovereign-command-center` - Next.js command center with the primary operator workflow.
 
 ## Launch
 
@@ -14,7 +19,7 @@ Then open `http://<host>:8080/dashboard/`.
 The hosted dashboard automatically reads the latest run catalog from `/api/runs`, so the operator does not need to drag files into the page.
 When auth is enabled, browser users are redirected to `/login`, API clients can use the configured header mode, and `/api/health` remains unauthenticated for health checks.
 
-Combined artifacts (`mode = combined`) can be loaded directly and switched between API/website/repo components using the Component filter.
+Combined artifacts (`mode = combined`) can be loaded directly and switched between attack/website/repository surfaces using the surface filter.
 
 ## Sovereign Command Center (Next.js)
 
@@ -31,12 +36,19 @@ Then open `http://localhost:3000`.
 Sovereign API testing workflow:
 
 1. Initialize workspace so payload categories are loaded.
-2. Go to `API Testing` in the sidebar.
+2. Go to `Attack Lab` in the sidebar.
 3. Set either single endpoint URL, batch URLs, or import JSON targets.
 4. Toggle method fuzzing and parameter injection as needed.
 5. Select payload categories to scope attack families, or keep default to use all.
 6. Run tests and inspect result severity, status, and response signal.
 7. Export endpoint test results as JSON for handoff.
+
+Sovereign overview workflow:
+
+1. Open the `Overview` tab for risk score, block rate, attack visibility, and latest run time.
+2. Use `Runs` to inspect historical artifacts and run-level status.
+3. Open `Launch` when you want to start a new run from the browser.
+4. Use `Settings` for auth and export configuration.
 
 ## Primary Operator Workflow
 
@@ -91,7 +103,7 @@ Direct Next.js serving follows the same env vars and protects routes through `sr
 
 ## Command Filters
 
-- Category filter: scope rows to one attack family.
+- Surface filter: scope rows to attack, website, or repository results.
 - Decision filter: adapts by summary type.
 API: `DENIED`, `PROCEED`, `UNKNOWN`, `ERROR`.
 Website/repo: severity (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`).
@@ -100,18 +112,18 @@ Website/repo: severity (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`).
 
 ## Quick Actions
 
-- Focus Weakest Category:
+- Highlight weak spots:
   - Automatically selects the category with the lowest match rate.
   - Enables mismatch-only view for fast triage.
-- Show Empty-200 Anomalies:
+- Show unverified 200s:
   - Filters to rows with empty JSON HTTP 200 response behavior.
   - Sets decision filter to `UNKNOWN`.
-- Export Filtered JSON:
+- Export filtered JSON:
   - Downloads currently filtered rows as `filtered_results.json`.
-- Show Repo Critical+High:
+- Show critical + high:
   - Enables mismatch-only view for repository findings.
   - Fast focus for exploitable hotspot triage.
-- Export Repo Hotspots:
+- Export weak spots:
   - Downloads repo `CRITICAL`/`HIGH` findings as `repo_hotspots.json`.
 
 ## Mission Priority Board
@@ -127,9 +139,9 @@ before lower-risk or already-stable families.
 
 ## Regression and Anomaly Panels
 
-- Regression panel shows high-risk baseline/current block rates and drop percent.
+- Regression panel shows baseline/current block rates and drop percent.
 - Mutation panel shows attempts/bypasses per mutation strategy.
-- Gap Analysis panel highlights top bypass-prone techniques.
+- Defense Weak Spots panel highlights top bypass-prone techniques.
 
 ## Reconciliation Signals
 

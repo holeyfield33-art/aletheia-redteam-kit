@@ -14,8 +14,8 @@ const ibmMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Aletheia Sovereign Command Center",
-  description: "Project-aware command center for regular and pre-connection adversarial audits.",
+  title: "Sovereign Command Center",
+  description: "Operator dashboard for run history, attack visibility, and launch control.",
 };
 
 export default function RootLayout({
