@@ -12,6 +12,11 @@
 - Cleaned checked-in operational artifacts from repository root and `runs/`, and moved reusable examples under `examples/`.
 - Expanded README with ethical-use requirements, production launch checklist, and external-target usage guidance.
 - Added test coverage for hosted rate limiting, default dashboard auth mode behavior, and stricter repo URL validation/clone timeout handling.
+- **Phase 2**: Added `--targets-file` batch execution for `--mode combined`: run API, repo, and website targets in a single sweep with bounded parallel execution, per-target artifact trees, and a merged command-center SQLite.
+- Fixed combined-mode SQLite `targets` table count: cleared the default single-target placeholder before appending batch target rows to prevent an off-by-one (N+1) count.
+- Fixed `test_repo_audit_can_clone_public_github_repo`: monkeypatched `subprocess.run` now correctly distinguishes `git clone` calls from `pip-audit` calls to avoid `cmd[-1]` collision.
+- Updated dashboard meta panel to surface batch progress fields (`batch_mode`, `targets_total`, `targets_completed`, `targets_failed`, `targets_file`) when a targets-file batch summary is loaded.
+- Added "Multi-target batch mode" section to README with full examples, output shape description, and field reference.
 
 ## v1.1.0
 

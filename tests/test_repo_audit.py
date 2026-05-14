@@ -139,18 +139,21 @@ def test_repo_audit_can_clone_public_github_repo(monkeypatch, tmp_path) -> None:
     created: dict[str, Path] = {}
 
     def _fake_run(cmd, **kwargs):
-        clone_root = Path(cmd[-1])
-        clone_root.mkdir(parents=True, exist_ok=True)
-        (clone_root / "pyproject.toml").write_text(
-            """
+        # Only simulate the git clone; other subprocess calls (e.g. pip-audit)
+        # should succeed silently without touching created[].
+        if cmd and cmd[0] == "git":
+            clone_root = Path(cmd[-1])
+            clone_root.mkdir(parents=True, exist_ok=True)
+            (clone_root / "pyproject.toml").write_text(
+                """
 [project]
 name = "sample"
 version = "0.0.1"
 dependencies = ["httpx>=0.27"]
 """.strip()
-        )
-        (clone_root / "app.py").write_text('API_KEY = "sk-test-0000000000000000"\n')  # aletheia-redteam:allowed-test-fixture
-        created["clone_root"] = clone_root
+            )
+            (clone_root / "app.py").write_text('API_KEY = "sk-test-0000000000000000"\n')  # aletheia-redteam:allowed-test-fixture
+            created["clone_root"] = clone_root
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr("engine.repo_audit.scanner.subprocess.run", _fake_run)

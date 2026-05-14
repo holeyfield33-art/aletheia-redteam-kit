@@ -466,6 +466,54 @@ Current custom technique taxonomy examples:
 - `encoded_instruction_injection`
 - `direct_data_exfiltration`
 
+## Multi-target batch mode (Phase 2)
+
+Sweep multiple API endpoints, repositories, and websites in a single command using a targets file:
+
+    cat > targets.json <<'JSON'
+    [
+        {"type": "api",     "url": "https://api.example.com",              "label": "prod-api"},
+        {"type": "repo",    "path": "/path/to/local/repo",                 "label": "backend-service"},
+        {"type": "repo",    "url": "https://github.com/example/public-api","label": "vendor-sdk"},
+        {"type": "website", "url": "https://app.example.com",              "label": "frontend"}
+    ]
+    JSON
+
+    python -m kit.runner --mode combined \
+        --targets-file targets.json \
+        --artifact-dir runs \
+        --output runs/batch_summary.json
+
+Each target runs through its corresponding mode runner (`api`, `repo`, `website`) with the same gates and thresholds as single-target runs. Progress is streamed to stderr as each target completes.
+
+Batch output shape:
+
+- `batch_summary.json`: top-level summary with `batch_mode`, `targets_total`, `targets_completed`, `targets_failed`, per-target status, and merged `gates`.
+- `runs/run-batch-{stamp}/targets/{label}/summary.json`: per-target summary.
+- `runs/run-batch-{stamp}/targets/{label}/artifacts/run-*/command_center.sqlite`: per-target SQLite.
+- `runs/run-combined-{stamp}/command_center.sqlite`: merged SQLite with one `targets` row per batch target.
+
+Parallel concurrency (default 2 workers):
+
+    python -m kit.runner --mode combined \
+        --targets-file targets.json \
+        --max-parallel-targets 4 \
+        --output runs/batch_summary.json
+
+Pass threshold overrides that apply to every target:
+
+    python -m kit.runner --mode combined \
+        --targets-file targets.json \
+        --thresholds max_high=5,min_pass_rate=80 \
+        --output runs/batch_summary.json
+
+Target object fields:
+
+- `type` (required): `api`, `repo`, or `website`
+- `url` (optional): target URL (API base URL, repo clone URL, or website URL)
+- `path` (optional): local filesystem path for repo targets
+- `label` (optional): human-readable name used in artifact paths and batch summary keys (auto-generated from type and index if omitted)
+
 ## Dashboard
 
 Open `dashboard/index.html` in a browser for the static Sovereign overview.
