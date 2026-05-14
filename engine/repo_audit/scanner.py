@@ -616,6 +616,11 @@ def _normalize_dependency_severity(value: str | None) -> str:
     return "HIGH"
 
 
+def _severity_rank(value: str | None) -> int:
+    order = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+    return order.get(str(value or "").strip().upper(), 0)
+
+
 def _classify_dependency_finding_type(*, advisory_id: str, description: str) -> str:
     blob = f"{advisory_id} {description}".lower()
     if any(token in blob for token in ("malware", "backdoor", "trojan", "compromised")):
@@ -665,6 +670,9 @@ def _parse_pip_audit_payload(payload: dict, report_rel: str) -> tuple[list[Findi
             )
             metadata.append(
                 {
+                    "package": name,
+                    "version": version,
+                    "advisory_id": vuln_id,
                     "severity": severity,
                     "language": "python",
                     "reachability": "unknown",
@@ -725,6 +733,9 @@ def _parse_osv_payload(payload: dict) -> tuple[list[Finding], list[dict[str, str
                 )
                 metadata.append(
                     {
+                        "package": package_name,
+                        "version": str(package.get("version") or package_info.get("version") or "unknown"),
+                        "advisory_id": vuln_id,
                         "severity": severity,
                         "language": language,
                         "reachability": reachability,
@@ -847,6 +858,7 @@ def _scan_dependency_advisories(repo_root: Path, *, deps_scan: str = "auto") -> 
     dep_by_severity = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
     dep_by_language: dict[str, int] = {}
     dep_by_reachability = {"direct": 0, "transitive": 0, "unknown": 0}
+    package_index: dict[str, dict[str, Any]] = {}
     for item in dep_meta:
         severity = item.get("severity", "HIGH")
         dep_by_severity[severity] = dep_by_severity.get(severity, 0) + 1
@@ -854,6 +866,55 @@ def _scan_dependency_advisories(repo_root: Path, *, deps_scan: str = "auto") -> 
         dep_by_language[language] = dep_by_language.get(language, 0) + 1
         reachability = item.get("reachability", "unknown")
         dep_by_reachability[reachability] = dep_by_reachability.get(reachability, 0) + 1
+
+        package_name = str(item.get("package") or "unknown")
+        pkg = package_index.setdefault(
+            package_name,
+            {
+                "name": package_name,
+                "version": str(item.get("version") or "unknown"),
+                "max_severity": "LOW",
+                "advisory_count": 0,
+                "languages": set(),
+                "tools": set(),
+                "reachability": {"direct": 0, "transitive": 0, "unknown": 0},
+                "finding_types": {},
+                "advisory_ids": [],
+            },
+        )
+        pkg["advisory_count"] += 1
+        if _severity_rank(severity) > _severity_rank(pkg["max_severity"]):
+            pkg["max_severity"] = severity
+        pkg["languages"].add(language)
+        pkg["tools"].add(str(item.get("tool") or "unknown"))
+        pkg["reachability"][reachability] = pkg["reachability"].get(reachability, 0) + 1
+        finding_type = str(item.get("type") or "dependency_vulnerability")
+        pkg["finding_types"][finding_type] = pkg["finding_types"].get(finding_type, 0) + 1
+        advisory_id = str(item.get("advisory_id") or "")
+        if advisory_id and advisory_id not in pkg["advisory_ids"]:
+            pkg["advisory_ids"].append(advisory_id)
+
+    top_packages = sorted(
+        (
+            {
+                "name": pkg["name"],
+                "version": pkg["version"],
+                "max_severity": pkg["max_severity"],
+                "advisory_count": int(pkg["advisory_count"]),
+                "languages": sorted(pkg["languages"]),
+                "tools": sorted(pkg["tools"]),
+                "reachability": pkg["reachability"],
+                "finding_types": pkg["finding_types"],
+                "advisory_ids": pkg["advisory_ids"][:5],
+            }
+            for pkg in package_index.values()
+        ),
+        key=lambda item: (
+            -_severity_rank(item["max_severity"]),
+            -int(item["advisory_count"]),
+            str(item["name"]),
+        ),
+    )[:10]
 
     exploitability_score = min(
         100,
@@ -872,6 +933,7 @@ def _scan_dependency_advisories(repo_root: Path, *, deps_scan: str = "auto") -> 
         "findings_by_language": dep_by_language,
         "reachability": dep_by_reachability,
         "exploitability_score": int(exploitability_score),
+        "top_packages": top_packages,
     }
 
     return findings, summary

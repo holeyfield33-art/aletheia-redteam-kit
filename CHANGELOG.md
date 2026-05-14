@@ -15,6 +15,8 @@
 - `_build_batch_target_legacy_args` forwards `--scan-profile` and `--scan-profile-file` to per-target runs.
 - Simplified `_run_repo_audit_with_cli_options` — removed brittle `TypeError`-based feature-detection shim; function now has a clean single call site.
 - Added 14 new tests covering scan profiles, tool-unavailable fallbacks, token masking, and CLI `--scan-profile` flag wiring.
+- Added `dependencies.top_packages` to repo audit summaries so dashboards can surface top vulnerable packages with advisory counts and max severity.
+- Updated the static dashboard repo mission board to prioritize vulnerable package remediation targets when dependency advisory data is present.
 
 ## v1.2.0
 

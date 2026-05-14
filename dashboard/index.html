@@ -1151,12 +1151,15 @@
         const deps = summary.dependencies || {};
         const depsTotal = Number(deps.findings_total || 0);
         const depsMode = deps.scan_mode || "auto";
+        const topPackage = Array.isArray(deps.top_packages) && deps.top_packages.length ? deps.top_packages[0] : null;
         metaEl.innerHTML = [
           "<div><b>Generated:</b> " + escapeHtml(generatedRepo) + "</div>",
           "<div><b>Repo root:</b> " + escapeHtml(repoRoot) + "</div>",
           "<div><b>Files scanned:</b> " + escapeHtml(filesScanned) + "</div>",
           "<div><b>Supply chain findings:</b> " + escapeHtml(depsTotal) + " (mode: " + escapeHtml(depsMode) + ")</div>"
-        ].join("");
+        ].concat(topPackage ? [
+          "<div><b>Top vulnerable package:</b> " + escapeHtml(String(topPackage.name || "unknown")) + " (" + escapeHtml(Number(topPackage.advisory_count || 0)) + ", max severity: " + escapeHtml(String(topPackage.max_severity || "unknown")) + ")</div>"
+        ] : []).join("");
         return;
       }
 
@@ -1654,6 +1657,28 @@
 
     function renderMissionBoard(summary) {
       if (isRepoSummary(summary)) {
+        const depPackages = (((summary || {}).dependencies || {}).top_packages || []).slice(0, 5);
+        if (depPackages.length) {
+          missionBoardEl.innerHTML = depPackages.map(function (pkg, idx) {
+            const severity = String(pkg.max_severity || "LOW");
+            const priority = severity === "CRITICAL" ? "critical" : ((severity === "HIGH" || idx < 2) ? "high" : "watch");
+            const tools = Array.isArray(pkg.tools) ? pkg.tools.join(", ") : "unknown";
+            const languages = Array.isArray(pkg.languages) ? pkg.languages.join(", ") : "unknown";
+            return (
+              '<div class="mission-item">' +
+              '<div class="mission-top">' +
+              '<strong>' + escapeHtml(String(pkg.name || "unknown")) + '</strong>' +
+              '<span class="mission-tag">' + escapeHtml(priority) + '</span>' +
+              '</div>' +
+              '<div class="muted">Advisories: ' + escapeHtml(Number(pkg.advisory_count || 0)) + ' | Max severity: ' + escapeHtml(severity) + '</div>' +
+              '<div class="muted">Language: ' + escapeHtml(languages) + ' | Tooling: ' + escapeHtml(tools) + '</div>' +
+              '<div class="muted">Operator action: upgrade or replace this package, verify lockfiles, and rerun repo mode.</div>' +
+              '</div>'
+            );
+          }).join('');
+          return;
+        }
+
         const byType = summary.findings_by_type || {};
         const topTypes = Object.entries(byType)
           .sort(function (a, b) { return Number(b[1] || 0) - Number(a[1] || 0); })

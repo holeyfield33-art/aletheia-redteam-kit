@@ -399,6 +399,13 @@ The scanner records dependency findings under `dependencies` in repo/combined
 summary output, including severity, language, reachability, and exploitability
 contribution.
 
+- `dependencies.top_packages` now highlights the highest-risk packages with
+    advisory count, max severity, languages, tools, reachability mix, and up to
+    five advisory IDs.
+- The static dashboard repo mission board prefers `dependencies.top_packages`
+    when available, so operators see concrete package upgrade priorities instead
+    of only aggregate finding types.
+
 Threat-feed enrichment:
 
 - Optional mapping file `examples/threat_feed.example.json` can attach threat intelligence context

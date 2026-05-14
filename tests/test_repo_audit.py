@@ -228,6 +228,65 @@ dependencies = ["httpx>=0.27"]
     assert any("PYSEC-TEST-1" in (f.get("title") or "") for f in summary["findings"])
 
 
+def test_repo_audit_summarizes_top_vulnerable_dependencies(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "pip-audit-report.json").write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "name": "urllib3",
+                        "version": "1.26.4",
+                        "vulns": [
+                            {
+                                "id": "PYSEC-TEST-1",
+                                "description": "High severity issue",
+                                "severity": "HIGH",
+                                "fix_versions": ["1.26.5"],
+                            },
+                            {
+                                "id": "PYSEC-TEST-2",
+                                "description": "Moderate follow-up issue",
+                                "severity": "MODERATE",
+                                "fix_versions": ["1.26.6"],
+                            },
+                        ],
+                    },
+                    {
+                        "name": "requests-typos",
+                        "version": "0.1.0",
+                        "vulns": [
+                            {
+                                "id": "OSV-TYPOSQUAT-1",
+                                "description": "Potential typosquatting package substitution",
+                                "severity": "HIGH",
+                                "fix_versions": ["remove-package"],
+                            }
+                        ],
+                    },
+                ]
+            }
+        )
+    )
+
+    summary = run_repo_audit(tmp_path)
+    top_packages = summary["dependencies"]["top_packages"]
+
+    assert top_packages[0]["name"] == "urllib3"
+    assert top_packages[0]["advisory_count"] == 2
+    assert top_packages[0]["max_severity"] == "HIGH"
+    assert "PYSEC-TEST-1" in top_packages[0]["advisory_ids"]
+    assert top_packages[1]["name"] == "requests-typos"
+    assert top_packages[1]["finding_types"]["dependency_tampering_risk"] == 1
+
+
 def test_repo_audit_auto_runs_pip_audit_when_python_manifest_present(monkeypatch, tmp_path) -> None:
     (tmp_path / "pyproject.toml").write_text(
         """
