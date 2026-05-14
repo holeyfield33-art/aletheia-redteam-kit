@@ -137,6 +137,29 @@ Single category run:
 
     python -m kit.runner --category prompt_injection --output prompt_only.json
 
+High-volume payload expansion run (500+ attacks with bounded quality controls):
+
+    python -m kit.runner \
+        --mode api \
+        --plugin kit.payload_mutation_plugin \
+        --payload-mutation-plugin \
+        --payload-family-file attacks/templates/payload_families.json \
+        --attack-intensity medium \
+        --payload-seed-limit 80 \
+        --payload-expand-to 500 \
+        --dedupe-semantic-threshold 0.92 \
+        --benign-ratio 0.2 \
+        --max-attacks 500 \
+        --output runs/payload500_summary.json
+
+Useful payload-corpus controls:
+
+- `--categories prompt_injection,tool_abuse,policy_evasion` limits execution to selected attack families.
+- `--max-attacks 200` caps the final expanded corpus for faster CI or smoke sweeps.
+- `--dedupe-semantic-threshold` removes near-duplicate payloads using token-overlap similarity.
+- `--benign-ratio 0.2` keeps roughly 20% `benign_controls` in capped runs to reduce noisy false positives.
+- `--payload-family-file` adds curated seed families without editing core recursive catalogs under `attacks/`.
+
 CI-style thresholded run:
 
     python -m kit.runner \

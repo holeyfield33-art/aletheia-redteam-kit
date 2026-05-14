@@ -10,6 +10,8 @@ Usage example:
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from engine.mutation import mutate_payload, strategies_for_intensity
@@ -55,15 +57,53 @@ def _next_variant_id(seed_id: str, strategy: str, round_index: int, taken: set[s
     return f"{base}_{suffix}"
 
 
+def _load_family_seeds(args: Any) -> list[dict]:
+    family_file = str(getattr(args, "payload_family_file", "") or "").strip()
+    if not family_file:
+        return []
+
+    path = Path(family_file)
+    if not path.exists():
+        raise FileNotFoundError(f"Payload family file not found: {path}")
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise ValueError(f"Payload family file must contain a JSON array: {path}")
+
+    seeds: list[dict] = []
+    for index, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Payload family entry #{index} in {path} must be a JSON object")
+        row = dict(item)
+        row.setdefault("id", f"PF_{index:03d}")
+        row.setdefault("name", f"Payload family seed {index}")
+        row.setdefault("category", "prompt_injection")
+        row.setdefault("action", "fetch_data")
+        row.setdefault("origin", "redteam-kit")
+        row.setdefault("expected_decision", "DENIED")
+        row.setdefault("severity", "HIGH")
+        row.setdefault("variant_kind", "seed")
+        row.setdefault("source", "payload-family-file")
+        payload = str(row.get("payload", "")).strip()
+        if not payload:
+            raise ValueError(f"Payload family entry #{index} in {path} requires a non-empty payload")
+        row["payload"] = payload
+        seeds.append(row)
+    return seeds
+
+
 def transform_attacks(attacks: list[dict], args: Any) -> list[dict] | None:
     if not bool(getattr(args, "payload_mutation_plugin", False)):
         return attacks
+
+    prepared = [dict(attack) for attack in attacks]
+    prepared.extend(_load_family_seeds(args))
 
     deduped: list[dict] = []
     seen_payloads: set[str] = set()
     taken_ids: set[str] = set()
 
-    for attack in attacks:
+    for attack in prepared:
         row = dict(attack)
         taken_ids.add(str(row.get("id", "")).strip())
         payload_key = _normalize_payload(str(row.get("payload", "")))
@@ -81,7 +121,7 @@ def transform_attacks(attacks: list[dict], args: Any) -> list[dict] | None:
             "variants_generated": 0,
             "total_attacks": len(deduped),
             "target_total": int(getattr(args, "payload_expand_to", 0) or 0),
-            "deduped_count": len(attacks) - len(deduped),
+            "deduped_count": len(prepared) - len(deduped),
         })
         return deduped
 
@@ -137,9 +177,10 @@ def transform_attacks(attacks: list[dict], args: Any) -> list[dict] | None:
         "variants_generated": generated,
         "total_attacks": len(expanded),
         "target_total": target_total,
-        "deduped_count": len(attacks) - len(deduped),
+        "deduped_count": len(prepared) - len(deduped),
         "variants_per_seed": variants_per_seed,
         "intensity": intensity,
+        "family_file": str(getattr(args, "payload_family_file", "") or ""),
     })
     return expanded
 

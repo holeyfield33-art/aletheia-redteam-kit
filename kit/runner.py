@@ -53,6 +53,7 @@ from kit.catalog import load_attacks as load_attacks_from_catalog
 from kit.client import AletheiaClient, TargetProfile, load_target_profile
 from kit.exit_codes import FAIL_ERROR, FAIL_THRESHOLD, PASS
 from kit.plugins import load_runner_plugins, plugin_name
+from kit.payload_quality import dedupe_attacks_semantic, limit_attacks_with_benign_ratio
 from kit.web_audit import WebAuditConfig, run_website_audit
 from kit.web_audit.config import AuthBypassTarget, AuthStep, CustomFindingRule, PromptInjectionTest
 
@@ -714,7 +715,16 @@ def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[objec
         intensity=getattr(args, "attack_intensity", "medium"),
     )
     expanded = _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
-    return _limit_attacks(expanded, getattr(args, "max_attacks", None))
+    deduped = dedupe_attacks_semantic(
+        expanded,
+        threshold=float(getattr(args, "dedupe_semantic_threshold", 0.92) or 0.92),
+    )
+    limited = limit_attacks_with_benign_ratio(
+        deduped,
+        max_attacks=int(getattr(args, "max_attacks", 0) or 0),
+        benign_ratio=float(getattr(args, "benign_ratio", 0.2) or 0.2),
+    )
+    return _limit_attacks(limited, getattr(args, "max_attacks", None))
 
 
 def run_attack(
@@ -1559,6 +1569,18 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         default=0,
         help="Maximum attacks to execute after expansion and plugin transforms (0 means no cap)",
     )
+    parser.add_argument(
+        "--dedupe-semantic-threshold",
+        type=float,
+        default=0.92,
+        help="Semantic dedupe threshold (0 disables semantic dedupe, 1 requires exact token overlap)",
+    )
+    parser.add_argument(
+        "--benign-ratio",
+        type=float,
+        default=0.2,
+        help="Target benign_controls ratio when max-attacks is set (0.2 means ~20 percent)",
+    )
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output path for summary JSON")
     parser.add_argument("--base-url", help="Override ALETHEIA_BASE_URL")
     parser.add_argument("--target-preset", choices=["aletheia", "openai"], default="aletheia", help="Target preset for API-compatible audits")
@@ -1689,6 +1711,10 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         type=int,
         default=80,
         help="Maximum seed attacks used by payload-mutation plugin for dynamic generation",
+    )
+    parser.add_argument(
+        "--payload-family-file",
+        help="Optional JSON file of additional seed payload families consumed by payload-mutation plugin",
     )
     parser.add_argument(
         "--variants-per-seed",
