@@ -1,9 +1,15 @@
 # aletheia-redteam-kit
 
+Brought to you by Aletheia Core - runtime AI security for agents.
+
 A command center for adversarial operations against the [Aletheia](https://aletheia-core.com) AI security surface.
 The dashboard is the primary operating surface for triage, drill-down, and mission prioritization, while the CLI is the execution surface for running sweeps, applying gates, and exporting artifacts.
 
 Current release: `v0.2.1`
+
+## Demo Video
+
+[![Watch the demo](docs/images/video_thumbnail.png)](https://youtu.be/placeholder)
 
 ## What it does
 
@@ -64,6 +70,14 @@ This runs representative backend tests plus dashboard lint/build checks.
 
 Review the [Certified AI Red Team Operator (CARTO) exam blueprint](docs/certification/syllabus.md) for the initial certification syllabus outline.
 
+## Attack Taxonomy
+
+- [Jailbreak catalogs](attacks/jailbreaks/)
+- [Injection catalogs](attacks/injections/)
+- [Exfiltration catalogs](attacks/exfil/)
+- [Encoding catalogs](attacks/encoding/)
+- [Visual catalogs](attacks/visual/)
+
 ## API red-team quick start
 
 Command-center control plane (single entry point):
@@ -96,7 +110,14 @@ Hosted operator mode:
 
 Agentic mode uses the standard mode selector:
 
-    python -m kit.runner --mode agentic --output summary.json
+    python -m kit.runner --mode agentic --threat-feed-file sample_threat_feed.json --output runs/agentic_results.json
+
+Quick agentic launch flow:
+
+- Start with recursive built-in payloads under `attacks/` plus any extra entries from `sample_threat_feed.json` or your own JSON feed.
+- Use `--mode agentic` to enable the adaptive requeue loop with payload cloaking and hard-negative generation.
+- Use `--max-iterations 10` or another value to bound the loop runtime.
+- Review `runs/agentic_results.json` for successful evasions, blocked payloads, and iteration summaries.
 
 Command-center run artifacts under `runs/` now include:
 
