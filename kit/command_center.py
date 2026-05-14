@@ -281,6 +281,43 @@ def normalize_summary_to_command_center(
             ]
         )
 
+        if mode == "repo":
+            dep_signals = ((summary.get("dependencies") or {}).get("signals") or {})
+            metrics.extend(
+                [
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "scope_type": "run",
+                        "scope_key": None,
+                        "metric_name": "dependency_malware_suspect_total",
+                        "metric_value": _safe_float(dep_signals.get("malware_suspect_total")),
+                        "metric_unit": "count",
+                        "created_at": started_at,
+                    },
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "scope_type": "run",
+                        "scope_key": None,
+                        "metric_name": "dependency_tampering_risk_total",
+                        "metric_value": _safe_float(dep_signals.get("tampering_risk_total")),
+                        "metric_unit": "count",
+                        "created_at": started_at,
+                    },
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "scope_type": "run",
+                        "scope_key": None,
+                        "metric_name": "suspicious_dependency_package_total",
+                        "metric_value": _safe_float(dep_signals.get("suspicious_package_total")),
+                        "metric_unit": "count",
+                        "created_at": started_at,
+                    },
+                ]
+            )
+
     elif mode == "combined":
         component_lookup = dict(summary.get("components") or {})
         target_rows = list(summary.get("targets") or [])

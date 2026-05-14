@@ -402,9 +402,15 @@ contribution.
 - `dependencies.top_packages` now highlights the highest-risk packages with
     advisory count, max severity, languages, tools, reachability mix, and up to
     five advisory IDs.
+- `dependencies.signals` now breaks out explicit supply-chain trust events:
+    `malware_suspect_total`, `tampering_risk_total`, `suspicious_package_total`,
+    and `top_suspicious_packages`.
 - The static dashboard repo mission board prefers `dependencies.top_packages`
     when available, so operators see concrete package upgrade priorities instead
     of only aggregate finding types.
+- When suspicious dependency signals are present, the repo dashboard elevates
+    those packages ahead of generic vulnerable-package rankings so operators can
+    treat them as provenance and trust incidents, not ordinary patch work.
 
 Threat-feed enrichment:
 

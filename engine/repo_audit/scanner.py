@@ -858,6 +858,7 @@ def _scan_dependency_advisories(repo_root: Path, *, deps_scan: str = "auto") -> 
     dep_by_severity = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
     dep_by_language: dict[str, int] = {}
     dep_by_reachability = {"direct": 0, "transitive": 0, "unknown": 0}
+    dep_by_type: dict[str, int] = {}
     package_index: dict[str, dict[str, Any]] = {}
     for item in dep_meta:
         severity = item.get("severity", "HIGH")
@@ -866,6 +867,8 @@ def _scan_dependency_advisories(repo_root: Path, *, deps_scan: str = "auto") -> 
         dep_by_language[language] = dep_by_language.get(language, 0) + 1
         reachability = item.get("reachability", "unknown")
         dep_by_reachability[reachability] = dep_by_reachability.get(reachability, 0) + 1
+        dep_type = str(item.get("type") or "dependency_vulnerability")
+        dep_by_type[dep_type] = dep_by_type.get(dep_type, 0) + 1
 
         package_name = str(item.get("package") or "unknown")
         pkg = package_index.setdefault(
@@ -888,7 +891,7 @@ def _scan_dependency_advisories(repo_root: Path, *, deps_scan: str = "auto") -> 
         pkg["languages"].add(language)
         pkg["tools"].add(str(item.get("tool") or "unknown"))
         pkg["reachability"][reachability] = pkg["reachability"].get(reachability, 0) + 1
-        finding_type = str(item.get("type") or "dependency_vulnerability")
+        finding_type = dep_type
         pkg["finding_types"][finding_type] = pkg["finding_types"].get(finding_type, 0) + 1
         advisory_id = str(item.get("advisory_id") or "")
         if advisory_id and advisory_id not in pkg["advisory_ids"]:
@@ -924,16 +927,32 @@ def _scan_dependency_advisories(repo_root: Path, *, deps_scan: str = "auto") -> 
         + dep_by_reachability.get("direct", 0) * 2,
     )
 
+    suspicious_packages = [
+        pkg
+        for pkg in top_packages
+        if pkg["finding_types"].get("dependency_malware_suspect", 0)
+        or pkg["finding_types"].get("dependency_tampering_risk", 0)
+    ]
+
+    signal_summary = {
+        "malware_suspect_total": int(dep_by_type.get("dependency_malware_suspect", 0)),
+        "tampering_risk_total": int(dep_by_type.get("dependency_tampering_risk", 0)),
+        "suspicious_package_total": len(suspicious_packages),
+        "top_suspicious_packages": suspicious_packages[:5],
+    }
+
     summary = {
         "scan_mode": deps_scan,
         "manifests": manifests,
         "tools": tools,
         "findings_total": len(dep_meta),
         "findings_by_severity": dep_by_severity,
+        "findings_by_type": dep_by_type,
         "findings_by_language": dep_by_language,
         "reachability": dep_by_reachability,
         "exploitability_score": int(exploitability_score),
         "top_packages": top_packages,
+        "signals": signal_summary,
     }
 
     return findings, summary

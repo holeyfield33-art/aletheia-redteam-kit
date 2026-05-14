@@ -17,6 +17,8 @@
 - Added 14 new tests covering scan profiles, tool-unavailable fallbacks, token masking, and CLI `--scan-profile` flag wiring.
 - Added `dependencies.top_packages` to repo audit summaries so dashboards can surface top vulnerable packages with advisory counts and max severity.
 - Updated the static dashboard repo mission board to prioritize vulnerable package remediation targets when dependency advisory data is present.
+- Added `dependencies.signals` for explicit malware-suspect and tampering-risk dependency counts plus top suspicious packages.
+- Updated command-center normalization and the static dashboard to surface suspicious dependency packages as supply-chain trust events.
 
 ## v1.2.0
 

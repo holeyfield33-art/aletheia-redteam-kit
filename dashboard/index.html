@@ -1149,6 +1149,7 @@
         const repoRoot = summary.repo_root || "(unknown)";
         const filesScanned = Number(summary.files_scanned || 0);
         const deps = summary.dependencies || {};
+        const depSignals = deps.signals || {};
         const depsTotal = Number(deps.findings_total || 0);
         const depsMode = deps.scan_mode || "auto";
         const topPackage = Array.isArray(deps.top_packages) && deps.top_packages.length ? deps.top_packages[0] : null;
@@ -1159,6 +1160,8 @@
           "<div><b>Supply chain findings:</b> " + escapeHtml(depsTotal) + " (mode: " + escapeHtml(depsMode) + ")</div>"
         ].concat(topPackage ? [
           "<div><b>Top vulnerable package:</b> " + escapeHtml(String(topPackage.name || "unknown")) + " (" + escapeHtml(Number(topPackage.advisory_count || 0)) + ", max severity: " + escapeHtml(String(topPackage.max_severity || "unknown")) + ")</div>"
+        ] : []).concat((Number(depSignals.malware_suspect_total || 0) || Number(depSignals.tampering_risk_total || 0)) ? [
+          "<div><b>Suspicious dependency signals:</b> malware " + escapeHtml(Number(depSignals.malware_suspect_total || 0)) + ", tampering " + escapeHtml(Number(depSignals.tampering_risk_total || 0)) + "</div>"
         ] : []).join("");
         return;
       }
@@ -1190,6 +1193,7 @@
         const sev = summary.findings_by_severity || {};
         const depSev = ((summary.dependencies || {}).findings_by_severity) || {};
         const depExploitability = Number(((summary.dependencies || {}).exploitability_score) || 0);
+        const depSignals = ((summary.dependencies || {}).signals) || {};
         const findingsTotal = Number(summary.findings_total || 0);
         const riskScore = Number(summary.risk_score || 0);
         const cards = [
@@ -1199,6 +1203,8 @@
           { label: "High", value: Number(sev.HIGH || 0) },
           { label: "Supply Chain Critical", value: Number(depSev.CRITICAL || 0) },
           { label: "Supply Chain High", value: Number(depSev.HIGH || 0) },
+          { label: "Malware Signals", value: Number(depSignals.malware_suspect_total || 0) },
+          { label: "Tampering Signals", value: Number(depSignals.tampering_risk_total || 0) },
           { label: "Supply Chain Score", value: depExploitability },
           { label: "Files Scanned", value: Number(summary.files_scanned || 0) }
         ];
@@ -1657,6 +1663,30 @@
 
     function renderMissionBoard(summary) {
       if (isRepoSummary(summary)) {
+        const depSignals = (((summary || {}).dependencies || {}).signals || {});
+        const suspiciousPackages = depSignals.top_suspicious_packages || [];
+        if (suspiciousPackages.length) {
+          missionBoardEl.innerHTML = suspiciousPackages.map(function (pkg) {
+            const malwareCount = Number(((pkg.finding_types || {}).dependency_malware_suspect) || 0);
+            const tamperingCount = Number(((pkg.finding_types || {}).dependency_tampering_risk) || 0);
+            const signalBits = [];
+            if (malwareCount) signalBits.push("malware " + malwareCount);
+            if (tamperingCount) signalBits.push("tampering " + tamperingCount);
+            return (
+              '<div class="mission-item">' +
+              '<div class="mission-top">' +
+              '<strong>' + escapeHtml(String(pkg.name || "unknown")) + '</strong>' +
+              '<span class="mission-tag">critical</span>' +
+              '</div>' +
+              '<div class="muted">Suspicious signals: ' + escapeHtml(signalBits.join(", ")) + ' | Max severity: ' + escapeHtml(String(pkg.max_severity || "HIGH")) + '</div>' +
+              '<div class="muted">Advisory IDs: ' + escapeHtml(((pkg.advisory_ids || []).slice(0, 3)).join(", ") || "unknown") + '</div>' +
+              '<div class="muted">Operator action: treat this as a supply-chain trust event, remove or pin the package, verify publisher provenance, and rerun repo mode.</div>' +
+              '</div>'
+            );
+          }).join('');
+          return;
+        }
+
         const depPackages = (((summary || {}).dependencies || {}).top_packages || []).slice(0, 5);
         if (depPackages.length) {
           missionBoardEl.innerHTML = depPackages.map(function (pkg, idx) {
