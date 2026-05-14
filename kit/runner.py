@@ -607,6 +607,35 @@ def load_conversation_attacks(path: str | None) -> list[dict]:
     return attacks
 
 
+def _parse_category_filters(raw: str | None) -> set[str]:
+    if not raw:
+        return set()
+    values: set[str] = set()
+    for chunk in str(raw).split(","):
+        value = chunk.strip().lower()
+        if value:
+            values.add(value)
+    return values
+
+
+def _filter_attacks_by_categories(attacks: list[dict], categories_raw: str | None) -> list[dict]:
+    categories = _parse_category_filters(categories_raw)
+    if not categories:
+        return [dict(attack) for attack in attacks]
+    return [
+        dict(attack)
+        for attack in attacks
+        if str(attack.get("category", "")).strip().lower() in categories
+    ]
+
+
+def _limit_attacks(attacks: list[dict], max_attacks: int | None) -> list[dict]:
+    limit = int(max_attacks or 0)
+    if limit <= 0:
+        return [dict(attack) for attack in attacks]
+    return [dict(attack) for attack in attacks[:limit]]
+
+
 def _load_runner_plugins_from_args(args: argparse.Namespace) -> list[object]:
     return load_runner_plugins(getattr(args, "plugin", []) or [])
 
@@ -678,12 +707,14 @@ def _run_attacks_with_cli_options(
 def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[object] | None = None) -> list[dict]:
     attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
     attacks.extend(load_conversation_attacks(getattr(args, "conversation_file", None)))
+    attacks = _filter_attacks_by_categories(attacks, getattr(args, "categories", None))
     expanded = expand_attack_families(
         attacks,
         objective=getattr(args, "objective", "Bypass secret exfil detection"),
         intensity=getattr(args, "attack_intensity", "medium"),
     )
-    return _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
+    expanded = _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
+    return _limit_attacks(expanded, getattr(args, "max_attacks", None))
 
 
 def run_attack(
@@ -1518,6 +1549,16 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Aletheia red team kit")
     parser.add_argument("--mode", choices=["api", "website", "agentic", "repo", "combined"], default="api", help="Run API catalog, autonomous agentic loop, website UI audit, static repository audit, or combined command-center sweep")
     parser.add_argument("--category", help="Run only one category (filename without .json)")
+    parser.add_argument(
+        "--categories",
+        help="Comma-separated category filter applied after catalog load (example: prompt_injection,exfil)",
+    )
+    parser.add_argument(
+        "--max-attacks",
+        type=int,
+        default=0,
+        help="Maximum attacks to execute after expansion and plugin transforms (0 means no cap)",
+    )
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output path for summary JSON")
     parser.add_argument("--base-url", help="Override ALETHEIA_BASE_URL")
     parser.add_argument("--target-preset", choices=["aletheia", "openai"], default="aletheia", help="Target preset for API-compatible audits")
@@ -1631,6 +1672,29 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         action="append",
         default=[],
         help="Runner plugin module, module:object, or file.py[:object]; repeatable",
+    )
+    parser.add_argument(
+        "--payload-mutation-plugin",
+        action="store_true",
+        help="Enable built-in payload-mutation plugin behavior when plugin module is loaded",
+    )
+    parser.add_argument(
+        "--payload-expand-to",
+        type=int,
+        default=0,
+        help="Target number of total attacks after payload-mutation plugin expansion (0 keeps default plugin behavior)",
+    )
+    parser.add_argument(
+        "--payload-seed-limit",
+        type=int,
+        default=80,
+        help="Maximum seed attacks used by payload-mutation plugin for dynamic generation",
+    )
+    parser.add_argument(
+        "--variants-per-seed",
+        type=int,
+        default=0,
+        help="Override payload-mutation plugin variants generated per seed (0 uses intensity defaults)",
     )
     parser.add_argument("--agentic-no-early-stop", action="store_true", help="Do not stop agentic mode after first bypass")
     args = parser.parse_args(argv)
