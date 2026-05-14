@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from engine.mutation import build_mutation_variants
+from kit.cloaking import CLOAKING_TECHNIQUES, fuzz_payload, generate_hard_negatives
 
 
 @dataclass(frozen=True)
@@ -41,10 +43,21 @@ class AgenticRunner:
             strategies=self.config.mutation_strategies,
         )
 
+    def _apply_cloaking(self, variants: list[dict]) -> list[dict]:
+        cloaked: list[dict] = []
+        for variant in variants:
+            cloaking_technique = random.choice(CLOAKING_TECHNIQUES)
+            updated = dict(variant)
+            updated["payload"] = fuzz_payload(str(variant.get("payload", "")), cloaking_technique)
+            updated["cloaking_technique"] = cloaking_technique
+            cloaked.append(updated)
+        return cloaked
+
     def run(self) -> dict:
         queue = list(self.attacks)
         blocked_payloads: list[dict] = []
         successful_payloads: list[dict] = []
+        hard_negative_payloads: list[dict] = []
         results: list[dict] = []
         iteration_summaries: list[dict] = []
         interrupted = False
@@ -72,6 +85,7 @@ class AgenticRunner:
                         "request_id": result.get("request_id"),
                         "error": result.get("error"),
                         "mutation_strategy": attack.get("mutation_strategy"),
+                        "cloaking_technique": attack.get("cloaking_technique"),
                     }
                     results.append(row)
 
@@ -83,7 +97,12 @@ class AgenticRunner:
                     if self._should_mutate(attack, result):
                         blocked_payloads.append(row)
                         blocked_this_round += 1
-                        queue.extend(self._build_requeue_variants(attack, iteration + 1))
+                        queue.extend(self._apply_cloaking(self._build_requeue_variants(attack, iteration + 1)))
+
+                fresh_hard_negatives = generate_hard_negatives(successful_payloads, blocked_payloads)
+                if fresh_hard_negatives:
+                    hard_negative_payloads.extend(fresh_hard_negatives)
+                    queue.extend(fresh_hard_negatives)
 
                 iteration_summaries.append(
                     {
@@ -91,6 +110,7 @@ class AgenticRunner:
                         "processed": len(current_batch),
                         "blocked": blocked_this_round,
                         "successful": successes_this_round,
+                        "hard_negatives": len(fresh_hard_negatives),
                         "requeued": len(queue),
                     }
                 )
@@ -107,6 +127,7 @@ class AgenticRunner:
             "initial_payloads": len(self.attacks),
             "successful_payloads": successful_payloads,
             "blocked_payloads": blocked_payloads,
+            "hard_negative_payloads": hard_negative_payloads,
             "results": results,
             "iteration_summaries": iteration_summaries,
         }
