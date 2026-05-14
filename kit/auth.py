@@ -147,7 +147,7 @@ class DashboardAuthManager:
 
         if resolved_mode == "disabled":
             warnings.append(
-                "Hosted dashboard authentication is disabled; only expose the dashboard on a trusted network or behind a reverse proxy."
+                "Hosted dashboard authentication is disabled; expose only on trusted networks behind TLS termination and a hardened reverse proxy."
             )
 
         if resolved_mode == "basic" and password_hash is None:

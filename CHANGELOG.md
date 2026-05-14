@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.0
+
+- Aligned release metadata to v1.2.0 across packaging and launch documentation.
+- Hardened hosted dashboard serving defaults to require authentication by default in `--serve` mode.
+- Added hosted request throttling (default 30 requests/minute per principal or client IP).
+- Improved dashboard safety messaging with explicit TLS and reverse-proxy recommendations.
+- Strengthened dashboard input sanitization for user-provided repo URLs and artifact path traversal handling.
+- Tightened repo clone safety for public GitHub audits with stricter URL normalization, timeout controls, and bounded clone resource limits.
+- Added stricter CLI sanitization for user-supplied JSON configuration paths (rules, auth workflows, prompt tests, threat feeds, and conversation inputs).
+- Cleaned checked-in operational artifacts from repository root and `runs/`, and moved reusable examples under `examples/`.
+- Expanded README with ethical-use requirements, production launch checklist, and external-target usage guidance.
+- Added test coverage for hosted rate limiting, default dashboard auth mode behavior, and stricter repo URL validation/clone timeout handling.
+
 ## v1.1.0
 
 - Sanitized the environment template defaults and cleaned checked-in run artifacts.

@@ -9,12 +9,18 @@ from pathlib import Path
 import tempfile
 import shutil
 import subprocess
+import os
 import re
 import tomllib
 import json
 from collections import defaultdict
 from urllib.parse import urlparse
 from typing import Any
+
+try:  # pragma: no cover - unavailable on some platforms
+    import resource
+except Exception:  # pragma: no cover - defensive
+    resource = None
 
 
 @dataclass(frozen=True)
@@ -247,6 +253,9 @@ GENERATED_ARTIFACT_GLOBS = (
     "report.md",
     "runs/**",
 )
+
+GITHUB_OWNER_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
+GITHUB_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 
 
 def is_test_file(file_path: str) -> bool:
@@ -1007,35 +1016,79 @@ def _normalize_public_github_repo_url(repo_url: str) -> str:
     host = parsed.netloc.lower()
     if host not in {"github.com", "www.github.com"}:
         raise ValueError("Only public github.com repository URLs are supported in this phase")
+    if parsed.username or parsed.password or parsed.port:
+        raise ValueError("GitHub repository URL must not include credentials or custom ports")
+    if parsed.query or parsed.fragment:
+        raise ValueError("GitHub repository URL must not include query strings or fragments")
 
     parts = [part for part in parsed.path.split("/") if part]
     if len(parts) < 2:
         raise ValueError("GitHub repository URL must include owner and repo name")
+    if len(parts) > 2:
+        raise ValueError("GitHub repository URL must point to the repository root")
 
     owner = parts[0]
     repo = parts[1]
     if repo.endswith(".git"):
         repo = repo[:-4]
+    if not GITHUB_OWNER_RE.fullmatch(owner):
+        raise ValueError("Invalid GitHub repository owner")
+    if not GITHUB_REPO_RE.fullmatch(repo):
+        raise ValueError("Invalid GitHub repository name")
     return f"https://github.com/{owner}/{repo}.git"
+
+
+def _clone_resource_limits() -> None:
+    if resource is None:
+        return
+    try:
+        resource.setrlimit(resource.RLIMIT_CPU, (120, 120))
+    except Exception:
+        pass
+    try:
+        resource.setrlimit(resource.RLIMIT_FSIZE, (200 * 1024 * 1024, 200 * 1024 * 1024))
+    except Exception:
+        pass
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
+    except Exception:
+        pass
 
 
 def _clone_public_github_repo(repo_url: str, clone_root: Path) -> Path:
     canonical_url = _normalize_public_github_repo_url(repo_url)
     clone_root.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(
-        [
-            "git",
-            "clone",
-            "--depth",
-            "1",
-            "--single-branch",
-            canonical_url,
-            str(clone_root),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    timeout_seconds = max(30, min(900, int(os.environ.get("ALETHEIA_REPO_CLONE_TIMEOUT_SEC", "180"))))
+    env = dict(os.environ)
+    env.setdefault("GIT_TERMINAL_PROMPT", "0")
+    run_kwargs: dict[str, Any] = {
+        "capture_output": True,
+        "text": True,
+        "check": False,
+        "timeout": timeout_seconds,
+        "env": env,
+    }
+    if os.name != "nt" and resource is not None:
+        run_kwargs["preexec_fn"] = _clone_resource_limits
+
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--filter=blob:none",
+                "--depth",
+                "1",
+                "--single-branch",
+                canonical_url,
+                str(clone_root),
+            ],
+            **run_kwargs,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Unable to clone public GitHub repository {canonical_url}: clone timed out after {timeout_seconds}s"
+        ) from exc
     if result.returncode != 0:
         details = (result.stderr or result.stdout or "unknown clone failure").strip()
         raise RuntimeError(f"Unable to clone public GitHub repository {canonical_url}: {details}")

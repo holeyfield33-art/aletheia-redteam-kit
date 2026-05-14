@@ -138,7 +138,7 @@ dependencies = ["httpx>=0.27"]
 def test_repo_audit_can_clone_public_github_repo(monkeypatch, tmp_path) -> None:
     created: dict[str, Path] = {}
 
-    def _fake_run(cmd, capture_output, text, check):
+    def _fake_run(cmd, **kwargs):
         clone_root = Path(cmd[-1])
         clone_root.mkdir(parents=True, exist_ok=True)
         (clone_root / "pyproject.toml").write_text(
@@ -166,6 +166,26 @@ dependencies = ["httpx>=0.27"]
 def test_normalize_public_github_repo_url_rejects_non_github() -> None:
     with pytest.raises(ValueError):
         scanner._normalize_public_github_repo_url("https://gitlab.com/example/repo")
+
+
+def test_normalize_public_github_repo_url_rejects_non_root_path() -> None:
+    with pytest.raises(ValueError):
+        scanner._normalize_public_github_repo_url("https://github.com/example/repo/tree/main")
+
+
+def test_normalize_public_github_repo_url_rejects_embedded_credentials() -> None:
+    with pytest.raises(ValueError):
+        scanner._normalize_public_github_repo_url("https://token@github.com/example/repo")
+
+
+def test_clone_public_github_repo_times_out(monkeypatch, tmp_path) -> None:
+    def _fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout", 1))
+
+    monkeypatch.setattr("engine.repo_audit.scanner.subprocess.run", _fake_run)
+
+    with pytest.raises(RuntimeError):
+        scanner._clone_public_github_repo("https://github.com/example/public-sample", tmp_path / "clone")
 
 
 def test_repo_audit_enriches_dependency_advisories_from_pip_audit(tmp_path) -> None:

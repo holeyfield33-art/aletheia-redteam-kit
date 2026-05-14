@@ -1124,10 +1124,12 @@
         const gate = ((combined.gates || {}).pass ? "PASS" : "FAIL");
         const violations = ((combined.gates || {}).violations || []).length;
         const components = Object.keys(combined.components || {}).join(", ") || "(none)";
+        const targets = Array.isArray(combined.targets) ? combined.targets.length : 0;
         metaEl.innerHTML = [
           "<div><b>Generated:</b> " + escapeHtml(generatedCombined) + "</div>",
           "<div><b>Combined Gate:</b> " + escapeHtml(gate) + " (violations: " + escapeHtml(violations) + ")</div>",
-          "<div><b>Components:</b> " + escapeHtml(components) + "</div>"
+          "<div><b>Components:</b> " + escapeHtml(components) + "</div>",
+          "<div><b>Targets:</b> " + escapeHtml(targets) + "</div>"
         ].join("");
         return;
       }

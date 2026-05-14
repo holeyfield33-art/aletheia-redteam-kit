@@ -24,5 +24,16 @@ env/
 
 # Project outputs
 summary.json
+summary_*.json
+website_summary.json
+report.md
+combined_run.log
+custom_rules.json
+threat_feed.json
+pip-audit-report.json
 runs/*
 !runs/.gitkeep
+runs/.launches/
+
+# Test fixture artifacts
+json/
