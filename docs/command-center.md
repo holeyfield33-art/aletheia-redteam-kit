@@ -8,10 +8,11 @@ Open `dashboard/index.html` in your browser.
 
 For a hosted, non-technical workflow, use the built-in server instead:
 
-  python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080
+  python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode auto
 
 Then open `http://<host>:8080/dashboard/`.
 The hosted dashboard automatically reads the latest run catalog from `/api/runs`, so the operator does not need to drag files into the page.
+When auth is enabled, browser users are redirected to `/login`, API clients can use the configured header mode, and `/api/health` remains unauthenticated for health checks.
 
 Combined artifacts (`mode = combined`) can be loaded directly and switched between API/website/repo components using the Component filter.
 
@@ -46,13 +47,47 @@ Sovereign API testing workflow:
 5. Write artifacts into `runs/` so the hosted dashboard can discover them automatically.
 6. Start the hosted dashboard server and share the browser URL with the operator.
 7. From the dashboard, paste a public GitHub repo URL into the launch field to queue a repo audit without leaving the browser.
-8. To require a password, set `ALETHEIA_DASHBOARD_USERNAME` and `ALETHEIA_DASHBOARD_PASSWORD` before launching the hosted dashboard server.
-9. Optionally attach a threat feed with `--threat-feed-file threat_feed.json` to enrich repo findings.
-10. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
-11. Triage weak categories using the Mission Priority Board.
-12. Filter to actionable rows using Command Filters and Quick Actions.
-13. Export filtered rows to hand off incidents or create follow-up attack expansions.
-14. Review API reconciliation coverage before closing transport/anomaly incidents.
+8. Preferred browser-login mode: set `ALETHEIA_DASHBOARD_USERNAME`, `ALETHEIA_DASHBOARD_PASSWORD_HASH`, and `ALETHEIA_DASHBOARD_SESSION_SECRET` before launching the hosted dashboard server.
+9. Backward-compatible browser-login mode: set `ALETHEIA_DASHBOARD_USERNAME` and `ALETHEIA_DASHBOARD_PASSWORD`; the server hashes it in memory and warns that `ALETHEIA_DASHBOARD_PASSWORD_HASH` is preferred.
+10. Optional API key mode: set `ALETHEIA_DASHBOARD_API_KEY_HASH` and launch with `--auth-mode api-key`.
+11. Optional reverse-proxy mode: set `ALETHEIA_DASHBOARD_TRUST_PROXY_AUTH=true` and forward `X-Forwarded-User` or `Authorization` headers from nginx, Caddy, or Traefik.
+12. Optionally attach a threat feed with `--threat-feed-file threat_feed.json` to enrich repo findings.
+13. Keep baseline artifacts in `runs/index.json` and load history via Auto-scan.
+14. Triage weak categories using the Mission Priority Board.
+15. Filter to actionable rows using Command Filters and Quick Actions.
+16. Export filtered rows to hand off incidents or create follow-up attack expansions.
+17. Review API reconciliation coverage before closing transport/anomaly incidents.
+
+## Secure Exposure
+
+Recommended production settings:
+
+- Use `ALETHEIA_DASHBOARD_PASSWORD_HASH` or `ALETHEIA_DASHBOARD_API_KEY_HASH` instead of plaintext secrets.
+- Set `ALETHEIA_DASHBOARD_SESSION_SECRET` to a 32-byte random value.
+- Keep `ALETHEIA_DASHBOARD_SECURE_COOKIES=true` when serving over HTTPS.
+- Leave `/api/health` unauthenticated for liveness checks; protect all other dashboard and `/api/*` routes.
+- Put the server behind TLS termination and optionally a reverse proxy that forwards `X-Forwarded-User`.
+
+Docker compose example:
+
+```yaml
+services:
+  dashboard:
+    image: python:3.12-slim
+    working_dir: /workspace
+    command: >
+      sh -lc "pip install . && python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode auto"
+    environment:
+      ALETHEIA_DASHBOARD_PASSWORD_HASH: ${ALETHEIA_DASHBOARD_PASSWORD_HASH}
+      ALETHEIA_DASHBOARD_SESSION_SECRET: ${ALETHEIA_DASHBOARD_SESSION_SECRET}
+      ALETHEIA_DASHBOARD_SECURE_COOKIES: "true"
+    volumes:
+      - .:/workspace
+    ports:
+      - "8080:8080"
+```
+
+Direct Next.js serving follows the same env vars and protects routes through `src/proxy.ts` plus route-level checks.
 
 ## Command Filters
 

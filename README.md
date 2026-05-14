@@ -97,14 +97,15 @@ Supported command-center flags:
 - `--filter` (category/decision/mismatch/technique/search)
 - `--open-dashboard`
 - `--artifact-dir` and `--dashboard-file`
-- `--serve`, `--host`, and `--port` for hosted dashboard mode
+- `--serve`, `--host`, `--port`, and `--auth-mode` for hosted dashboard mode
 - `--cli-only`
 
 Hosted operator mode:
 
 - Run a sweep once with `python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs --output summary.json`.
-- Start the hosted dashboard with `python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080`.
-- Hand the operator the browser URL `http://<host>:8080/dashboard/`.
+- Start the hosted dashboard with `python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode auto`.
+- Use `ALETHEIA_DASHBOARD_USERNAME` plus `ALETHEIA_DASHBOARD_PASSWORD_HASH` for browser login, `ALETHEIA_DASHBOARD_API_KEY_HASH` for header-based API access, or `ALETHEIA_DASHBOARD_TRUST_PROXY_AUTH=true` to trust reverse-proxy identity headers.
+- Browser login issues signed `HttpOnly` session cookies with strict same-site policy and configurable 8-24 hour lifetime.
 - The hosted dashboard auto-loads the latest run from `/api/runs`; the operator does not need to upload JSON manually.
 - Health-check endpoint: `http://<host>:8080/api/health`.
 
@@ -178,7 +179,33 @@ Audit a public GitHub repo:
 
 If you are using the hosted dashboard, paste the GitHub repo URL into the launch field and start the audit from the browser. The dashboard queues the job, writes the run into `runs/`, and refreshes from the same catalog used for combined audits.
 
-To password-protect the hosted dashboard, set `ALETHEIA_DASHBOARD_USERNAME` and `ALETHEIA_DASHBOARD_PASSWORD` before starting the server.
+How to securely expose the dashboard:
+
+- Preferred browser-login mode: set `ALETHEIA_DASHBOARD_USERNAME`, `ALETHEIA_DASHBOARD_PASSWORD_HASH`, and `ALETHEIA_DASHBOARD_SESSION_SECRET`.
+- Backward-compatible browser-login mode: set `ALETHEIA_DASHBOARD_USERNAME` and `ALETHEIA_DASHBOARD_PASSWORD`; the password is hashed in memory at startup and a warning is emitted.
+- API key mode: set `ALETHEIA_DASHBOARD_API_KEY_HASH` and optionally `ALETHEIA_DASHBOARD_API_KEY_HEADER`.
+- Reverse proxy mode: set `ALETHEIA_DASHBOARD_TRUST_PROXY_AUTH=true` and forward `X-Forwarded-User` or `Authorization` from nginx, Caddy, or Traefik.
+- If no dashboard auth env vars are set, hosted mode stays available with a clear warning and `--auth-mode auto` resolves to `disabled`.
+
+Docker / reverse-proxy example:
+
+    services:
+      dashboard:
+        image: python:3.12-slim
+        working_dir: /workspace
+        command: >
+          sh -lc "pip install . && python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode auto"
+        environment:
+          ALETHEIA_DASHBOARD_USERNAME: aletheia
+          ALETHEIA_DASHBOARD_PASSWORD_HASH: ${ALETHEIA_DASHBOARD_PASSWORD_HASH}
+          ALETHEIA_DASHBOARD_SESSION_SECRET: ${ALETHEIA_DASHBOARD_SESSION_SECRET}
+          ALETHEIA_DASHBOARD_SECURE_COOKIES: "true"
+        volumes:
+          - .:/workspace
+        ports:
+          - "8080:8080"
+
+Put the container behind TLS termination and a reverse proxy when exposing it outside a private network.
 
 Run full dependency/supply-chain scan (multi-language when tools are installed):
 

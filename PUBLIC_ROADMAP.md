@@ -15,7 +15,7 @@
 - [x] Deepen multi-turn orchestrators (Crescendo, TAP-style refinement, Skeleton-Key persistence)
 - [x] Add plugin skeleton with example attack generators and enrichers
 - [ ] Improve reconciliation reliability to consistently exceed 95%
-- [ ] Strengthen hosted dashboard authentication before release
+- [x] Strengthen hosted dashboard authentication before release
 
 **Active Features**:
 
@@ -25,8 +25,9 @@
 - Combined mode that merges all three into unified artifacts
 - Command-center CLI with subcommands: `run`, `dashboard`, `compare`, `export`, `gate`
 - Hosted dashboard server with auto-discovery (v0.3)
+- Hosted dashboard auth modes: browser login, API key, and reverse-proxy trusted headers (v0.3)
 - Normalized SQLite artifacts alongside JSON (v0.3)
-- Sovereign Next.js dashboard with selectable combined modes and adversarial API endpoint testing
+- Sovereign Next.js dashboard with selectable combined modes, adversarial API endpoint testing, and direct-serve auth fencing
 
 ## Near-term Priorities
 
@@ -81,7 +82,7 @@
 
 - **No async I/O**: Currently synchronous. Parallelization requires threading or multiprocessing.
 - **No persistent data store**: Artifacts are filesystem-based JSON/SQLite; no central database.
-- **Limited auth**: Hosted dashboard has no auth; assume trusted network environment for now.
+- **Single-user auth**: Hosted dashboard auth currently targets one operator/admin identity; viewer/operator role splits are the next extension point.
 - **Single-target per run**: Each audit run targets one mode (API+URL, repo path, website URL); combined mode runs sequential sweeps.
 
 ## How to Contribute

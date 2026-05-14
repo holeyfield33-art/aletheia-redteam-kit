@@ -273,6 +273,12 @@ def _command_center_cli(argv: list[str]) -> int:
     dashboard_parser.add_argument("--serve", action="store_true", help="Serve a hosted dashboard for non-technical users")
     dashboard_parser.add_argument("--host", default="127.0.0.1")
     dashboard_parser.add_argument("--port", type=int, default=8080)
+    dashboard_parser.add_argument(
+        "--auth-mode",
+        choices=["auto", "disabled", "basic", "api-key", "proxy"],
+        default="auto",
+        help="Hosted dashboard auth mode; auto enables auth when matching env vars are configured",
+    )
 
     compare_parser = subparsers.add_parser("compare", help="Compare current summary against baseline")
     compare_parser.add_argument("--current", required=True, help="Current summary JSON")
@@ -349,6 +355,7 @@ def _command_center_cli(argv: list[str]) -> int:
                     dashboard_file=Path(args.dashboard_file),
                     host=args.host,
                     port=args.port,
+                    auth_mode=args.auth_mode,
                 )
             )
             return PASS

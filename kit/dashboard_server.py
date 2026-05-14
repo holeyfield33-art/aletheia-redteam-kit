@@ -6,15 +6,19 @@ import mimetypes
 import os
 import subprocess
 import sys
+import logging
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from uuid import uuid4
 
 from engine.repo_audit.scanner import _normalize_public_github_repo_url
+from kit.auth import DashboardAuthManager, sanitize_next_path
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,7 @@ class DashboardServerConfig:
     dashboard_file: Path
     host: str = "127.0.0.1"
     port: int = 8080
+    auth_mode: str = "auto"
 
 
 def _load_run_index(artifact_dir: Path) -> list[dict[str, object]]:
@@ -113,14 +118,6 @@ def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> d
     }
 
 
-def _dashboard_auth_settings() -> tuple[str, str] | None:
-    password = os.environ.get("ALETHEIA_DASHBOARD_PASSWORD")
-    if not password:
-                return None
-    username = os.environ.get("ALETHEIA_DASHBOARD_USERNAME", "aletheia")
-    return username, password
-
-
 def _parse_basic_auth_header(value: str) -> tuple[str, str] | None:
     raw = str(value or "").strip()
     if not raw.lower().startswith("basic "):
@@ -142,35 +139,102 @@ def create_dashboard_handler(config: DashboardServerConfig):
     repo_root = config.repo_root.resolve()
     artifact_root = config.artifact_dir.resolve()
     dashboard_file = config.dashboard_file.resolve()
+    auth_manager = DashboardAuthManager.from_env(auth_mode=config.auth_mode, host=config.host)
+    auth_manager.log_startup_warnings()
+
+    def _render_login_page(*, next_path: str, error: str | None = None) -> bytes:
+        status = f'<p class="status">{error}</p>' if error else ""
+        return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aletheia Dashboard Login</title>
+    <style>
+      body {{ background: #0b0b0c; color: #f4f4f5; font-family: ui-sans-serif, system-ui, sans-serif; }}
+      main {{ max-width: 26rem; margin: 6rem auto; padding: 2rem; border: 1px solid #27272a; border-radius: 1rem; background: #111113; }}
+      h1 {{ margin: 0 0 0.5rem; font-size: 1.5rem; }}
+      p {{ color: #a1a1aa; }}
+      label {{ display: block; margin-top: 1rem; font-size: 0.95rem; }}
+      input {{ width: 100%; margin-top: 0.35rem; padding: 0.75rem; border-radius: 0.75rem; border: 1px solid #3f3f46; background: #09090b; color: inherit; }}
+      button {{ width: 100%; margin-top: 1.25rem; padding: 0.8rem; border: 0; border-radius: 999px; background: #15803d; color: white; font-weight: 700; cursor: pointer; }}
+      .status {{ color: #fca5a5; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Operator Login</h1>
+      <p>Authenticate to access hosted dashboard artifacts and control-plane APIs.</p>
+      {status}
+      <form method="post" action="/login">
+        <input type="hidden" name="next" value="{next_path}" />
+        <label>Username<input name="username" autocomplete="username" required /></label>
+        <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
+        <button type="submit">Sign in</button>
+      </form>
+    </main>
+  </body>
+</html>""".encode("utf-8")
 
     class DashboardHandler(SimpleHTTPRequestHandler):
         def log_message(self, format: str, *args) -> None:
             return
 
-        def _require_auth(self) -> bool:
-            settings = _dashboard_auth_settings()
-            if settings is None:
+        def _client_ip(self) -> str:
+            return str((self.client_address or ["unknown"])[0])
+
+        def _is_exempt_path(self, path: str) -> bool:
+            return path == "/api/health" or path == "/login"
+
+        def _wants_html(self) -> bool:
+            accept = str(self.headers.get("Accept", "")).lower()
+            return "text/html" in accept or accept in {"", "*/*"}
+
+        def _authorize(self, *, path: str) -> bool:
+            if self._is_exempt_path(path):
                 return True
-            expected_username, expected_password = settings
-            provided = _parse_basic_auth_header(self.headers.get("Authorization", ""))
-            if provided == (expected_username, expected_password):
+
+            outcome = auth_manager.authenticate_request(headers=self.headers, client_ip=self._client_ip())
+            if outcome.allowed:
                 return True
-            body = b"Authentication required"
-            self.send_response(HTTPStatus.UNAUTHORIZED)
-            self.send_header("WWW-Authenticate", 'Basic realm="Aletheia Dashboard"')
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+
+            if auth_manager.config.mode == "basic" and not path.startswith("/api/") and self._wants_html():
+                target = sanitize_next_path(path)
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", f"/login?next={quote(target, safe='/')}")
+                self.end_headers()
+                return False
+
+            payload = {"ok": False, "error": outcome.reason}
+            self._send_json(payload, status=outcome.status, extra_headers=self._auth_headers(outcome))
             return False
 
-        def _send_json(self, payload: object, status: int = HTTPStatus.OK) -> None:
+        def _auth_headers(self, outcome) -> dict[str, str]:
+            headers: dict[str, str] = {}
+            if outcome.challenge:
+                headers["WWW-Authenticate"] = outcome.challenge
+            if outcome.retry_after is not None:
+                headers["Retry-After"] = str(outcome.retry_after)
+            return headers
+
+        def _send_json(self, payload: object, status: int = HTTPStatus.OK, extra_headers: dict[str, str] | None = None) -> None:
             encoded = json.dumps(payload, indent=2).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(encoded)))
+            for name, value in (extra_headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(encoded)
+
+        def _send_html(self, payload: bytes, status: int = HTTPStatus.OK, extra_headers: dict[str, str] | None = None) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            for name, value in (extra_headers or {}).items():
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(payload)
 
         def _send_file(self, file_path: Path) -> None:
             if not file_path.exists() or not file_path.is_file():
@@ -192,9 +256,30 @@ def create_dashboard_handler(config: DashboardServerConfig):
             return requested
 
         def do_GET(self) -> None:
-            if not self._require_auth():
-                return
             parsed = urlparse(self.path)
+            if parsed.path == "/login":
+                if auth_manager.config.mode != "basic":
+                    self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+                    return
+                if auth_manager.authenticate_request(headers=self.headers, client_ip=self._client_ip()).allowed:
+                    self.send_response(HTTPStatus.SEE_OTHER)
+                    self.send_header("Location", sanitize_next_path(parse_qs(parsed.query).get("next", ["/dashboard/"])[0]))
+                    self.end_headers()
+                    return
+                next_path = sanitize_next_path(parse_qs(parsed.query).get("next", ["/dashboard/"])[0])
+                self._send_html(_render_login_page(next_path=next_path))
+                return
+
+            if parsed.path == "/logout":
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", "/login")
+                self.send_header("Set-Cookie", auth_manager.build_logout_cookie_header())
+                self.end_headers()
+                return
+
+            if not self._authorize(path=parsed.path):
+                return
+
             if parsed.path in {"/", "/dashboard", "/dashboard/"}:
                 self._send_file(dashboard_file)
                 return
@@ -209,6 +294,8 @@ def create_dashboard_handler(config: DashboardServerConfig):
                     {
                         "ok": True,
                         "dashboard": "/dashboard/",
+                        "auth_mode": auth_manager.config.mode,
+                        "auth_enabled": auth_manager.config.enabled,
                         "runs_total": len(entries),
                         "latest_run": entries[-1] if entries else None,
                     }
@@ -231,9 +318,42 @@ def create_dashboard_handler(config: DashboardServerConfig):
             self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
         def do_POST(self) -> None:
-            if not self._require_auth():
-                return
             parsed = urlparse(self.path)
+            if parsed.path == "/login":
+                if auth_manager.config.mode != "basic":
+                    self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+                    return
+                content_length = int(self.headers.get("Content-Length") or 0)
+                raw_body = self.rfile.read(content_length).decode("utf-8") if content_length else ""
+                form = parse_qs(raw_body, keep_blank_values=True)
+                username = str(form.get("username", [""])[0])
+                password = str(form.get("password", [""])[0])
+                next_path = sanitize_next_path(form.get("next", ["/dashboard/"])[0])
+                outcome = auth_manager.authenticate_login(
+                    username=username,
+                    password=password,
+                    client_ip=self._client_ip(),
+                )
+                if outcome.allowed and outcome.principal is not None:
+                    self.send_response(HTTPStatus.SEE_OTHER)
+                    self.send_header("Location", next_path)
+                    self.send_header("Set-Cookie", auth_manager.build_set_cookie_header(auth_manager.create_session_cookie(outcome.principal)))
+                    self.end_headers()
+                    return
+                error = "Too many attempts. Try again later." if outcome.status == HTTPStatus.TOO_MANY_REQUESTS else "Invalid username or password."
+                extra_headers = self._auth_headers(outcome)
+                self._send_html(_render_login_page(next_path=next_path, error=error), status=outcome.status, extra_headers=extra_headers)
+                return
+
+            if parsed.path == "/logout":
+                self.send_response(HTTPStatus.SEE_OTHER)
+                self.send_header("Location", "/login")
+                self.send_header("Set-Cookie", auth_manager.build_logout_cookie_header())
+                self.end_headers()
+                return
+
+            if not self._authorize(path=parsed.path):
+                return
             if parsed.path != "/api/repo-audit":
                 self.send_error(HTTPStatus.NOT_FOUND, "Not found")
                 return
@@ -268,4 +388,10 @@ def create_dashboard_handler(config: DashboardServerConfig):
 def serve_dashboard(config: DashboardServerConfig) -> None:
     handler = create_dashboard_handler(config)
     with ThreadingHTTPServer((config.host, config.port), handler) as server:
+        LOGGER.info(
+            "dashboard.server.start host=%s port=%s auth_mode=%s",
+            config.host,
+            config.port,
+            config.auth_mode,
+        )
         server.serve_forever()

@@ -1731,6 +1731,7 @@ def test_cli_dashboard_serve_dispatches_hosted_server(monkeypatch: pytest.Monkey
         captured["port"] = config.port
         captured["artifact_dir"] = config.artifact_dir
         captured["dashboard_file"] = config.dashboard_file
+        captured["auth_mode"] = config.auth_mode
 
     monkeypatch.setattr(runner, "serve_dashboard", _fake_serve)
     monkeypatch.setattr(
@@ -1747,6 +1748,8 @@ def test_cli_dashboard_serve_dispatches_hosted_server(monkeypatch: pytest.Monkey
             "0.0.0.0",
             "--port",
             "9090",
+            "--auth-mode",
+            "api-key",
         ],
     )
 
@@ -1757,3 +1760,4 @@ def test_cli_dashboard_serve_dispatches_hosted_server(monkeypatch: pytest.Monkey
     assert captured["port"] == 9090
     assert captured["artifact_dir"] == artifact_dir
     assert str(captured["dashboard_file"]) == "dashboard/index.html"
+    assert captured["auth_mode"] == "api-key"

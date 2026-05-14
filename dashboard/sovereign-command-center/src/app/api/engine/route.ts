@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { authorizeApiRouteRequest } from "@/lib/server/dashboard-auth";
 import { runSovereignAudit } from "@/lib/server/engine";
 import { AuditModeSelection, ProjectId, RuntimeMode } from "@/lib/types";
 
@@ -9,6 +10,11 @@ interface AuditRequest {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const unauthorized = authorizeApiRouteRequest(request);
+  if (unauthorized) {
+    return unauthorized;
+  }
+
   try {
     const body = (await request.json()) as AuditRequest;
     const projectId: ProjectId = body.projectId ?? "aletheia-core";

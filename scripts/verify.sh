@@ -13,9 +13,10 @@ echo "[verify] Running Python regression checks"
 cd "${ROOT_DIR}"
 "${VENV_DIR}/bin/python" -m pytest -q tests/test_runner.py tests/test_catalog.py
 
-echo "[verify] Running Sovereign dashboard lint/build"
+echo "[verify] Running Sovereign dashboard lint/test/build"
 cd "${ROOT_DIR}/dashboard/sovereign-command-center"
 npm run lint
+npm test
 npm run build
 
 echo "[verify] Environment verification passed"
