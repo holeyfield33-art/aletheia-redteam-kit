@@ -19,6 +19,7 @@ from kit.dashboard_server import (
     _parse_basic_auth_header,
     create_dashboard_handler,
 )
+from tests.test_fixtures import TEST_DASHBOARD_SESSION_SECRET, TEST_PASSWORD, TEST_USERNAME
 
 
 def test_parse_basic_auth_header_round_trips_credentials() -> None:
@@ -143,8 +144,8 @@ def _running_dashboard(tmp_path: Path, *, auth_mode: str = "auto"):
 def test_dashboard_health_endpoint_is_exempt_from_auth(tmp_path: Path) -> None:
     with _env_vars(
         {
-            "ALETHEIA_DASHBOARD_PASSWORD": "secret-pass",
-            "ALETHEIA_DASHBOARD_USERNAME": "aletheia",
+            "ALETHEIA_DASHBOARD_PASSWORD": TEST_PASSWORD,
+            "ALETHEIA_DASHBOARD_USERNAME": TEST_USERNAME,
         }
     ):
         with _running_dashboard(tmp_path, auth_mode="basic") as base_url:
@@ -157,9 +158,9 @@ def test_dashboard_health_endpoint_is_exempt_from_auth(tmp_path: Path) -> None:
 def test_dashboard_basic_login_sets_session_and_protects_routes(tmp_path: Path) -> None:
     with _env_vars(
         {
-            "ALETHEIA_DASHBOARD_PASSWORD": "secret-pass",
-            "ALETHEIA_DASHBOARD_USERNAME": "aletheia",
-            "ALETHEIA_DASHBOARD_SESSION_SECRET": "test-secret",
+            "ALETHEIA_DASHBOARD_PASSWORD": TEST_PASSWORD,
+            "ALETHEIA_DASHBOARD_USERNAME": TEST_USERNAME,
+            "ALETHEIA_DASHBOARD_SESSION_SECRET": TEST_DASHBOARD_SESSION_SECRET,
         }
     ):
         with _running_dashboard(tmp_path, auth_mode="basic") as base_url:
@@ -174,7 +175,7 @@ def test_dashboard_basic_login_sets_session_and_protects_routes(tmp_path: Path) 
 
                 login = client.post(
                     "/login",
-                    data={"username": "aletheia", "password": "secret-pass", "next": "/dashboard/"},
+                    data={"username": TEST_USERNAME, "password": TEST_PASSWORD, "next": "/dashboard/"},
                 )
                 assert login.status_code == 303
                 assert login.headers["location"] == "/dashboard/"
@@ -203,8 +204,8 @@ def test_auth_manager_locks_after_repeated_login_failures() -> None:
     manager = DashboardAuthManager(
         DashboardAuthConfig(
             mode="basic",
-            username="aletheia",
-            password_hash=bcrypt.hashpw(b"secret-pass", bcrypt.gensalt(rounds=12)),
+            username=TEST_USERNAME,
+            password_hash=bcrypt.hashpw(TEST_PASSWORD.encode("utf-8"), bcrypt.gensalt(rounds=12)),
             api_key_header="X-API-Key",
             api_key_hash=None,
             session_secret="secret",
@@ -221,9 +222,9 @@ def test_auth_manager_locks_after_repeated_login_failures() -> None:
         now_fn=lambda: current_time["value"],
     )
 
-    first = manager.authenticate_login(username="aletheia", password="wrong", client_ip="127.0.0.1")
-    second = manager.authenticate_login(username="aletheia", password="wrong", client_ip="127.0.0.1")
-    third = manager.authenticate_login(username="aletheia", password="wrong", client_ip="127.0.0.1")
+    first = manager.authenticate_login(username=TEST_USERNAME, password="wrong", client_ip="127.0.0.1")
+    second = manager.authenticate_login(username=TEST_USERNAME, password="wrong", client_ip="127.0.0.1")
+    third = manager.authenticate_login(username=TEST_USERNAME, password="wrong", client_ip="127.0.0.1")
 
     assert first.status == 401
     assert second.status == 429

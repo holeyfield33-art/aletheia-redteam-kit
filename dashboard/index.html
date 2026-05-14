@@ -3,19 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Aletheia Red Team Kit Dashboard</title>
+  <title>Sovereign Command Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --crimson: #8B1A2A;
-      --deep-crimson: #5C0F1A;
-      --silver: #A8B0B8;
-      --paper: #f4f0ed;
-      --ink: #130f10;
-      --ok: #2f8f4e;
-      --warn: #b8892f;
-      --bad: #a72c2c;
-      --panel: #201718;
-      --panel-soft: #2b2022;
+      --bg: #060608;
+      --bg-elevated: #0b0b10;
+      --panel: rgba(17, 17, 24, 0.92);
+      --panel-soft: rgba(23, 23, 33, 0.9);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --text: #f4f3f8;
+      --muted: #a5a3b4;
+      --crimson: #ef4444;
+      --deep-crimson: #7f1d1d;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --bad: #f97316;
+      --accent: #d9465f;
     }
 
     * {
@@ -24,47 +31,58 @@
 
     body {
       margin: 0;
-      font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
-      color: var(--paper);
+      font-family: "Space Grotesk", "IBM Plex Mono", system-ui, sans-serif;
+      color: var(--text);
       background:
-        radial-gradient(circle at 85% -20%, #7a1c2e 0%, transparent 45%),
-        radial-gradient(circle at 10% 120%, #3d0d15 0%, transparent 50%),
-        linear-gradient(145deg, #2f0c12 0%, var(--deep-crimson) 50%, #2a0a11 100%);
+        radial-gradient(circle at 20% 10%, rgba(217, 70, 95, 0.16), transparent 34%),
+        radial-gradient(circle at 85% 12%, rgba(245, 158, 11, 0.12), transparent 24%),
+        radial-gradient(circle at 50% 110%, rgba(34, 197, 94, 0.08), transparent 28%),
+        linear-gradient(180deg, #050507 0%, #09090d 42%, #050507 100%);
       min-height: 100vh;
     }
 
     .frame {
-      width: min(1200px, 95vw);
-      margin: 1.25rem auto 2rem;
+      width: min(1480px, calc(100vw - 2rem));
+      margin: 1rem auto 2rem;
     }
 
     .header {
-      border: 1px solid color-mix(in srgb, var(--silver) 60%, transparent);
-      background: linear-gradient(95deg, #3f0e17, #6d1422 55%, #410e18);
-      border-radius: 16px;
-      padding: 1rem;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--border);
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 38%),
+        linear-gradient(95deg, rgba(127, 29, 29, 0.42), rgba(17, 17, 24, 0.96) 45%, rgba(15, 15, 23, 0.98));
+      border-radius: 22px;
+      padding: 1.1rem 1.2rem;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
       margin-bottom: 1rem;
     }
 
     .title {
       margin: 0;
-      font-size: clamp(1.4rem, 3.6vw, 2rem);
-      font-family: "Playfair Display", Georgia, "Times New Roman", serif;
-      letter-spacing: 0.02em;
-      color: #fff4f1;
+      font-size: clamp(1.6rem, 3.8vw, 2.7rem);
+      font-family: "Space Grotesk", sans-serif;
+      letter-spacing: -0.03em;
+      color: #fff;
+    }
+
+    .subtitle {
+      max-width: 72ch;
+      margin-top: 0.45rem;
+      color: var(--muted);
+      font-size: 0.98rem;
+      line-height: 1.5;
     }
 
     .meta {
       display: grid;
       gap: 0.35rem;
       margin-top: 0.6rem;
-      color: var(--silver);
+      color: var(--muted);
       font-size: 0.9rem;
     }
 
     .meta b {
-      color: #efe6e8;
+      color: #fff;
       font-weight: 600;
     }
 
@@ -87,8 +105,8 @@
     }
 
     .clickable:hover {
-      border-color: #8f6a70;
-      background: #231718;
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.03);
     }
 
     .run-list {
@@ -97,31 +115,31 @@
     }
 
     .run-item {
-      border: 1px solid #4a373b;
+      border: 1px solid var(--border);
       border-radius: 10px;
-      background: #181112;
+      background: rgba(10, 10, 14, 0.96);
       padding: 0.45rem 0.55rem;
       font-size: 0.8rem;
       cursor: pointer;
     }
 
     .run-item:hover {
-      background: #241719;
+      background: rgba(255, 255, 255, 0.03);
     }
 
     .drop-zone {
-      border: 1px dashed color-mix(in srgb, var(--silver) 70%, transparent);
+      border: 1px dashed rgba(255, 255, 255, 0.18);
       border-radius: 14px;
-      background: rgba(20, 14, 15, 0.45);
+      background: rgba(255, 255, 255, 0.02);
       padding: 0.9rem;
-      color: var(--silver);
+      color: var(--muted);
       text-align: center;
       transition: border-color 0.2s ease, background 0.2s ease;
     }
 
     .drop-zone.drag {
-      border-color: #f3d8dd;
-      background: rgba(255, 255, 255, 0.09);
+      border-color: rgba(239, 68, 68, 0.8);
+      background: rgba(239, 68, 68, 0.08);
       color: #fff;
     }
 
@@ -133,9 +151,9 @@
 
     button,
     input[type="file"]::file-selector-button {
-      border: 1px solid color-mix(in srgb, var(--silver) 70%, transparent);
-      background: #3a2024;
-      color: #f2e8ea;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+      color: #fff;
       border-radius: 10px;
       padding: 0.5rem 0.8rem;
       cursor: pointer;
@@ -144,13 +162,13 @@
 
     button:hover,
     input[type="file"]::file-selector-button:hover {
-      background: #4e282d;
+      background: linear-gradient(180deg, rgba(239, 68, 68, 0.16), rgba(255, 255, 255, 0.04));
     }
 
     .button-row input[type="text"] {
-      border: 1px solid color-mix(in srgb, var(--silver) 70%, transparent);
-      background: #150f10;
-      color: #efe6e8;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(7, 7, 11, 0.92);
+      color: #fff;
       border-radius: 10px;
       padding: 0.5rem 0.8rem;
       font: inherit;
@@ -166,14 +184,14 @@
     }
 
     .card {
-      border: 1px solid color-mix(in srgb, var(--silver) 55%, transparent);
+      border: 1px solid var(--border);
       border-radius: 14px;
-      background: linear-gradient(180deg, rgba(36, 24, 25, 0.9), rgba(23, 16, 17, 0.9));
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
       padding: 0.8rem;
     }
 
     .card-label {
-      color: var(--silver);
+      color: var(--muted);
       font-size: 0.76rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -181,18 +199,19 @@
 
     .card-value {
       margin-top: 0.25rem;
-      font-family: "Playfair Display", Georgia, serif;
+      font-family: "Space Grotesk", sans-serif;
       font-size: 1.6rem;
       color: #fff;
       line-height: 1.1;
     }
 
     .bars {
-      border: 1px solid color-mix(in srgb, var(--silver) 50%, transparent);
+      border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 0.85rem;
-      background: rgba(19, 14, 15, 0.85);
+      padding: 0.9rem;
+      background: var(--panel);
       margin-bottom: 1rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
     }
 
     .bars h2,
@@ -200,8 +219,8 @@
     .detail h2 {
       margin: 0 0 0.7rem;
       font-size: 1rem;
-      color: #fff0f4;
-      font-family: "Playfair Display", Georgia, serif;
+      color: #fff;
+      font-family: "Space Grotesk", sans-serif;
       letter-spacing: 0.03em;
     }
 
@@ -218,9 +237,9 @@
       width: 100%;
       height: 12px;
       border-radius: 999px;
-      background: #352527;
+      background: rgba(255, 255, 255, 0.08);
       overflow: hidden;
-      border: 1px solid #4f3b3e;
+      border: 1px solid rgba(255, 255, 255, 0.08);
     }
 
     .bar-fill {
@@ -230,18 +249,18 @@
     }
 
     .table-wrap {
-      border: 1px solid color-mix(in srgb, var(--silver) 45%, transparent);
+      border: 1px solid var(--border);
       border-radius: 14px;
-      background: rgba(15, 11, 11, 0.9);
+      background: var(--panel);
       padding: 0.75rem;
     }
 
     .scroll {
       overflow: auto;
       max-height: 420px;
-      border: 1px solid #453336;
+      border: 1px solid var(--border);
       border-radius: 10px;
-      background: #150f10;
+      background: rgba(7, 7, 11, 0.95);
     }
 
     table {
@@ -255,7 +274,7 @@
     td {
       padding: 0.52rem;
       text-align: left;
-      border-bottom: 1px solid #352729;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       white-space: nowrap;
       vertical-align: top;
     }
@@ -263,9 +282,9 @@
     thead th {
       position: sticky;
       top: 0;
-      background: #231819;
+      background: #0e0e14;
       z-index: 1;
-      color: #e5d3d6;
+      color: #e8e6ef;
       font-size: 0.75rem;
       letter-spacing: 0.06em;
       text-transform: uppercase;
@@ -276,7 +295,7 @@
     }
 
     tbody tr:hover {
-      background: #241a1b;
+      background: rgba(255, 255, 255, 0.03);
     }
 
     .match {
@@ -290,9 +309,9 @@
     }
 
     .detail {
-      border: 1px solid color-mix(in srgb, var(--silver) 55%, transparent);
+      border: 1px solid var(--border);
       border-radius: 14px;
-      background: rgba(18, 13, 14, 0.92);
+      background: var(--panel);
       padding: 0.8rem;
       margin-top: 1rem;
     }
@@ -306,11 +325,11 @@
 
     pre {
       margin: 0;
-      background: #100c0d;
-      border: 1px solid #423135;
+      background: rgba(5, 5, 8, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 10px;
       padding: 0.8rem;
-      color: #e0d4d7;
+      color: #eceaf2;
       overflow: auto;
       max-height: 300px;
       white-space: pre-wrap;
@@ -318,13 +337,13 @@
     }
 
     .muted {
-      color: var(--silver);
+      color: var(--muted);
       font-size: 0.84rem;
     }
 
     .status {
       margin-top: 0.55rem;
-      color: #f1d2d7;
+      color: #f1d5da;
       font-size: 0.85rem;
       min-height: 1.2rem;
     }
@@ -520,131 +539,132 @@
 <body>
   <div class="frame">
     <div class="header">
-      <h1 class="title">Aletheia Adversarial Command Center</h1>
+      <h1 class="title">Sovereign Command Center</h1>
+      <div class="subtitle">A premium operator view for run history, attack visibility, and the most important defense weak spots. Load a summary, review results, and move from signal to action without deciphering raw artifacts.</div>
       <div class="meta" id="meta"></div>
     </div>
 
     <div class="dashboard-grid">
     <div class="controls">
-      <div class="drop-zone" id="dropZone">Drop an API, website, or repo summary JSON here, or use Auto-scan ./runs for API history.</div>
+      <div class="drop-zone" id="dropZone">Drop a run summary JSON here, or auto-scan <strong>./runs</strong> to refresh the latest history.</div>
       <div class="button-row">
         <input id="fileInput" type="file" accept="application/json,.json">
-        <button id="loadDefaultBtn" type="button">Load ./summary.json</button>
-        <button id="loadWebsiteBtn" type="button">Load ./website_summary.json</button>
-        <button id="autoScanBtn" type="button">Auto-scan ./runs History</button>
+        <button id="loadDefaultBtn" type="button">Load current summary</button>
+        <button id="loadWebsiteBtn" type="button">Load web summary</button>
+        <button id="autoScanBtn" type="button">Refresh run history</button>
         <input id="repoUrlInput" type="text" placeholder="Public GitHub repo URL or owner/repo">
-        <button id="launchRepoBtn" type="button">Launch Repo Audit</button>
-        <button id="refreshRunsBtn" type="button">Refresh Run Catalog</button>
-        <button id="verifyAllBtn" type="button">Verify All Signatures</button>
+        <button id="launchRepoBtn" type="button">Launch repository audit</button>
+        <button id="refreshRunsBtn" type="button">Refresh catalog</button>
+        <button id="verifyAllBtn" type="button">Verify all receipts</button>
       </div>
     </div>
 
     <div class="bars" id="runScopePane">
-      <h2>Scopes & Runs</h2>
+      <h2>Recent Runs</h2>
       <div class="run-list" id="runList"></div>
     </div>
 
     <div class="bars" id="filtersPane">
-      <h2>Command Filters</h2>
+      <h2>Findings Filters</h2>
       <div class="command-controls">
         <label>
-          Component
+          Surface
           <select id="componentFilter">
-            <option value="auto">auto</option>
-            <option value="api">api</option>
-            <option value="website">website</option>
-            <option value="repo">repo</option>
+            <option value="auto">All surfaces</option>
+            <option value="api">Attack API</option>
+            <option value="website">Website</option>
+            <option value="repo">Repository</option>
           </select>
         </label>
         <label>
           Category
           <select id="categoryFilter">
-            <option value="all">all</option>
+            <option value="all">All categories</option>
           </select>
         </label>
         <label>
           Decision
           <select id="decisionFilter">
-            <option value="all">all</option>
+            <option value="all">All decisions</option>
             <option value="DENIED">DENIED</option>
             <option value="PROCEED">PROCEED</option>
-            <option value="UNKNOWN">UNKNOWN</option>
-            <option value="ERROR">ERROR</option>
+            <option value="UNKNOWN">Unverified</option>
+            <option value="ERROR">Failed</option>
           </select>
         </label>
         <label>
           Search
-          <input id="searchBox" type="text" placeholder="id, name, payload term">
+          <input id="searchBox" type="text" placeholder="Search id, name, or evidence">
         </label>
         <label>
           Technique
           <select id="techniqueFilter">
-            <option value="all">all</option>
+            <option value="all">All techniques</option>
           </select>
         </label>
         <label class="toggle-row">
           <input id="mismatchOnly" type="checkbox">
-          <span>Mismatches only</span>
+          <span>Only mismatches</span>
         </label>
-        <button id="resetFiltersBtn" type="button">Reset Filters</button>
+        <button id="resetFiltersBtn" type="button">Reset filters</button>
       </div>
       <div class="quick-actions">
-        <button id="focusWeakBtn" type="button">Focus Weakest Category</button>
-        <button id="showAnomalyBtn" type="button">Show Empty-200 Anomalies</button>
-        <button id="exportFilteredBtn" type="button">Export Filtered JSON</button>
-        <button id="repoHotBtn" type="button">Show Repo Critical+High</button>
-        <button id="exportRepoHotBtn" type="button">Export Repo Hotspots</button>
+        <button id="focusWeakBtn" type="button">Highlight weak spots</button>
+        <button id="showAnomalyBtn" type="button">Show unverified 200s</button>
+        <button id="exportFilteredBtn" type="button">Export filtered JSON</button>
+        <button id="repoHotBtn" type="button">Show critical + high</button>
+        <button id="exportRepoHotBtn" type="button">Export weak spots</button>
       </div>
     </div>
 
     <div class="stats" id="stats"></div>
 
     <div class="bars" id="summaryBars">
-      <h2 id="barsTitle">Per-Category Blocking Ratio</h2>
+      <h2 id="barsTitle">Attack Visibility by Category</h2>
       <div id="bars"></div>
     </div>
 
     <div class="bars" id="trendPane">
-      <h2>Regression Trend (API)</h2>
+      <h2>Attack Visibility Trend</h2>
       <div id="trend"></div>
     </div>
 
     <div class="bars" id="regressionPane">
-      <h2>API Regression (High-Risk)</h2>
+      <h2>Defense Regressions</h2>
       <div id="regressionApi"></div>
       <div class="command-controls" style="margin-top:0.6rem;">
         <label>
-          Baseline Run
+          Baseline run
           <select id="baselineRunFilter">
-            <option value="">none</option>
+            <option value="">None</option>
           </select>
         </label>
-        <button id="useSelectedAsBaselineBtn" type="button">Use Selected Run as Baseline</button>
+        <button id="useSelectedAsBaselineBtn" type="button">Use selected run as baseline</button>
       </div>
     </div>
 
     <div class="bars" id="heatmapPane">
-      <h2>Run-to-Run Regression Heatmap</h2>
+      <h2>Cross-run matrix</h2>
       <div id="heatmap"></div>
     </div>
 
     <div class="bars" id="mutationPane">
-      <h2>Mutation Strategy Analytics</h2>
+      <h2>Mutation quality</h2>
       <div id="mutationAnalytics"></div>
     </div>
 
     <div class="bars" id="missionPane">
-      <h2>Mission Priority Board</h2>
+      <h2>Top weak spots</h2>
       <div id="missionBoard"></div>
     </div>
 
     <div class="bars" id="gapPane">
-      <h2>Technique Gap Analysis</h2>
+      <h2>Defense weak spots</h2>
       <div id="gapBars"></div>
     </div>
 
     <div class="table-wrap" id="opsTable">
-      <h2 id="tableTitle">Results Table</h2>
+      <h2 id="tableTitle">Findings</h2>
       <div class="scroll">
         <table>
           <thead>
@@ -657,17 +677,17 @@
     </div>
 
     <div class="detail" id="detail">
-      <h2>Result Detail</h2>
-      <p class="muted">Click any row to inspect the full JSON payload.</p>
-      <div class="muted" id="detailMeta">No selection context.</div>
+      <h2>Run Detail</h2>
+      <p class="muted">Select any finding to inspect the receipt, diff, and recommendation.</p>
+      <div class="muted" id="detailMeta">No run selected.</div>
       <div class="detail-top">
-        <button id="copyReceiptBtn" type="button" disabled>Copy Receipt JSON</button>
-        <button id="verifyBtn" type="button" disabled>Verify Signature</button>
+        <button id="copyReceiptBtn" type="button" disabled>Copy receipt JSON</button>
+        <button id="verifyBtn" type="button" disabled>Verify signature</button>
       </div>
       <pre id="receiptView">No selection.</pre>
-      <h2 style="margin-top:0.9rem;">Inline Regression Diff</h2>
+      <h2 style="margin-top:0.9rem;">Inline regression diff</h2>
       <pre id="regressionDiffView">No baseline selected.</pre>
-      <textarea id="remediationNotes" class="remediation-notes" placeholder="Remediation notes and operator comments..."></textarea>
+      <textarea id="remediationNotes" class="remediation-notes" placeholder="Operator notes and next steps..."></textarea>
       <div class="status" id="verifyStatus"></div>
     </div>
     </div>

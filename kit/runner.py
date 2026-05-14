@@ -34,7 +34,7 @@ from uuid import uuid4
 
 import httpx
 
-from engine.gap_analysis import build_gap_report
+from engine.gap_analysis import build_category_gap_report, build_gap_report
 from engine.mutation import expand_attack_families
 from engine.repo_audit import run_repo_audit
 from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
@@ -48,11 +48,13 @@ from kit.command_center import (
     write_command_center_sqlite,
 )
 from kit.dashboard_server import DashboardServerConfig, serve_dashboard
+from kit.external_corpus import load_external_corpus_attacks
 from kit.api_analysis import build_api_regression_summary, extract_multi_turn_steps
 from kit.catalog import load_attacks as load_attacks_from_catalog
 from kit.client import AletheiaClient, TargetProfile, load_target_profile
 from kit.exit_codes import FAIL_ERROR, FAIL_THRESHOLD, PASS
 from kit.plugins import load_runner_plugins, plugin_name
+from kit.payload_quality import dedupe_attacks_semantic, limit_attacks_with_benign_ratio
 from kit.web_audit import WebAuditConfig, run_website_audit
 from kit.web_audit.config import AuthBypassTarget, AuthStep, CustomFindingRule, PromptInjectionTest
 
@@ -607,6 +609,58 @@ def load_conversation_attacks(path: str | None) -> list[dict]:
     return attacks
 
 
+def _parse_category_filters(raw: str | None) -> set[str]:
+    if not raw:
+        return set()
+    values: set[str] = set()
+    for chunk in str(raw).split(","):
+        value = chunk.strip().lower()
+        if value:
+            values.add(value)
+    return values
+
+
+def _filter_attacks_by_categories(attacks: list[dict], categories_raw: str | None) -> list[dict]:
+    categories = _parse_category_filters(categories_raw)
+    if not categories:
+        return [dict(attack) for attack in attacks]
+    return [
+        dict(attack)
+        for attack in attacks
+        if str(attack.get("category", "")).strip().lower() in categories
+    ]
+
+
+def _limit_attacks(attacks: list[dict], max_attacks: int | None) -> list[dict]:
+    limit = int(max_attacks or 0)
+    if limit <= 0:
+        return [dict(attack) for attack in attacks]
+    return [dict(attack) for attack in attacks[:limit]]
+
+
+def _count_by_key(rows: list[dict], key: str, fallback: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(key, fallback) or fallback).strip() or fallback
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _benign_ratio(rows: list[dict]) -> float:
+    if not rows:
+        return 0.0
+    benign_total = sum(
+        1
+        for row in rows
+        if str(row.get("category", "")).strip().lower() == "benign_controls"
+    )
+    return round(float(benign_total) / float(len(rows)), 4)
+
+
+def _record_corpus_diagnostics(args: argparse.Namespace, diagnostics: dict) -> None:
+    setattr(args, "_payload_corpus_diagnostics", diagnostics)
+
+
 def _load_runner_plugins_from_args(args: argparse.Namespace) -> list[object]:
     return load_runner_plugins(getattr(args, "plugin", []) or [])
 
@@ -676,14 +730,54 @@ def _run_attacks_with_cli_options(
 
 
 def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[object] | None = None) -> list[dict]:
-    attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
-    attacks.extend(load_conversation_attacks(getattr(args, "conversation_file", None)))
+    catalog_attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
+    external_attacks = load_external_corpus_attacks(
+        getattr(args, "external_corpus_file", []) or [],
+        default_category=getattr(args, "external_corpus_category", "prompt_injection"),
+    )
+    conversation_attacks = load_conversation_attacks(getattr(args, "conversation_file", None))
+
+    attacks = [*catalog_attacks, *external_attacks, *conversation_attacks]
+    filtered = _filter_attacks_by_categories(attacks, getattr(args, "categories", None))
     expanded = expand_attack_families(
-        attacks,
+        filtered,
         objective=getattr(args, "objective", "Bypass secret exfil detection"),
         intensity=getattr(args, "attack_intensity", "medium"),
     )
-    return _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
+    plugin_expanded = _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
+    deduped = dedupe_attacks_semantic(
+        plugin_expanded,
+        threshold=float(getattr(args, "dedupe_semantic_threshold", 0.92) or 0.92),
+    )
+    limited = limit_attacks_with_benign_ratio(
+        deduped,
+        max_attacks=int(getattr(args, "max_attacks", 0) or 0),
+        benign_ratio=float(getattr(args, "benign_ratio", 0.2) or 0.2),
+    )
+    final_attacks = _limit_attacks(limited, getattr(args, "max_attacks", None))
+
+    diagnostics = {
+        "catalog_loaded": len(catalog_attacks),
+        "external_loaded": len(external_attacks),
+        "conversation_loaded": len(conversation_attacks),
+        "pre_filter_total": len(attacks),
+        "post_category_filter": len(filtered),
+        "expanded_total": len(expanded),
+        "post_plugin_total": len(plugin_expanded),
+        "post_dedupe_total": len(deduped),
+        "final_total": len(final_attacks),
+        "max_attacks": int(getattr(args, "max_attacks", 0) or 0),
+        "benign_ratio_target": float(getattr(args, "benign_ratio", 0.2) or 0.2),
+        "benign_ratio_achieved": _benign_ratio(final_attacks),
+        "dropped_by_category_filter": max(0, len(attacks) - len(filtered)),
+        "dropped_by_dedupe": max(0, len(plugin_expanded) - len(deduped)),
+        "dropped_by_cap": max(0, len(deduped) - len(final_attacks)),
+        "source_mix": _count_by_key(final_attacks, "source", "catalog"),
+        "category_mix": _count_by_key(final_attacks, "category", "unknown"),
+        "adapter_mix": _count_by_key(final_attacks, "source_adapter", "none"),
+    }
+    _record_corpus_diagnostics(args, diagnostics)
+    return final_attacks
 
 
 def run_attack(
@@ -716,6 +810,12 @@ def run_attack(
                 "category": attack["category"],
                 "technique": technique,
                 "severity": attack.get("severity", "MEDIUM"),
+                "variant_kind": attack.get("variant_kind", "seed"),
+                "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+                "target_surface": attack.get("target_surface", "prompt_interface"),
+                "mutation_strategy": attack.get("mutation_strategy"),
+                "family_id": attack.get("family_id"),
+                "source": attack.get("source"),
                 "expected_decision": attack["expected_decision"],
                 "actual_decision": result.decision,
                 "match": result.decision == attack["expected_decision"],
@@ -747,6 +847,12 @@ def run_attack(
                 "category": attack["category"],
                 "technique": technique,
                 "severity": attack.get("severity", "MEDIUM"),
+                "variant_kind": attack.get("variant_kind", "seed"),
+                "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+                "target_surface": attack.get("target_surface", "prompt_interface"),
+                "mutation_strategy": attack.get("mutation_strategy"),
+                "family_id": attack.get("family_id"),
+                "source": attack.get("source"),
                 "expected_decision": attack["expected_decision"],
                 "actual_decision": "ERROR",
                 "match": False,
@@ -767,6 +873,12 @@ def run_attack(
                 "category": attack["category"],
                 "technique": technique,
                 "severity": attack.get("severity", "MEDIUM"),
+                "variant_kind": attack.get("variant_kind", "seed"),
+                "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+                "target_surface": attack.get("target_surface", "prompt_interface"),
+                "mutation_strategy": attack.get("mutation_strategy"),
+                "family_id": attack.get("family_id"),
+                "source": attack.get("source"),
                 "expected_decision": attack["expected_decision"],
                 "actual_decision": "ERROR",
                 "match": False,
@@ -847,6 +959,12 @@ def run_multi_turn_attack(client: AletheiaClient, attack: dict) -> dict:
             "category": attack["category"],
             "technique": technique,
             "severity": attack.get("severity", "MEDIUM"),
+            "variant_kind": attack.get("variant_kind", "seed"),
+            "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+            "target_surface": attack.get("target_surface", "conversation"),
+            "mutation_strategy": attack.get("mutation_strategy"),
+            "family_id": attack.get("family_id"),
+            "source": attack.get("source"),
             "expected_decision": attack["expected_decision"],
             "actual_decision": last.decision,
             "match": last.decision == attack["expected_decision"],
@@ -865,6 +983,12 @@ def run_multi_turn_attack(client: AletheiaClient, attack: dict) -> dict:
             "category": attack["category"],
             "technique": technique,
             "severity": attack.get("severity", "MEDIUM"),
+            "variant_kind": attack.get("variant_kind", "seed"),
+            "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+            "target_surface": attack.get("target_surface", "conversation"),
+            "mutation_strategy": attack.get("mutation_strategy"),
+            "family_id": attack.get("family_id"),
+            "source": attack.get("source"),
             "expected_decision": attack["expected_decision"],
             "actual_decision": "ERROR",
             "match": False,
@@ -912,6 +1036,17 @@ def summarize(results: list[dict]) -> dict:
         elif r["actual_decision"] == "UNKNOWN":
             by_cat[category]["unknown"] += 1
 
+    tier_counts: dict[str, int] = {"baseline": 0, "elevated": 0, "advanced": 0, "unknown": 0}
+    for r in results:
+        tier = str(r.get("effectiveness_tier") or "baseline").strip().lower()
+        if tier not in tier_counts:
+            tier = "unknown"
+        tier_counts[tier] += 1
+    tier_rates = {
+        key: (round(100 * value / total, 1) if total else 0.0)
+        for key, value in tier_counts.items()
+    }
+
     benign = by_cat.get("benign_controls", {"total": 0, "blocked": 0, "proceeded": 0})
     benign_total = benign["total"]
     benign_blocked = benign["blocked"]
@@ -929,6 +1064,10 @@ def summarize(results: list[dict]) -> dict:
         "empty_200_anomalies": empty_200_anomalies,
         "block_rate": round(100 * blocked / total, 1) if total else 0.0,
         "categories": by_cat,
+        "effectiveness_tiers": {
+            "counts": tier_counts,
+            "rates": tier_rates,
+        },
         "trial_mode_suspected": trial_mode_suspected,
         "trial_mode_reason": (
             "All benign_controls payloads were denied; this can indicate trial-tier blanket blocking"
@@ -1518,6 +1657,28 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Aletheia red team kit")
     parser.add_argument("--mode", choices=["api", "website", "agentic", "repo", "combined"], default="api", help="Run API catalog, autonomous agentic loop, website UI audit, static repository audit, or combined command-center sweep")
     parser.add_argument("--category", help="Run only one category (filename without .json)")
+    parser.add_argument(
+        "--categories",
+        help="Comma-separated category filter applied after catalog load (example: prompt_injection,exfil)",
+    )
+    parser.add_argument(
+        "--max-attacks",
+        type=int,
+        default=0,
+        help="Maximum attacks to execute after expansion and plugin transforms (0 means no cap)",
+    )
+    parser.add_argument(
+        "--dedupe-semantic-threshold",
+        type=float,
+        default=0.92,
+        help="Semantic dedupe threshold (0 disables semantic dedupe, 1 requires exact token overlap)",
+    )
+    parser.add_argument(
+        "--benign-ratio",
+        type=float,
+        default=0.2,
+        help="Target benign_controls ratio when max-attacks is set (0.2 means ~20 percent)",
+    )
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output path for summary JSON")
     parser.add_argument("--base-url", help="Override ALETHEIA_BASE_URL")
     parser.add_argument("--target-preset", choices=["aletheia", "openai"], default="aletheia", help="Target preset for API-compatible audits")
@@ -1632,6 +1793,44 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         default=[],
         help="Runner plugin module, module:object, or file.py[:object]; repeatable",
     )
+    parser.add_argument(
+        "--payload-mutation-plugin",
+        action="store_true",
+        help="Enable built-in payload-mutation plugin behavior when plugin module is loaded",
+    )
+    parser.add_argument(
+        "--payload-expand-to",
+        type=int,
+        default=0,
+        help="Target number of total attacks after payload-mutation plugin expansion (0 keeps default plugin behavior)",
+    )
+    parser.add_argument(
+        "--payload-seed-limit",
+        type=int,
+        default=80,
+        help="Maximum seed attacks used by payload-mutation plugin for dynamic generation",
+    )
+    parser.add_argument(
+        "--payload-family-file",
+        help="Optional JSON file of additional seed payload families consumed by payload-mutation plugin",
+    )
+    parser.add_argument(
+        "--external-corpus-file",
+        action="append",
+        default=[],
+        help="Optional external payload corpus JSON file; repeatable",
+    )
+    parser.add_argument(
+        "--external-corpus-category",
+        default="prompt_injection",
+        help="Default category for external corpus entries without explicit category",
+    )
+    parser.add_argument(
+        "--variants-per-seed",
+        type=int,
+        default=0,
+        help="Override payload-mutation plugin variants generated per seed (0 uses intensity defaults)",
+    )
     parser.add_argument("--agentic-no-early-stop", action="store_true", help="Do not stop agentic mode after first bypass")
     args = parser.parse_args(argv)
     plugins = _load_runner_plugins_from_args(args)
@@ -1669,9 +1868,11 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
                 "mode": "api",
                 "engine_url": client.base_url,
                 **api_summary,
+                "corpus_diagnostics": getattr(args, "_payload_corpus_diagnostics", {}),
                 "reconciliation": reconciliation,
                 "regression": api_regression,
                 "gap_report": build_gap_report(results),
+                "category_gap_report": build_category_gap_report(results),
                 "results": results,
             }
             api_component = _finalize_summary_with_plugins(api_component, results, args, plugins)
@@ -1738,8 +1939,9 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         # Repo component
         repo_summary = _run_repo_audit_with_cli_options(args)
         repo_gates = repo_summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
-        critical = int((repo_summary.get("findings_by_severity") or {}).get("CRITICAL", 0))
-        high = int((repo_summary.get("findings_by_severity") or {}).get("HIGH", 0))
+        gate_scope = (repo_summary.get("first_party_non_test_by_severity") or repo_summary.get("findings_by_severity") or {})
+        critical = int(gate_scope.get("CRITICAL", 0))
+        high = int(gate_scope.get("HIGH", 0))
         if critical > args.max_repo_critical:
             repo_gates["pass"] = False
             repo_gates.setdefault("violations", []).append("critical_repo_findings_over_limit")
@@ -1880,8 +2082,9 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         summary = _run_repo_audit_with_cli_options(args)
         gates = summary.get("gates", {"pass": False, "violations": ["missing_gates"]})
 
-        critical = int((summary.get("findings_by_severity") or {}).get("CRITICAL", 0))
-        high = int((summary.get("findings_by_severity") or {}).get("HIGH", 0))
+        gate_scope = (summary.get("first_party_non_test_by_severity") or summary.get("findings_by_severity") or {})
+        critical = int(gate_scope.get("CRITICAL", 0))
+        high = int(gate_scope.get("HIGH", 0))
         dependency_severity = ((summary.get("dependencies") or {}).get("findings_by_severity") or {})
         deps_critical = int(dependency_severity.get("CRITICAL", 0))
         deps_high = int(dependency_severity.get("HIGH", 0))
@@ -1950,9 +2153,11 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "engine_url": client.base_url,
         **summary,
+        "corpus_diagnostics": getattr(args, "_payload_corpus_diagnostics", {}),
         "reconciliation": reconciliation,
         "regression": api_regression,
         "gap_report": build_gap_report(results),
+        "category_gap_report": build_category_gap_report(results),
         "results": results,
     }
     output = _finalize_summary_with_plugins(output, results, args, plugins)

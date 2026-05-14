@@ -10,6 +10,10 @@ import {
   resolveDashboardAuthConfig,
 } from "./dashboard-auth";
 
+const TEST_USERNAME = "aletheia";
+const TEST_PASSWORD = "secret-pass"; // nosec aletheia-redteam:allowed-test-fixture
+const TEST_SESSION_SECRET = "session-secret"; // nosec aletheia-redteam:allowed-test-fixture
+
 function withEnv(values: Record<string, string | undefined>, run: () => Promise<void> | void): Promise<void> | void {
   const previous = new Map<string, string | undefined>();
   for (const [key, value] of Object.entries(values)) {
@@ -48,14 +52,14 @@ function withEnv(values: Record<string, string | undefined>, run: () => Promise<
 test("resolveDashboardAuthConfig auto-detects basic auth from env", () =>
   withEnv(
     {
-      ALETHEIA_DASHBOARD_PASSWORD: "secret-pass",
-      ALETHEIA_DASHBOARD_USERNAME: "aletheia",
+      ALETHEIA_DASHBOARD_PASSWORD: TEST_PASSWORD,
+      ALETHEIA_DASHBOARD_USERNAME: TEST_USERNAME,
       ALETHEIA_DASHBOARD_AUTH_MODE: undefined,
     },
     () => {
       const config = resolveDashboardAuthConfig();
       assert.equal(config.mode, "basic");
-      assert.equal(config.username, "aletheia");
+      assert.equal(config.username, TEST_USERNAME);
       assert.ok(config.passwordHash);
     },
   ));
@@ -63,12 +67,12 @@ test("resolveDashboardAuthConfig auto-detects basic auth from env", () =>
 test("authorizeDashboardRequest accepts valid session cookies", () =>
   withEnv(
     {
-      ALETHEIA_DASHBOARD_PASSWORD: "secret-pass",
-      ALETHEIA_DASHBOARD_SESSION_SECRET: "session-secret",
+      ALETHEIA_DASHBOARD_PASSWORD: TEST_PASSWORD,
+      ALETHEIA_DASHBOARD_SESSION_SECRET: TEST_SESSION_SECRET,
     },
     () => {
       const config = resolveDashboardAuthConfig();
-      const token = createSessionToken("aletheia", config);
+      const token = createSessionToken(TEST_USERNAME, config);
       const request = new NextRequest("http://localhost/api/payloads", {
         headers: {
           cookie: `${config.sessionCookieName}=${token}`,
@@ -76,7 +80,7 @@ test("authorizeDashboardRequest accepts valid session cookies", () =>
       });
       const result = authorizeDashboardRequest(request, config);
       assert.equal(result.authorized, true);
-      assert.equal(result.principal, "aletheia");
+      assert.equal(result.principal, TEST_USERNAME);
       assert.equal(result.via, "session");
     },
   ));
@@ -84,8 +88,8 @@ test("authorizeDashboardRequest accepts valid session cookies", () =>
 test("authorizeDashboardRequest treats malformed session signatures as unauthorized", () =>
   withEnv(
     {
-      ALETHEIA_DASHBOARD_PASSWORD: "secret-pass",
-      ALETHEIA_DASHBOARD_SESSION_SECRET: "session-secret",
+      ALETHEIA_DASHBOARD_PASSWORD: TEST_PASSWORD,
+      ALETHEIA_DASHBOARD_SESSION_SECRET: TEST_SESSION_SECRET,
     },
     () => {
       const config = resolveDashboardAuthConfig();
@@ -104,8 +108,8 @@ test("authorizeDashboardRequest treats malformed session signatures as unauthori
 test("proxy redirects unauthenticated browser requests to login", () =>
   withEnv(
     {
-      ALETHEIA_DASHBOARD_PASSWORD: "secret-pass",
-      ALETHEIA_DASHBOARD_SESSION_SECRET: "session-secret",
+      ALETHEIA_DASHBOARD_PASSWORD: TEST_PASSWORD,
+      ALETHEIA_DASHBOARD_SESSION_SECRET: TEST_SESSION_SECRET,
     },
     () => {
       const response = proxy(new NextRequest("http://localhost/"));
@@ -117,14 +121,14 @@ test("proxy redirects unauthenticated browser requests to login", () =>
 test("login route sets a session cookie for valid credentials", async () =>
   withEnv(
     {
-      ALETHEIA_DASHBOARD_PASSWORD: "secret-pass",
-      ALETHEIA_DASHBOARD_USERNAME: "aletheia",
-      ALETHEIA_DASHBOARD_SESSION_SECRET: "session-secret",
+      ALETHEIA_DASHBOARD_PASSWORD: TEST_PASSWORD,
+      ALETHEIA_DASHBOARD_USERNAME: TEST_USERNAME,
+      ALETHEIA_DASHBOARD_SESSION_SECRET: TEST_SESSION_SECRET,
     },
     async () => {
       const form = new FormData();
-      form.set("username", "aletheia");
-      form.set("password", "secret-pass");
+      form.set("username", TEST_USERNAME);
+      form.set("password", TEST_PASSWORD);
       form.set("next", "/");
       const request = new NextRequest("http://localhost/api/auth/login", {
         method: "POST",

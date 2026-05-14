@@ -137,6 +137,45 @@ Single category run:
 
     python -m kit.runner --category prompt_injection --output prompt_only.json
 
+High-volume payload expansion run (500+ attacks with bounded quality controls):
+
+    python -m kit.runner \
+        --mode api \
+        --plugin kit.payload_mutation_plugin \
+        --payload-mutation-plugin \
+        --payload-family-file attacks/templates/payload_families.json \
+        --attack-intensity medium \
+        --payload-seed-limit 80 \
+        --payload-expand-to 500 \
+        --dedupe-semantic-threshold 0.92 \
+        --benign-ratio 0.2 \
+        --max-attacks 500 \
+        --output runs/payload500_summary.json
+
+Useful payload-corpus controls:
+
+- `--categories prompt_injection,tool_abuse,policy_evasion` limits execution to selected attack families.
+- `--max-attacks 200` caps the final expanded corpus for faster CI or smoke sweeps.
+- `--dedupe-semantic-threshold` removes near-duplicate payloads using token-overlap similarity.
+- `--benign-ratio 0.2` keeps roughly 20% `benign_controls` in capped runs to reduce noisy false positives.
+- `--payload-family-file` adds curated seed families without editing core recursive catalogs under `attacks/`.
+- `--external-corpus-file` imports additional corpora (Garak/JailbreakBench/HarmBench-style JSON) and normalizes them into attack rows.
+- `--external-corpus-category` sets fallback category when external rows omit category metadata.
+- External corpus rows now include `source_adapter` and `source_confidence` metadata for traceable normalization quality.
+
+Example with external corpora adapters:
+
+    python -m kit.runner \
+        --mode api \
+        --plugin kit.payload_mutation_plugin \
+        --payload-mutation-plugin \
+        --payload-family-file attacks/templates/payload_families.json \
+        --external-corpus-file data/garak_prompts.json \
+        --external-corpus-file data/harmbench_cases.json \
+        --external-corpus-category prompt_injection \
+        --payload-expand-to 500 \
+        --max-attacks 500
+
 CI-style thresholded run:
 
     python -m kit.runner \
@@ -150,6 +189,9 @@ Important API outputs:
 - `summary.json`: full run artifact
 - `categories`: blocked / proceeded totals per category
 - `gap_report`: custom-technique bypass analysis
+- `category_gap_report`: category-level bypass analysis and top category gaps
+- `effectiveness_tiers`: baseline/elevated/advanced distribution in the executed set
+- `corpus_diagnostics`: pre-execution corpus mix, dedupe drops, source/adaptor mix, and achieved benign ratio
 - `results[*].technique`: explicit or inferred custom technique tag per attack
 - `results[*].request_id`: captured request id (or `null` when unavailable)
 - `unknown`: count of requests classified as unknown decisions
@@ -380,26 +422,26 @@ Current custom technique taxonomy examples:
 
 ## Dashboard
 
-Open `dashboard/index.html` in a browser.
+Open `dashboard/index.html` in a browser for the static Sovereign overview.
 
 Recommended workflow:
 
-1. Run one or more API red-team jobs that produce `summary*.json` files.
+1. Run one or more audits that produce `summary*.json` files.
 2. Copy the runs you want to compare into `runs/`.
 3. Add those file names to `runs/index.json`.
-4. In the dashboard, click `Auto-scan ./runs`.
+4. In the dashboard, click `Refresh run history`.
 
 Dashboard views now include:
 
-- per-category blocking ratio
-- regression trend across scanned API runs
-- technique gap analysis from `gap_report`
+- attack visibility by category
+- attack visibility trend across scanned runs
+- defense weak spots from `gap_report`
 - receipt inspection and signature verification tools
-- command filters (category, decision, mismatch-only, search)
-- quick actions (focus weakest category, anomaly focus, export filtered rows)
-- repo drill-down quick actions (critical/high focus and hotspot export)
-- combined artifact component switching (api / website / repo)
-- mission priority board for operator triage
+- findings filters (surface, decision, mismatch-only, search)
+- quick actions (highlight weak spots, unverified 200s, export filtered rows)
+- repository weak-spot quick actions
+- combined artifact surface switching (attack / website / repository)
+- top weak spots for operator triage
 
 For command-center usage details, see [docs/command-center.md](docs/command-center.md).
 
@@ -418,14 +460,11 @@ Open `http://localhost:3000`.
 
 Sovereign features:
 
-- Combined mode selector: choose API, website, repo per run.
-- API endpoint adversarial testing: single endpoint URL
-- API endpoint adversarial testing: batch endpoints (one URL per line)
-- API endpoint adversarial testing: JSON target import
-- API endpoint adversarial testing: saved test profiles (save/load/delete)
-- API endpoint adversarial testing: method fuzzing + parameter injection
-- API endpoint adversarial testing: payload category filters from recursive JSON catalogs under `attacks/`
-- API endpoint adversarial testing: result export and clear controls
+- Overview shell with risk score, block rate, attack visibility, critical bypasses, and latest run timestamp.
+- Runs and findings views backed by the existing run catalog and summary JSON outputs.
+- Attack launch controls for API endpoint testing with saved profiles, method fuzzing, and parameter injection.
+- Settings and signing-ready event export for operator handoff.
+- Dark-only shell designed to match the static dashboard language and visual style.
 
 Build checks:
 
