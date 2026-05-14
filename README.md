@@ -1,13 +1,19 @@
 # aletheia-redteam-kit
 
+Brought to you by Aletheia Core - runtime AI security for agents.
+
 A command center for adversarial operations against the [Aletheia](https://aletheia-core.com) AI security surface.
 The dashboard is the primary operating surface for triage, drill-down, and mission prioritization, while the CLI is the execution surface for running sweeps, applying gates, and exporting artifacts.
 
 Current release: `v0.2.1`
 
+## Demo Video
+
+[![Watch the demo](docs/images/video_thumbnail.png)](https://youtu.be/placeholder)
+
 ## What it does
 
-1. Loads ~100 adversarial payloads from `attacks/*.json`
+1. Loads ~100 adversarial payloads from recursive JSON catalogs under `attacks/`
     (prompt injection, data exfiltration, tool abuse, jailbreak, policy evasion,
     plus benign controls).
 2. Sends each payload to `https://api.aletheia-core.com/v1/audit`.
@@ -60,6 +66,18 @@ Verify environment on any machine:
 
 This runs representative backend tests plus dashboard lint/build checks.
 
+## Certification
+
+Review the [Certified AI Red Team Operator (CARTO) exam blueprint](docs/certification/syllabus.md) for the initial certification syllabus outline.
+
+## Attack Taxonomy
+
+- [Jailbreak catalogs](attacks/jailbreaks/)
+- [Injection catalogs](attacks/injections/)
+- [Exfiltration catalogs](attacks/exfil/)
+- [Encoding catalogs](attacks/encoding/)
+- [Visual catalogs](attacks/visual/)
+
 ## API red-team quick start
 
 Command-center control plane (single entry point):
@@ -74,6 +92,7 @@ Command-center control plane (single entry point):
 Supported command-center flags:
 
 - `--mode api|website|repo|combined|agentic`
+- `--agentic-mode` has been removed in favor of `--mode agentic`.
 - `--baseline` and `--thresholds`
 - `--filter` (category/decision/mismatch/technique/search)
 - `--open-dashboard`
@@ -88,6 +107,17 @@ Hosted operator mode:
 - Hand the operator the browser URL `http://<host>:8080/dashboard/`.
 - The hosted dashboard auto-loads the latest run from `/api/runs`; the operator does not need to upload JSON manually.
 - Health-check endpoint: `http://<host>:8080/api/health`.
+
+Agentic mode uses the standard mode selector:
+
+    python -m kit.runner --mode agentic --threat-feed-file sample_threat_feed.json --output runs/agentic_results.json
+
+Quick agentic launch flow:
+
+- Start with recursive built-in payloads under `attacks/` plus any extra entries from `sample_threat_feed.json` or your own JSON feed.
+- Use `--mode agentic` to enable the adaptive requeue loop with payload cloaking and hard-negative generation.
+- Use `--max-iterations 10` or another value to bound the loop runtime.
+- Review `runs/agentic_results.json` for successful evasions, blocked payloads, and iteration summaries.
 
 Command-center run artifacts under `runs/` now include:
 
@@ -366,7 +396,7 @@ Sovereign features:
     - JSON target import
     - saved test profiles (save/load/delete)
     - method fuzzing + parameter injection
-    - payload category filters from `attacks/*.json`
+    - payload category filters from recursive JSON catalogs under `attacks/`
     - result export and clear controls
 
 Build checks:

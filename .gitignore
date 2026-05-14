@@ -22,5 +22,5 @@ env/
 
 # Project outputs
 summary.json
-runs/*.json
-!runs/index.json
+runs/*
+!runs/.gitkeep

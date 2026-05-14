@@ -4,6 +4,7 @@ Run the full attack catalog against the Aletheia API.
 Usage:
     python -m kit.runner                         # full API catalog
     python -m kit.runner --category prompt_injection
+    python -m kit.runner --mode agentic
     python -m kit.runner --mode combined --target-url https://example.com
     python -m kit.runner --output results.json   # default: summary.json
     python -m kit.runner --min-expectation-match-rate 50
@@ -33,10 +34,10 @@ from uuid import uuid4
 
 import httpx
 
-from engine.agentic import AgenticConfig, run_agentic_loop
 from engine.gap_analysis import build_gap_report
 from engine.repo_audit import run_repo_audit
 from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
+from kit.agentic_runner import AgenticRunner, AgenticRunnerConfig
 from kit.command_center import (
     apply_finding_filter,
     compare_summaries,
@@ -55,6 +56,7 @@ from kit.web_audit.config import AuthBypassTarget, AuthStep, CustomFindingRule, 
 
 ATTACK_DIR = Path(__file__).parent.parent / "attacks"
 DEFAULT_OUTPUT = Path("summary.json")
+DEFAULT_AGENTIC_OUTPUT = Path("runs/agentic_results.json")
 DEFAULT_REQUEST_DELAY_SEC = 1.0
 DEFAULT_MAX_REQUEST_DELAY_SEC = 30.0
 RECONCILIATION_COVERAGE_THRESHOLD_PCT = 95.0
@@ -474,9 +476,18 @@ def infer_custom_technique(attack: dict) -> str:
     return "unspecified"
 
 
-def load_attacks(category: str | None = None) -> list[dict]:
+def load_attacks(category: str | None = None, threat_feed_file: str | None = None) -> list[dict]:
     """Load attacks from catalog provider. category=None loads all."""
-    return load_attacks_from_catalog(category)
+    return load_attacks_from_catalog(category, threat_feed_file=threat_feed_file)
+
+
+def _load_attacks_with_cli_options(category: str | None, threat_feed_file: str | None) -> list[dict]:
+    try:
+        return load_attacks(category, threat_feed_file=threat_feed_file)
+    except TypeError as exc:
+        if "threat_feed_file" not in str(exc):
+            raise
+        return load_attacks(category)
 
 
 def run_attack(client: AletheiaClient, attack: dict, *, include_status_code: bool = False) -> dict:
@@ -1344,7 +1355,10 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         "--repo-url",
         help="Public GitHub repository URL or owner/repo shorthand for --mode repo",
     )
-    parser.add_argument("--threat-feed-file", help="Optional threat feed JSON for repo and combined modes")
+    parser.add_argument(
+        "--threat-feed-file",
+        help="Optional JSON array file of extra attack payloads for API/agentic execution; repo mode continues to pass this path to repo-audit threat-feed enrichment",
+    )
     parser.add_argument(
         "--deps-scan",
         choices=["off", "auto", "full"],
@@ -1380,7 +1394,8 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-deps-critical", type=int, default=0, help="Fail repo mode if dependency CRITICAL findings exceed this")
     parser.add_argument("--max-deps-high", type=int, default=10, help="Fail repo mode if dependency HIGH findings exceed this")
     parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
-    parser.add_argument("--agentic-iterations", type=int, default=4, help="Maximum iterations for agentic mode")
+    parser.add_argument("--agentic-iterations", type=int, default=4, help="Maximum iterations for legacy engine agentic mode")
+    parser.add_argument("--max-iterations", type=int, help="Maximum iterations for agentic mode (default: 10)")
     parser.add_argument("--agentic-seed-size", type=int, default=10, help="Number of seed attacks to initialize agentic mode")
     parser.add_argument("--agentic-variants", type=int, default=6, help="Maximum candidates evaluated per agentic iteration")
     parser.add_argument(
@@ -1404,7 +1419,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         hard_error = False
 
         # API component
-        attacks = load_attacks(args.category)
+        attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
         print(f"Loaded {len(attacks)} attacks for combined API component", file=sys.stderr)
         with AletheiaClient(base_url=args.base_url) as client:
             results = run_attacks_with_backoff(client, attacks)
@@ -1594,39 +1609,34 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         return PASS if gates.get("pass", False) else FAIL_THRESHOLD
 
     if args.mode == "agentic":
-        attacks = load_attacks(args.category)
+        attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
         print(f"Loaded {len(attacks)} attacks for agentic optimization", file=sys.stderr)
 
+        output_path = Path(args.output)
+        if output_path == DEFAULT_OUTPUT:
+            output_path = DEFAULT_AGENTIC_OUTPUT
+        max_iterations = args.max_iterations if args.max_iterations is not None else 10
+
         with AletheiaClient(base_url=args.base_url) as client:
-            agentic = run_agentic_loop(
+            agentic = AgenticRunner(
                 client=client,
                 attacks=attacks,
                 run_attack_fn=run_attack,
-                config=AgenticConfig(
+                config=AgenticRunnerConfig(
                     objective=args.objective,
-                    iterations=args.agentic_iterations,
-                    seed_size=args.agentic_seed_size,
+                    max_iterations=max_iterations,
                     variants_per_round=args.agentic_variants,
-                    stop_on_first_bypass=not args.agentic_no_early_stop,
                     mutation_strategies=args.mutation_strategy,
+                    output_path=output_path,
                 ),
-            )
-            output = {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-                "engine_url": client.base_url,
-                "mode": "agentic",
-                "agentic": agentic,
-            }
+            ).run()
 
-        Path(args.output).write_text(json.dumps(output, indent=2))
-        best_result = agentic.get("best_result") or {}
+        best_result = (agentic.get("successful_payloads") or [{}])[0]
         print(
-            f"\nDone. Agentic iterations: {agentic['iterations_executed']}/{agentic['iterations_requested']}, "
-            f"best decision: {best_result.get('actual_decision', 'N/A')}. Output: {args.output}",
+            f"\nDone. Agentic iterations: {agentic['iterations_executed']}/{agentic['max_iterations']}, "
+            f"successful evasions: {len(agentic.get('successful_payloads', []))}. Output: {output_path}",
             file=sys.stderr,
         )
-        if agentic.get("execution_errors", 0) > 0:
-            return FAIL_ERROR
         return PASS
 
     if args.mode == "repo":
@@ -1684,7 +1694,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
             return FAIL_THRESHOLD
         return PASS
 
-    attacks = load_attacks(args.category)
+    attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
     print(f"Loaded {len(attacks)} attacks", file=sys.stderr)
 
     with AletheiaClient(base_url=args.base_url) as client:
