@@ -327,7 +327,57 @@ Current repo checks include:
 - weak crypto primitive usage checks
 - config/policy drift patterns (TLS verify disabled, wildcard CORS, JWT none)
 
-GitHub repo audit support is public-repo first: `--repo-url` clones a public GitHub repository into a temporary workspace and reuses the same static scanner. Private repo support is planned for a later phase.
+GitHub repo audit supports both **public and private** repositories:
+
+```bash
+# Public repo (no authentication required)
+python -m kit.runner --mode repo \
+    --repo-url https://github.com/example/public-repo \
+    --output runs/repo_summary.json
+
+# Private repo via PAT (or fine-grained token with Contents: read scope)
+python -m kit.runner --mode repo \
+    --repo-url https://github.com/myorg/private-repo \
+    --repo-token ghp_... \
+    --output runs/repo_summary.json
+
+# Or set the env var (preferred — keeps token out of shell history)
+export ALETHEIA_GITHUB_TOKEN=ghp_...
+python -m kit.runner --mode repo \
+    --repo-url https://github.com/myorg/private-repo \
+    --output runs/repo_summary.json
+```
+
+> **Security**: the token is delivered via `GIT_ASKPASS` so it never appears in
+> process command-line arguments, run logs, or summary JSON output.
+
+### Scan profiles
+
+Control scanning depth with `--scan-profile`:
+
+| Profile  | Scanners enabled |
+|----------|-----------------|
+| `light`  | secrets, ci_config, language_risks, threat_feed |
+| `medium` | (default) light + dep_hygiene + dep_advisories |
+| `full`   | medium + semgrep + bandit + trivy + npm_audit |
+| `custom` | arbitrary set from `--scan-profile-file` |
+
+```bash
+# Fast surface scan (no dep advisory tooling)
+python -m kit.runner --mode repo --repo-path . --scan-profile light --output runs/repo_summary.json
+
+# Deep scan with all external tools
+python -m kit.runner --mode repo --repo-path . --scan-profile full --output runs/repo_summary.json
+
+# Custom scanner set
+echo '{"scanners": ["secrets", "bandit", "trivy"]}' > my_profile.json
+python -m kit.runner --mode repo --repo-path . \
+    --scan-profile custom --scan-profile-file my_profile.json \
+    --output runs/repo_summary.json
+```
+
+`full` profile requires the respective tools on `PATH` (`semgrep`, `bandit`, `trivy`, `npm`). Missing tools
+are reported as `{"status": "unavailable"}` in `extra_tools` without aborting the run.
 
 Dependency advisory enrichment:
 
