@@ -60,6 +60,10 @@ Verify environment on any machine:
 
 This runs representative backend tests plus dashboard lint/build checks.
 
+## Certification
+
+Review the [Certified AI Red Team Operator (CARTO) exam blueprint](docs/certification/syllabus.md) for the initial certification syllabus outline.
+
 ## API red-team quick start
 
 Command-center control plane (single entry point):
