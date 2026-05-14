@@ -4,6 +4,7 @@ Run the full attack catalog against the Aletheia API.
 Usage:
     python -m kit.runner                         # full API catalog
     python -m kit.runner --category prompt_injection
+    python -m kit.runner --mode agentic
     python -m kit.runner --mode combined --target-url https://example.com
     python -m kit.runner --output results.json   # default: summary.json
     python -m kit.runner --min-expectation-match-rate 50

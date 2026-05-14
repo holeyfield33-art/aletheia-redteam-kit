@@ -147,6 +147,12 @@ def test_cli_website_mode_requires_target_url(monkeypatch: pytest.MonkeyPatch) -
         runner.cli()
 
 
+def test_cli_rejects_removed_agentic_mode_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["kit.runner", "--agentic-mode"])
+    with pytest.raises(SystemExit):
+        runner.cli()
+
+
 def test_cli_website_mode_writes_summary(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     output = tmp_path / "website_summary.json"
 

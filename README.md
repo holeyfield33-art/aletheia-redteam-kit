@@ -74,6 +74,7 @@ Command-center control plane (single entry point):
 Supported command-center flags:
 
 - `--mode api|website|repo|combined|agentic`
+- `--agentic-mode` has been removed in favor of `--mode agentic`.
 - `--baseline` and `--thresholds`
 - `--filter` (category/decision/mismatch/technique/search)
 - `--open-dashboard`
@@ -88,6 +89,10 @@ Hosted operator mode:
 - Hand the operator the browser URL `http://<host>:8080/dashboard/`.
 - The hosted dashboard auto-loads the latest run from `/api/runs`; the operator does not need to upload JSON manually.
 - Health-check endpoint: `http://<host>:8080/api/health`.
+
+Agentic mode uses the standard mode selector:
+
+    python -m kit.runner --mode agentic --output summary.json
 
 Command-center run artifacts under `runs/` now include:
 
