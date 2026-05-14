@@ -1021,6 +1021,59 @@ def test_reconcile_results_skips_auth_required_lookups_from_coverage() -> None:
     assert reconciliation["skipped_request_ids"] == ["req-1"]
 
 
+def test_reconcile_results_dedupes_duplicate_request_ids() -> None:
+    class FakeClient:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def lookup_decision(self, request_id: str):
+            self.calls.append(request_id)
+            return type(
+                "Lookup",
+                (),
+                {
+                    "request_id": request_id,
+                    "decision": "SANDBOX_BLOCKED",
+                    "endpoint": "https://api.example.com/api/v1/receipt/req-1",
+                    "auth_mode": "api_key",
+                },
+            )()
+
+    client = FakeClient()
+    rows = [
+        {
+            "id": "A1",
+            "name": "a",
+            "category": "prompt_injection",
+            "expected_decision": "DENIED",
+            "actual_decision": "UNKNOWN",
+            "match": False,
+            "request_id": "req-1",
+            "reason": "empty",
+        },
+        {
+            "id": "A2",
+            "name": "b",
+            "category": "prompt_injection",
+            "expected_decision": "DENIED",
+            "actual_decision": "ERROR",
+            "match": False,
+            "request_id": "req-1",
+            "reason": "timeout",
+        },
+    ]
+
+    reconciliation = reconcile_results(rows, client)
+
+    assert client.calls == ["req-1"]
+    assert reconciliation["total_reconciled"] == 1
+    assert reconciliation["reconcilable_total"] == 1
+    assert reconciliation["unreconciled"] == 0
+    assert reconciliation["reconciliation_coverage_pct"] == 100.0
+    assert all(row["actual_decision"] == "DENIED" for row in rows)
+    assert all(row["match"] is True for row in rows)
+
+
 def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     output = tmp_path / "summary.json"
 
@@ -1074,7 +1127,8 @@ def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeyp
     rc = runner.cli()
     data = json.loads(output.read_text())
     assert rc == 2
-    assert data["reconciliation"]["reconcilable_total"] == data["attacks_total"]
+    assert data["attacks_total"] == 6
+    assert data["reconciliation"]["reconcilable_total"] == 1
     assert data["reconciliation"]["reconciliation_coverage_pct"] == 0.0
 
 

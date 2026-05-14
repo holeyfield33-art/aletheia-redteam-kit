@@ -849,11 +849,14 @@ def _dedupe_preserving_order(values: list[str]) -> list[str]:
 
 def reconcile_results(results: list[dict], client: AletheiaClient) -> dict:
     """Resolve UNKNOWN/ERROR decisions from authoritative receipt/log lookups."""
-    reconcilable = [
-        row
-        for row in results
-        if _needs_reconciliation(row) and str(row.get("request_id") or "").strip()
-    ]
+    reconcilable_groups: dict[str, list[dict]] = {}
+    for row in results:
+        if not _needs_reconciliation(row):
+            continue
+        request_id = str(row.get("request_id") or "").strip()
+        if not request_id:
+            continue
+        reconcilable_groups.setdefault(request_id, []).append(row)
 
     unreconciled_request_ids: list[str] = []
     skipped_request_ids: list[str] = []
@@ -862,9 +865,7 @@ def reconcile_results(results: list[dict], client: AletheiaClient) -> dict:
     endpoint_used: str | None = None
     auth_mode = "unknown"
 
-    for row in reconcilable:
-        request_id = str(row.get("request_id") or "").strip()
-
+    for request_id, grouped_rows in reconcilable_groups.items():
         lookup = client.lookup_decision(request_id)
 
         if lookup.endpoint and endpoint_used is None:
@@ -883,13 +884,14 @@ def reconcile_results(results: list[dict], client: AletheiaClient) -> dict:
             unreconciled_request_ids.append(request_id)
             continue
 
-        row["actual_decision"] = reconciled_decision
-        row["match"] = reconciled_decision == str(row.get("expected_decision") or "")
-        prior_reason = str(row.get("reason") or "").strip()
-        if prior_reason:
-            row["reason"] = f"{prior_reason} | reconciled via {lookup.endpoint}"
-        else:
-            row["reason"] = f"reconciled via {lookup.endpoint}"
+        for row in grouped_rows:
+            row["actual_decision"] = reconciled_decision
+            row["match"] = reconciled_decision == str(row.get("expected_decision") or "")
+            prior_reason = str(row.get("reason") or "").strip()
+            if prior_reason:
+                row["reason"] = f"{prior_reason} | reconciled via {lookup.endpoint}"
+            else:
+                row["reason"] = f"reconciled via {lookup.endpoint}"
         total_reconciled += 1
 
     unreconciled_request_ids = _dedupe_preserving_order(unreconciled_request_ids)
