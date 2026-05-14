@@ -35,6 +35,7 @@ from uuid import uuid4
 import httpx
 
 from engine.gap_analysis import build_gap_report
+from engine.mutation import expand_attack_families
 from engine.repo_audit import run_repo_audit
 from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
 from kit.agentic_runner import AgenticRunner, AgenticRunnerConfig
@@ -49,8 +50,9 @@ from kit.command_center import (
 from kit.dashboard_server import DashboardServerConfig, serve_dashboard
 from kit.api_analysis import build_api_regression_summary, extract_multi_turn_steps
 from kit.catalog import load_attacks as load_attacks_from_catalog
-from kit.client import AletheiaClient
+from kit.client import AletheiaClient, TargetProfile, load_target_profile
 from kit.exit_codes import FAIL_ERROR, FAIL_THRESHOLD, PASS
+from kit.plugins import load_runner_plugins, plugin_name
 from kit.web_audit import WebAuditConfig, run_website_audit
 from kit.web_audit.config import AuthBypassTarget, AuthStep, CustomFindingRule, PromptInjectionTest
 
@@ -93,6 +95,48 @@ def _apply_thresholds_to_legacy_args(legacy_args: list[str], thresholds_raw: str
         flag = mapping.get(key)
         if flag:
             legacy_args.extend([flag, value])
+
+
+def _apply_target_profile_args_to_legacy_args(legacy_args: list[str], args: argparse.Namespace) -> None:
+    mapping = {
+        "target_preset": "--target-preset",
+        "target_profile_file": "--target-profile-file",
+        "target_model": "--target-model",
+        "auth_header": "--auth-header",
+        "auth_scheme": "--auth-scheme",
+        "conversation_file": "--conversation-file",
+        "attack_intensity": "--attack-intensity",
+    }
+    for attr, flag in mapping.items():
+        value = getattr(args, attr, None)
+        if value:
+            legacy_args.extend([flag, str(value)])
+    for header in getattr(args, "header", []) or []:
+        legacy_args.extend(["--header", header])
+    for plugin in getattr(args, "plugin", []) or []:
+        legacy_args.extend(["--plugin", plugin])
+
+
+def _build_target_profile_from_args(args: argparse.Namespace) -> TargetProfile:
+    return load_target_profile(
+        preset=getattr(args, "target_preset", "aletheia") or "aletheia",
+        profile_file=getattr(args, "target_profile_file", None),
+        base_url=getattr(args, "base_url", None),
+        model=getattr(args, "target_model", None),
+        auth_header=getattr(args, "auth_header", None),
+        auth_scheme=getattr(args, "auth_scheme", None),
+        extra_headers=getattr(args, "header", None),
+    )
+
+
+def _create_api_client(args: argparse.Namespace) -> AletheiaClient:
+    target_profile = _build_target_profile_from_args(args)
+    try:
+        return AletheiaClient(base_url=args.base_url, target_profile=target_profile)
+    except TypeError as exc:
+        if "target_profile" not in str(exc):
+            raise
+        return AletheiaClient(base_url=args.base_url)
 
 
 def _write_command_center_artifacts(
@@ -205,6 +249,21 @@ def _command_center_cli(argv: list[str]) -> int:
     run_parser.add_argument("--target-url")
     run_parser.add_argument("--repo-path", default=".")
     run_parser.add_argument("--repo-url")
+    run_parser.add_argument("--base-url", help="Override target base URL for API, agentic, or combined runs")
+    run_parser.add_argument("--target-preset", choices=["aletheia", "openai"], default="aletheia")
+    run_parser.add_argument("--target-profile-file", help="JSON target profile file for custom API-compatible providers")
+    run_parser.add_argument("--target-model", help="Model name for OpenAI-compatible target profiles")
+    run_parser.add_argument("--auth-header", help="Override auth header name for the selected target profile")
+    run_parser.add_argument("--auth-scheme", help="Override auth scheme prefix, for example Bearer")
+    run_parser.add_argument("--header", action="append", default=[], help="Extra request header in KEY=VALUE format; repeatable")
+    run_parser.add_argument("--conversation-file", help="JSON file of multi-turn conversation attacks to append to the run")
+    run_parser.add_argument("--attack-intensity", choices=["light", "medium", "aggressive"], default="medium")
+    run_parser.add_argument(
+        "--plugin",
+        action="append",
+        default=[],
+        help="Runner plugin module, module:object, or file.py[:object]; repeatable",
+    )
 
     dashboard_parser = subparsers.add_parser("dashboard", help="Prepare/open dashboard from artifacts")
     dashboard_parser.add_argument("--artifact-dir", default="runs")
@@ -239,6 +298,8 @@ def _command_center_cli(argv: list[str]) -> int:
             legacy_args.extend(["--repo-url", args.repo_url])
         if args.target_url:
             legacy_args.extend(["--target-url", args.target_url])
+        if args.base_url:
+            legacy_args.extend(["--base-url", args.base_url])
         if args.baseline:
             if args.mode == "api":
                 legacy_args.extend(["--api-baseline-summary", args.baseline])
@@ -247,6 +308,7 @@ def _command_center_cli(argv: list[str]) -> int:
             else:
                 legacy_args.extend(["--baseline-state-file", args.baseline])
         _apply_thresholds_to_legacy_args(legacy_args, args.thresholds)
+        _apply_target_profile_args_to_legacy_args(legacy_args, args)
 
         rc = _legacy_cli(legacy_args)
 
@@ -380,6 +442,17 @@ def _map_reconciled_decision(decision: str | None) -> str | None:
     return None
 
 
+def _dedupe_preserving_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
+
+
 def reconcile_results(results: list[dict], client: AletheiaClient) -> dict:
     """Resolve UNKNOWN/ERROR decisions from authoritative receipt/log lookups."""
     reconcilable = [
@@ -389,16 +462,14 @@ def reconcile_results(results: list[dict], client: AletheiaClient) -> dict:
     ]
 
     unreconciled_request_ids: list[str] = []
+    skipped_request_ids: list[str] = []
     total_reconciled = 0
+    total_eligible = 0
     endpoint_used: str | None = None
     auth_mode = "unknown"
 
     for row in reconcilable:
         request_id = str(row.get("request_id") or "").strip()
-
-        if auth_mode == "session_cookie_required":
-            unreconciled_request_ids.append(request_id)
-            continue
 
         lookup = client.lookup_decision(request_id)
 
@@ -406,6 +477,12 @@ def reconcile_results(results: list[dict], client: AletheiaClient) -> dict:
             endpoint_used = lookup.endpoint
         if lookup.auth_mode != "unknown":
             auth_mode = lookup.auth_mode
+
+        if lookup.auth_mode in {"session_cookie_required", "not_applicable"}:
+            skipped_request_ids.append(request_id)
+            continue
+
+        total_eligible += 1
 
         reconciled_decision = _map_reconciled_decision(lookup.decision)
         if reconciled_decision is None:
@@ -421,16 +498,20 @@ def reconcile_results(results: list[dict], client: AletheiaClient) -> dict:
             row["reason"] = f"reconciled via {lookup.endpoint}"
         total_reconciled += 1
 
+    unreconciled_request_ids = _dedupe_preserving_order(unreconciled_request_ids)
+    skipped_request_ids = _dedupe_preserving_order(skipped_request_ids)
     unreconciled = len(unreconciled_request_ids)
     coverage_pct = round(
-        (100.0 * total_reconciled / len(reconcilable)) if reconcilable else 100.0,
+        (100.0 * total_reconciled / total_eligible) if total_eligible else 100.0,
         1,
     )
     return {
         "total_reconciled": total_reconciled,
+        "reconcilable_total": total_eligible,
         "unreconciled": unreconciled,
         "reconciliation_coverage_pct": coverage_pct,
         "unreconciled_request_ids": unreconciled_request_ids,
+        "skipped_request_ids": skipped_request_ids,
         "endpoint": endpoint_used,
         "auth_mode": auth_mode,
     }
@@ -490,10 +571,125 @@ def _load_attacks_with_cli_options(category: str | None, threat_feed_file: str |
         return load_attacks(category)
 
 
-def run_attack(client: AletheiaClient, attack: dict, *, include_status_code: bool = False) -> dict:
+def load_conversation_attacks(path: str | None) -> list[dict]:
+    if not path:
+        return []
+
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(raw, dict):
+        rows = raw.get("conversations") or raw.get("attacks") or [raw]
+    else:
+        rows = raw
+
+    if not isinstance(rows, list):
+        raise ValueError("Conversation file must contain a JSON array or an object with conversations/attacks")
+
+    attacks: list[dict] = []
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            raise ValueError(f"Conversation attack #{index} must be a JSON object")
+        attack = dict(row)
+        attack.setdefault("id", f"CF_{index:03d}")
+        attack.setdefault("name", f"Conversation file attack {index}")
+        attack.setdefault("category", "multi_turn")
+        attack.setdefault("action", "chat")
+        attack.setdefault("origin", "redteam-kit")
+        attack.setdefault("expected_decision", attack.get("expected_verdict") or "DENIED")
+        attack.setdefault("severity", "HIGH")
+        attacks.append(attack)
+    return attacks
+
+
+def _load_runner_plugins_from_args(args: argparse.Namespace) -> list[object]:
+    return load_runner_plugins(getattr(args, "plugin", []) or [])
+
+
+def _apply_attack_plugins(attacks: list[dict], args: argparse.Namespace, plugins: list[object]) -> list[dict]:
+    updated = [dict(attack) for attack in attacks]
+    for plugin in plugins:
+        hook = getattr(plugin, "transform_attacks", None)
+        if not callable(hook):
+            continue
+        maybe_updated = hook(updated, args)
+        if maybe_updated is not None:
+            updated = maybe_updated
+        if not isinstance(updated, list):
+            raise TypeError(f"Plugin {plugin_name(plugin)} transform_attacks must return a list of attacks")
+    return updated
+
+
+def _apply_result_plugins(result: dict, attack: dict, args: argparse.Namespace | None, plugins: list[object] | None) -> dict:
+    updated = dict(result)
+    for plugin in plugins or []:
+        hook = getattr(plugin, "transform_result", None)
+        if not callable(hook):
+            continue
+        maybe_updated = hook(updated, attack, args)
+        if maybe_updated is not None:
+            updated = maybe_updated
+        if not isinstance(updated, dict):
+            raise TypeError(f"Plugin {plugin_name(plugin)} transform_result must return a dict result")
+    return updated
+
+
+def _finalize_summary_with_plugins(
+    summary: dict,
+    results: list[dict],
+    args: argparse.Namespace | None,
+    plugins: list[object] | None,
+) -> dict:
+    updated = dict(summary)
+    for plugin in plugins or []:
+        hook = getattr(plugin, "finalize_summary", None)
+        if not callable(hook):
+            continue
+        maybe_updated = hook(updated, results, args)
+        if maybe_updated is not None:
+            updated = maybe_updated
+        if not isinstance(updated, dict):
+            raise TypeError(f"Plugin {plugin_name(plugin)} finalize_summary must return a dict summary")
+    if plugins:
+        updated["plugins"] = [plugin_name(plugin) for plugin in plugins]
+    return updated
+
+
+def _run_attacks_with_cli_options(
+    client: AletheiaClient,
+    attacks: list[dict],
+    *,
+    plugins: list[object] | None,
+    plugin_args: argparse.Namespace | None,
+) -> list[dict]:
+    try:
+        return run_attacks_with_backoff(client, attacks, plugins=plugins, plugin_args=plugin_args)
+    except TypeError as exc:
+        if "plugins" not in str(exc) and "plugin_args" not in str(exc):
+            raise
+        return run_attacks_with_backoff(client, attacks)
+
+
+def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[object] | None = None) -> list[dict]:
+    attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
+    attacks.extend(load_conversation_attacks(getattr(args, "conversation_file", None)))
+    expanded = expand_attack_families(
+        attacks,
+        objective=getattr(args, "objective", "Bypass secret exfil detection"),
+        intensity=getattr(args, "attack_intensity", "medium"),
+    )
+    return _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
+
+
+def run_attack(
+    client: AletheiaClient,
+    attack: dict,
+    *,
+    include_status_code: bool = False,
+    plugins: list[object] | None = None,
+    plugin_args: argparse.Namespace | None = None,
+) -> dict:
     """Execute one attack, return a result record."""
     if str(attack.get("category", "")).strip().lower() == "multi_turn":
-        return run_multi_turn_attack(client, attack)
+        return _apply_result_plugins(run_multi_turn_attack(client, attack), attack, plugin_args, plugins)
 
     started = time.time()
     technique = attack.get("technique") or infer_custom_technique(attack)
@@ -528,7 +724,7 @@ def run_attack(client: AletheiaClient, attack: dict, *, include_status_code: boo
                     if isinstance(getattr(result, "raw", {}), dict)
                     else 200
                 )
-            return row
+            return _apply_result_plugins(row, attack, plugin_args, plugins)
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code if exc.response is not None else None
             if status_code is not None and 500 <= status_code < 600 and not retried_5xx:
@@ -555,7 +751,7 @@ def run_attack(client: AletheiaClient, attack: dict, *, include_status_code: boo
             }
             if include_status_code:
                 row["status_code"] = status_code
-            return row
+            return _apply_result_plugins(row, attack, plugin_args, plugins)
         except Exception as exc:
             latency_ms = (time.time() - started) * 1000
             row = {
@@ -575,10 +771,16 @@ def run_attack(client: AletheiaClient, attack: dict, *, include_status_code: boo
             }
             if include_status_code:
                 row["status_code"] = None
-            return row
+            return _apply_result_plugins(row, attack, plugin_args, plugins)
 
 
-def run_attacks_with_backoff(client: AletheiaClient, attacks: list[dict]) -> list[dict]:
+def run_attacks_with_backoff(
+    client: AletheiaClient,
+    attacks: list[dict],
+    *,
+    plugins: list[object] | None = None,
+    plugin_args: argparse.Namespace | None = None,
+) -> list[dict]:
     """Run attacks with adaptive pacing to reduce transport failures."""
     results: list[dict] = []
     delay_sec = DEFAULT_REQUEST_DELAY_SEC
@@ -587,7 +789,13 @@ def run_attacks_with_backoff(client: AletheiaClient, attacks: list[dict]) -> lis
         if i > 1:
             time.sleep(delay_sec)
 
-        result = run_attack(client, attack, include_status_code=True)
+        result = run_attack(
+            client,
+            attack,
+            include_status_code=True,
+            plugins=plugins,
+            plugin_args=plugin_args,
+        )
         status = "OK" if result["match"] else "NO"
         print(
             f"[{i}/{len(attacks)}] {status} {attack['id']:<12} "
@@ -986,7 +1194,6 @@ def _apply_gate_exceptions(mode: str, gates: dict, exceptions_data: dict) -> dic
                     "matched_pattern": pattern,
                     "owner": entry.get("owner"),
                     "expires_at": entry.get("expires_at"),
-                    "reason": entry.get("reason") or "",
                 }
                 break
 
@@ -1306,6 +1513,12 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--category", help="Run only one category (filename without .json)")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output path for summary JSON")
     parser.add_argument("--base-url", help="Override ALETHEIA_BASE_URL")
+    parser.add_argument("--target-preset", choices=["aletheia", "openai"], default="aletheia", help="Target preset for API-compatible audits")
+    parser.add_argument("--target-profile-file", help="JSON target profile file for custom API targets")
+    parser.add_argument("--target-model", help="Model name for OpenAI-compatible chat-completion targets")
+    parser.add_argument("--auth-header", help="Override auth header name for custom target profiles")
+    parser.add_argument("--auth-scheme", help="Override auth scheme prefix, for example Bearer")
+    parser.add_argument("--header", action="append", default=[], help="Extra request header in KEY=VALUE format; repeatable")
     default_min_expectation = float(os.environ.get("ALETHEIA_MIN_EXPECTATION_MATCH_RATE", "0.0"))
     raw_max_drop = os.environ.get("ALETHEIA_MAX_HIGH_RISK_BLOCK_DROP")
     default_max_drop = float(raw_max_drop) if raw_max_drop is not None else None
@@ -1394,6 +1607,8 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-deps-critical", type=int, default=0, help="Fail repo mode if dependency CRITICAL findings exceed this")
     parser.add_argument("--max-deps-high", type=int, default=10, help="Fail repo mode if dependency HIGH findings exceed this")
     parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
+    parser.add_argument("--attack-intensity", choices=["light", "medium", "aggressive"], default="medium", help="Payload family expansion intensity for API and agentic attack generation")
+    parser.add_argument("--conversation-file", help="JSON file of multi-turn conversation attacks to append to the run")
     parser.add_argument("--agentic-iterations", type=int, default=4, help="Maximum iterations for legacy engine agentic mode")
     parser.add_argument("--max-iterations", type=int, help="Maximum iterations for agentic mode (default: 10)")
     parser.add_argument("--agentic-seed-size", type=int, default=10, help="Number of seed attacks to initialize agentic mode")
@@ -1404,8 +1619,15 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         default=[],
         help="Mutation strategy for agentic mode; repeatable (objective_suffix, safe_reframe, step_escalation, base64_wrap, roleplay)",
     )
+    parser.add_argument(
+        "--plugin",
+        action="append",
+        default=[],
+        help="Runner plugin module, module:object, or file.py[:object]; repeatable",
+    )
     parser.add_argument("--agentic-no-early-stop", action="store_true", help="Do not stop agentic mode after first bypass")
     args = parser.parse_args(argv)
+    plugins = _load_runner_plugins_from_args(args)
 
     if args.mode == "combined":
         gate_exceptions_data = _load_gate_exceptions(args.gate_exceptions_file)
@@ -1419,10 +1641,10 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         hard_error = False
 
         # API component
-        attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
+        attacks = _prepare_attacks_for_execution(args, plugins=plugins)
         print(f"Loaded {len(attacks)} attacks for combined API component", file=sys.stderr)
-        with AletheiaClient(base_url=args.base_url) as client:
-            results = run_attacks_with_backoff(client, attacks)
+        with _create_api_client(args) as client:
+            results = _run_attacks_with_cli_options(client, attacks, plugins=plugins, plugin_args=args)
             reconciliation = reconcile_results(results, client)
 
             api_summary = summarize(results)
@@ -1445,6 +1667,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
                 "gap_report": build_gap_report(results),
                 "results": results,
             }
+            api_component = _finalize_summary_with_plugins(api_component, results, args, plugins)
             combined["components"]["api"] = api_component
 
         reconciliation_coverage = float(reconciliation.get("reconciliation_coverage_pct", 0.0))
@@ -1609,7 +1832,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         return PASS if gates.get("pass", False) else FAIL_THRESHOLD
 
     if args.mode == "agentic":
-        attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
+        attacks = _prepare_attacks_for_execution(args, plugins=plugins)
         print(f"Loaded {len(attacks)} attacks for agentic optimization", file=sys.stderr)
 
         output_path = Path(args.output)
@@ -1617,11 +1840,16 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
             output_path = DEFAULT_AGENTIC_OUTPUT
         max_iterations = args.max_iterations if args.max_iterations is not None else 10
 
-        with AletheiaClient(base_url=args.base_url) as client:
+        with _create_api_client(args) as client:
             agentic = AgenticRunner(
                 client=client,
                 attacks=attacks,
-                run_attack_fn=run_attack,
+                run_attack_fn=lambda current_client, attack: run_attack(
+                    current_client,
+                    attack,
+                    plugins=plugins,
+                    plugin_args=args,
+                ),
                 config=AgenticRunnerConfig(
                     objective=args.objective,
                     max_iterations=max_iterations,
@@ -1694,11 +1922,11 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
             return FAIL_THRESHOLD
         return PASS
 
-    attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
+    attacks = _prepare_attacks_for_execution(args, plugins=plugins)
     print(f"Loaded {len(attacks)} attacks", file=sys.stderr)
 
-    with AletheiaClient(base_url=args.base_url) as client:
-        results = run_attacks_with_backoff(client, attacks)
+    with _create_api_client(args) as client:
+        results = _run_attacks_with_cli_options(client, attacks, plugins=plugins, plugin_args=args)
         reconciliation = reconcile_results(results, client)
 
     summary = summarize(results)
@@ -1720,6 +1948,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         "gap_report": build_gap_report(results),
         "results": results,
     }
+    output = _finalize_summary_with_plugins(output, results, args, plugins)
     Path(args.output).write_text(json.dumps(output, indent=2))
     print(
         f"\nDone. {summary['blocked']}/{summary['attacks_total']} blocked, "

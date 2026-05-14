@@ -8,7 +8,10 @@ import pytest
 
 from kit import runner
 from kit.runner import (
+    _build_target_profile_from_args,
+    _prepare_attacks_for_execution,
     infer_custom_technique,
+    load_conversation_attacks,
     load_auth_workflow,
     load_prompt_injection_tests,
     load_protected_profiles,
@@ -255,6 +258,202 @@ def test_cli_agentic_mode_uses_default_output_path(monkeypatch: pytest.MonkeyPat
     assert rc == 0
     assert str(captured["output_path"]) == "runs/agentic_results.json"
     assert captured["max_iterations"] == 10
+
+
+def test_build_target_profile_from_args_supports_openai_preset() -> None:
+    args = type(
+        "Args",
+        (),
+        {
+            "target_preset": "openai",
+            "target_profile_file": None,
+            "base_url": "https://llm.example.com",
+            "target_model": "gpt-test",
+            "auth_header": None,
+            "auth_scheme": None,
+            "header": ["X-Trace=123"],
+        },
+    )()
+
+    profile = _build_target_profile_from_args(args)
+
+    assert profile.mode == "openai_chat"
+    assert profile.base_url == "https://llm.example.com"
+    assert profile.model == "gpt-test"
+    assert profile.extra_headers == {"X-Trace": "123"}
+
+
+def test_prepare_attacks_for_execution_expands_payload_families(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        runner,
+        "_load_attacks_with_cli_options",
+        lambda category, threat_feed_file: [
+            {
+                "id": "PI_001",
+                "name": "seed",
+                "category": "prompt_injection",
+                "payload": "override policy",
+                "expected_decision": "DENIED",
+                "severity": "HIGH",
+            }
+        ],
+    )
+    args = type(
+        "Args",
+        (),
+        {
+            "category": None,
+            "threat_feed_file": None,
+            "conversation_file": None,
+            "plugin": [],
+            "objective": "Bypass controls",
+            "attack_intensity": "light",
+        },
+    )()
+
+    attacks = _prepare_attacks_for_execution(args)
+
+    assert len(attacks) == 3
+    assert attacks[0]["variant_kind"] == "seed"
+    assert attacks[1]["variant_kind"] == "dynamic"
+
+
+def test_load_conversation_attacks_reads_array_file(tmp_path) -> None:
+    conversation_file = tmp_path / "conversation.json"
+    conversation_file.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "MT_CUSTOM_1",
+                    "turns": ["Gather context", "Escalate request"],
+                    "technique": "tap",
+                }
+            ]
+        )
+    )
+
+    attacks = load_conversation_attacks(str(conversation_file))
+
+    assert len(attacks) == 1
+    assert attacks[0]["category"] == "multi_turn"
+    assert attacks[0]["expected_decision"] == "DENIED"
+
+
+def test_prepare_attacks_for_execution_appends_conversation_file_and_plugins(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    conversation_file = tmp_path / "conversation.json"
+    conversation_file.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "MT_CUSTOM_1",
+                    "turns": ["Gather context", "Escalate request"],
+                    "technique": "tap",
+                }
+            ]
+        )
+    )
+    monkeypatch.setattr(
+        runner,
+        "_load_attacks_with_cli_options",
+        lambda category, threat_feed_file: [
+            {
+                "id": "PI_001",
+                "name": "seed",
+                "category": "prompt_injection",
+                "payload": "override policy",
+                "expected_decision": "DENIED",
+                "severity": "HIGH",
+            }
+        ],
+    )
+    args = type(
+        "Args",
+        (),
+        {
+            "category": None,
+            "threat_feed_file": None,
+            "conversation_file": str(conversation_file),
+            "plugin": ["tests.runner_plugin_fixture"],
+            "objective": "Bypass controls",
+            "attack_intensity": "light",
+        },
+    )()
+
+    attacks = _prepare_attacks_for_execution(args)
+
+    assert any(attack["category"] == "multi_turn" for attack in attacks)
+    assert all(attack["plugin_attack"] is True for attack in attacks)
+
+
+def test_cli_api_mode_applies_plugin_hooks(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "summary.json"
+
+    monkeypatch.setattr(
+        runner,
+        "load_attacks",
+        lambda category=None, threat_feed_file=None: [
+            {
+                "id": "BC_001",
+                "name": "Benign",
+                "category": "benign_controls",
+                "payload": "show uptime",
+                "expected_decision": "PROCEED",
+                "severity": "LOW",
+            }
+        ],
+    )
+
+    class FakeClient:
+        base_url = "https://example.com"
+
+        def __init__(self, base_url=None, target_profile=None):
+            self.base_url = base_url or self.base_url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def audit(self, payload: str, action: str, origin: str) -> _AuditResult:
+            return _AuditResult("PROCEED", "req-1", {"sig": "x"}, None, raw={"status_code": 200})
+
+    monkeypatch.setattr(runner, "AletheiaClient", FakeClient)
+    monkeypatch.setattr(
+        runner,
+        "reconcile_results",
+        lambda results, client: {
+            "total_reconciled": 0,
+            "unreconciled": 0,
+            "reconciliation_coverage_pct": 100.0,
+            "unreconciled_request_ids": [],
+            "endpoint": None,
+            "auth_mode": "unknown",
+        },
+    )
+    monkeypatch.setattr(runner, "build_gap_report", lambda results: {})
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "api",
+            "--plugin",
+            "tests.runner_plugin_fixture",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    payload = json.loads(output.read_text())
+
+    assert rc == 0
+    assert payload["plugins"] == ["fixture-plugin"]
+    assert payload["plugin_result_count"] == 1
+    assert payload["results"][0]["plugin_result"] == "BC_001"
 
 
 def test_cli_website_mode_writes_summary(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
@@ -740,12 +939,108 @@ def test_reconcile_results_maps_saved_decisions() -> None:
     assert rows[0]["actual_decision"] == "DENIED"
     assert rows[0]["match"] is True
     assert reconciliation["total_reconciled"] == 1
+    assert reconciliation["reconcilable_total"] == 2
     assert reconciliation["unreconciled"] == 1
     assert reconciliation["reconciliation_coverage_pct"] == 50.0
     assert reconciliation["unreconciled_request_ids"] == ["req-2"]
+    assert reconciliation["skipped_request_ids"] == []
+
+
+def test_reconcile_results_skips_auth_required_lookups_from_coverage() -> None:
+    class FakeClient:
+        def lookup_decision(self, request_id: str):
+            return type(
+                "Lookup",
+                (),
+                {
+                    "request_id": request_id,
+                    "decision": None,
+                    "endpoint": "https://app.aletheia-core.com/api/logs",
+                    "auth_mode": "session_cookie_required",
+                },
+            )()
+
+    rows = [
+        {
+            "id": "A1",
+            "name": "a",
+            "category": "prompt_injection",
+            "expected_decision": "DENIED",
+            "actual_decision": "ERROR",
+            "match": False,
+            "request_id": "req-1",
+            "reason": "timeout",
+        }
+    ]
+
+    reconciliation = reconcile_results(rows, FakeClient())
+
+    assert reconciliation["total_reconciled"] == 0
+    assert reconciliation["reconcilable_total"] == 0
+    assert reconciliation["unreconciled"] == 0
+    assert reconciliation["reconciliation_coverage_pct"] == 100.0
+    assert reconciliation["unreconciled_request_ids"] == []
+    assert reconciliation["skipped_request_ids"] == ["req-1"]
 
 
 def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "summary.json"
+
+    class FakeClient:
+        base_url = "https://example.test"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def audit(self, payload: str, action: str, origin: str) -> _AuditResult:
+            return _AuditResult("ERROR", "req-1", {}, "empty", raw={"status_code": 500})
+
+        def lookup_decision(self, request_id: str):
+            return type(
+                "Lookup",
+                (),
+                {
+                    "request_id": request_id,
+                    "decision": None,
+                    "endpoint": "https://app.aletheia-core.com/api/logs",
+                    "auth_mode": "unknown",
+                },
+            )()
+
+    monkeypatch.setattr(
+        runner,
+        "load_attacks",
+        lambda category=None: [
+            {
+                "id": "PI_T3",
+                "name": "reconciliation fail",
+                "category": "prompt_injection",
+                "expected_decision": "DENIED",
+                "payload": "ignore rules",
+            }
+        ],
+    )
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    data = json.loads(output.read_text())
+    assert rc == 2
+    assert data["reconciliation"]["reconcilable_total"] == data["attacks_total"]
+    assert data["reconciliation"]["reconciliation_coverage_pct"] == 0.0
+
+
+def test_cli_api_mode_skips_auth_required_reconciliation_gap(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     output = tmp_path / "summary.json"
 
     class FakeClient:
@@ -778,7 +1073,7 @@ def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeyp
         lambda category=None: [
             {
                 "id": "PI_T3",
-                "name": "reconciliation fail",
+                "name": "reconciliation skip",
                 "category": "prompt_injection",
                 "expected_decision": "DENIED",
                 "payload": "ignore rules",
@@ -797,8 +1092,11 @@ def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeyp
 
     rc = runner.cli()
     data = json.loads(output.read_text())
-    assert rc == 2
-    assert data["reconciliation"]["reconciliation_coverage_pct"] == 0.0
+
+    assert rc == 0
+    assert data["reconciliation"]["reconcilable_total"] == 0
+    assert data["reconciliation"]["reconciliation_coverage_pct"] == 100.0
+    assert data["reconciliation"]["skipped_request_ids"] == ["req-1"]
 
 
 def test_cli_combined_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
