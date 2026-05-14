@@ -5,11 +5,28 @@ Brought to you by Aletheia Core - runtime AI security for agents.
 A command center for adversarial operations against the [Aletheia](https://aletheia-core.com) AI security surface.
 The dashboard is the primary operating surface for triage, drill-down, and mission prioritization, while the CLI is the execution surface for running sweeps, applying gates, and exporting artifacts.
 
-Current release: `v0.2.1`
+Current release: `v1.2.0`
+
+## Ethical Use And Permissions
+
+This toolkit is for authorized security testing only.
+
+- Only assess systems you own or have explicit written permission to test.
+- Follow applicable laws, contracts, and disclosure requirements.
+- Do not use this project to target third-party infrastructure without authorization.
+- Treat findings and artifacts as sensitive security data.
+
+By using this project, you agree to operate within legal and ethical boundaries.
 
 ## Demo Video
 
 [![Watch the demo](docs/images/video_thumbnail.png)](https://youtu.be/placeholder)
+
+Demo media guidance:
+
+- Replace the placeholder link with a recorded walkthrough before public launch.
+- Include one short CLI run and one hosted dashboard flow in the recording.
+- Blur or redact tenant identifiers, tokens, and sensitive target data.
 
 ## What it does
 
@@ -70,6 +87,11 @@ This runs representative backend tests plus dashboard lint/build checks.
 
 Review the [Certified AI Red Team Operator (CARTO) exam blueprint](docs/certification/syllabus.md) for the initial certification syllabus outline.
 
+Additional CARTO-aligned operator guidance:
+
+- [Command-center architecture and data shape notes](docs/command-center-data-shapes.md)
+- [Command-center operator workflow details](docs/command-center.md)
+
 ## Attack Taxonomy
 
 - [Jailbreak catalogs](attacks/jailbreaks/)
@@ -103,15 +125,32 @@ Supported command-center flags:
 Hosted operator mode:
 
 - Run a sweep once with `python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs --output summary.json`.
-- Start the hosted dashboard with `python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode auto`.
+- Start the hosted dashboard with `python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080`.
 - Use `ALETHEIA_DASHBOARD_USERNAME` plus `ALETHEIA_DASHBOARD_PASSWORD_HASH` for browser login, `ALETHEIA_DASHBOARD_API_KEY_HASH` for header-based API access, or `ALETHEIA_DASHBOARD_TRUST_PROXY_AUTH=true` to trust reverse-proxy identity headers.
 - Browser login issues signed `HttpOnly` session cookies with strict same-site policy and configurable 8-24 hour lifetime.
 - The hosted dashboard auto-loads the latest run from `/api/runs`; the operator does not need to upload JSON manually.
 - Health-check endpoint: `http://<host>:8080/api/health`.
 
+Hosted mode hardening defaults in v1.2.0:
+
+- `--serve` now defaults to authenticated mode (`--auth-mode basic`).
+- If you explicitly set `--auth-mode disabled`, the CLI emits a loud warning.
+- Hosted APIs are rate-limited by default (30 requests/minute per principal/IP).
+- Use `ALETHEIA_DASHBOARD_RATE_LIMIT_PER_MINUTE` to tune the default for trusted environments.
+
 Agentic mode uses the standard mode selector:
 
     python -m kit.runner --mode agentic --threat-feed-file sample_threat_feed.json --output runs/agentic_results.json
+
+    Authorized external-target examples:
+
+    - Third-party website (with written permission):
+
+        python -m kit.runner --mode website --target-url https://partner-example.com --output runs/partner_website_summary.json
+
+    - Public third-party repository:
+
+        python -m kit.runner --mode repo --repo-url https://github.com/example/public-repo --output runs/partner_repo_summary.json
 
 Quick agentic launch flow:
 
@@ -227,7 +266,14 @@ How to securely expose the dashboard:
 - Backward-compatible browser-login mode: set `ALETHEIA_DASHBOARD_USERNAME` and `ALETHEIA_DASHBOARD_PASSWORD`; the password is hashed in memory at startup and a warning is emitted.
 - API key mode: set `ALETHEIA_DASHBOARD_API_KEY_HASH` and optionally `ALETHEIA_DASHBOARD_API_KEY_HEADER`.
 - Reverse proxy mode: set `ALETHEIA_DASHBOARD_TRUST_PROXY_AUTH=true` and forward `X-Forwarded-User` or `Authorization` from nginx, Caddy, or Traefik.
-- If no dashboard auth env vars are set, hosted mode stays available with a clear warning and `--auth-mode auto` resolves to `disabled`.
+- If you explicitly choose `--auth-mode auto` and no dashboard auth env vars are set, hosted mode resolves to `disabled` with a warning.
+
+Public deployment guidance:
+
+- Always terminate TLS at the edge (nginx/Caddy/Traefik/cloud LB).
+- Keep the dashboard behind a reverse proxy, WAF, and network allowlist.
+- Prefer hashed secrets (`*_HASH`) over plaintext values.
+- Disable direct internet exposure for non-production environments.
 
 Docker / reverse-proxy example:
 
@@ -236,7 +282,7 @@ Docker / reverse-proxy example:
         image: python:3.12-slim
         working_dir: /workspace
         command: >
-          sh -lc "pip install . && python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode auto"
+          sh -lc "pip install . && python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode basic"
         environment:
           ALETHEIA_DASHBOARD_USERNAME: aletheia
           ALETHEIA_DASHBOARD_PASSWORD_HASH: ${ALETHEIA_DASHBOARD_PASSWORD_HASH}
@@ -281,7 +327,57 @@ Current repo checks include:
 - weak crypto primitive usage checks
 - config/policy drift patterns (TLS verify disabled, wildcard CORS, JWT none)
 
-GitHub repo audit support is public-repo first: `--repo-url` clones a public GitHub repository into a temporary workspace and reuses the same static scanner. Private repo support is planned for a later phase.
+GitHub repo audit supports both **public and private** repositories:
+
+```bash
+# Public repo (no authentication required)
+python -m kit.runner --mode repo \
+    --repo-url https://github.com/example/public-repo \
+    --output runs/repo_summary.json
+
+# Private repo via PAT (or fine-grained token with Contents: read scope)
+python -m kit.runner --mode repo \
+    --repo-url https://github.com/myorg/private-repo \
+    --repo-token ghp_... \
+    --output runs/repo_summary.json
+
+# Or set the env var (preferred — keeps token out of shell history)
+export ALETHEIA_GITHUB_TOKEN=ghp_...
+python -m kit.runner --mode repo \
+    --repo-url https://github.com/myorg/private-repo \
+    --output runs/repo_summary.json
+```
+
+> **Security**: the token is delivered via `GIT_ASKPASS` so it never appears in
+> process command-line arguments, run logs, or summary JSON output.
+
+### Scan profiles
+
+Control scanning depth with `--scan-profile`:
+
+| Profile  | Scanners enabled |
+|----------|-----------------|
+| `light`  | secrets, ci_config, language_risks, threat_feed |
+| `medium` | (default) light + dep_hygiene + dep_advisories |
+| `full`   | medium + semgrep + bandit + trivy + npm_audit |
+| `custom` | arbitrary set from `--scan-profile-file` |
+
+```bash
+# Fast surface scan (no dep advisory tooling)
+python -m kit.runner --mode repo --repo-path . --scan-profile light --output runs/repo_summary.json
+
+# Deep scan with all external tools
+python -m kit.runner --mode repo --repo-path . --scan-profile full --output runs/repo_summary.json
+
+# Custom scanner set
+echo '{"scanners": ["secrets", "bandit", "trivy"]}' > my_profile.json
+python -m kit.runner --mode repo --repo-path . \
+    --scan-profile custom --scan-profile-file my_profile.json \
+    --output runs/repo_summary.json
+```
+
+`full` profile requires the respective tools on `PATH` (`semgrep`, `bandit`, `trivy`, `npm`). Missing tools
+are reported as `{"status": "unavailable"}` in `extra_tools` without aborting the run.
 
 Dependency advisory enrichment:
 
@@ -305,11 +401,11 @@ contribution.
 
 Threat-feed enrichment:
 
-- Optional mapping file `threat_feed.json` can attach threat intelligence context
+- Optional mapping file `examples/threat_feed.example.json` can attach threat intelligence context
     to matching finding types.
 - Override location with CLI flag:
 
-            python -m kit.runner --mode repo --repo-path . --threat-feed-file threat_feed.json
+            python -m kit.runner --mode repo --repo-path . --threat-feed-file examples/threat_feed.example.json
 
 - Summary includes `threat_feed.source`, `threat_feed.matches_total`, and
     `threat_feed.matches_by_type`.
@@ -420,6 +516,54 @@ Current custom technique taxonomy examples:
 - `encoded_instruction_injection`
 - `direct_data_exfiltration`
 
+## Multi-target batch mode (Phase 2)
+
+Sweep multiple API endpoints, repositories, and websites in a single command using a targets file:
+
+    cat > targets.json <<'JSON'
+    [
+        {"type": "api",     "url": "https://api.example.com",              "label": "prod-api"},
+        {"type": "repo",    "path": "/path/to/local/repo",                 "label": "backend-service"},
+        {"type": "repo",    "url": "https://github.com/example/public-api","label": "vendor-sdk"},
+        {"type": "website", "url": "https://app.example.com",              "label": "frontend"}
+    ]
+    JSON
+
+    python -m kit.runner --mode combined \
+        --targets-file targets.json \
+        --artifact-dir runs \
+        --output runs/batch_summary.json
+
+Each target runs through its corresponding mode runner (`api`, `repo`, `website`) with the same gates and thresholds as single-target runs. Progress is streamed to stderr as each target completes.
+
+Batch output shape:
+
+- `batch_summary.json`: top-level summary with `batch_mode`, `targets_total`, `targets_completed`, `targets_failed`, per-target status, and merged `gates`.
+- `runs/run-batch-{stamp}/targets/{label}/summary.json`: per-target summary.
+- `runs/run-batch-{stamp}/targets/{label}/artifacts/run-*/command_center.sqlite`: per-target SQLite.
+- `runs/run-combined-{stamp}/command_center.sqlite`: merged SQLite with one `targets` row per batch target.
+
+Parallel concurrency (default 2 workers):
+
+    python -m kit.runner --mode combined \
+        --targets-file targets.json \
+        --max-parallel-targets 4 \
+        --output runs/batch_summary.json
+
+Pass threshold overrides that apply to every target:
+
+    python -m kit.runner --mode combined \
+        --targets-file targets.json \
+        --thresholds max_high=5,min_pass_rate=80 \
+        --output runs/batch_summary.json
+
+Target object fields:
+
+- `type` (required): `api`, `repo`, or `website`
+- `url` (optional): target URL (API base URL, repo clone URL, or website URL)
+- `path` (optional): local filesystem path for repo targets
+- `label` (optional): human-readable name used in artifact paths and batch summary keys (auto-generated from type and index if omitted)
+
 ## Dashboard
 
 Open `dashboard/index.html` in a browser for the static Sovereign overview.
@@ -444,6 +588,18 @@ Dashboard views now include:
 - top weak spots for operator triage
 
 For command-center usage details, see [docs/command-center.md](docs/command-center.md).
+
+## Production Launch Checklist
+
+- [ ] Pin release and environment (`pyproject.toml`, lockfiles, container tag if used).
+- [ ] Set dashboard auth (`ALETHEIA_DASHBOARD_PASSWORD_HASH` and session secret) before using `--serve`.
+- [ ] Put dashboard behind TLS termination and a reverse proxy.
+- [ ] Confirm rate limiting and ingress controls for hosted endpoints.
+- [ ] Store run artifacts under `runs/` only; do not commit operational summaries or logs.
+- [ ] Validate `.env` and CI secrets handling (no plaintext tokens in logs/artifacts).
+- [ ] Run `./scripts/bootstrap.sh` then `./scripts/verify.sh` before release.
+- [ ] Re-run representative API + website + repo audits on approved external targets.
+- [ ] Review legal authorization evidence for each third-party target.
 
 ## Sovereign Command Center (Next.js)
 
@@ -527,7 +683,7 @@ Disable fallback to require browser-mode only:
 
 Custom finding rules (Phase 2 item 1):
 
-        cat > rules.json <<'JSON'
+    cat > rules.json <<'JSON'
         [
             {
                 "name": "Debug token leak",
@@ -547,6 +703,8 @@ Custom finding rules (Phase 2 item 1):
         JSON
 
         python -m kit.runner --mode website --target-url https://example.com --rules-file rules.json
+
+    Reusable starter rule set: `examples/custom_rules.example.json`.
 
 Rule fields:
 
@@ -715,7 +873,7 @@ finding with `CRITICAL` severity.
 
 - Run a local Aletheia engine (use the hosted one).
 - Provide a gateway, database, or middleware (none needed).
-- Probe non-Aletheia targets (that's Phase 2).
+- Full generic endpoint templates and non-chat protocol fuzzing (planned in later phases).
 - Generate PDF reports (Phase 2).
 
 ## License

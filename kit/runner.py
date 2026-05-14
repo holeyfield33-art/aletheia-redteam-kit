@@ -24,9 +24,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from fnmatch import fnmatch
 from pathlib import Path
@@ -64,6 +66,7 @@ DEFAULT_AGENTIC_OUTPUT = Path("runs/agentic_results.json")
 DEFAULT_REQUEST_DELAY_SEC = 1.0
 DEFAULT_MAX_REQUEST_DELAY_SEC = 30.0
 RECONCILIATION_COVERAGE_THRESHOLD_PCT = 95.0
+TOOL_VERSION = "1.2.0"
 
 
 def _parse_key_value_csv(raw: str | None) -> dict[str, str]:
@@ -79,6 +82,357 @@ def _parse_key_value_csv(raw: str | None) -> dict[str, str]:
         if key:
             pairs[key] = value
     return pairs
+
+
+def _has_control_chars(value: str) -> bool:
+    return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+
+
+def _sanitize_user_string(value: str | None, *, field_name: str, max_length: int = 2048) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    if len(normalized) > max_length:
+        raise ValueError(f"{field_name} is too long")
+    if _has_control_chars(normalized):
+        raise ValueError(f"{field_name} contains invalid control characters")
+    return normalized
+
+
+def _sanitize_json_path(value: str | None, *, field_name: str) -> str | None:
+    normalized = _sanitize_user_string(value, field_name=field_name, max_length=4096)
+    if not normalized:
+        return None
+    if Path(normalized).suffix.lower() != ".json":
+        raise ValueError(f"{field_name} must point to a .json file")
+    return normalized
+
+
+def _sanitize_repo_url(value: str | None) -> str | None:
+    normalized = _sanitize_user_string(value, field_name="repo_url", max_length=512)
+    if not normalized:
+        return None
+    if normalized.startswith("file://"):
+        raise ValueError("repo_url must be a public GitHub URL or owner/repo shorthand")
+    return normalized
+
+
+def _sanitize_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
+    args.repo_url = _sanitize_repo_url(getattr(args, "repo_url", None))
+    # repo_token is intentionally not logged; read from env if not passed explicitly
+    if not getattr(args, "repo_token", None):
+        args.repo_token = os.environ.get("ALETHEIA_GITHUB_TOKEN") or None
+    args.threat_feed_file = _sanitize_json_path(getattr(args, "threat_feed_file", None), field_name="threat_feed_file")
+    args.rules_file = _sanitize_json_path(getattr(args, "rules_file", None), field_name="rules_file")
+    args.auth_workflow_file = _sanitize_json_path(getattr(args, "auth_workflow_file", None), field_name="auth_workflow_file")
+    args.prompt_tests_file = _sanitize_json_path(getattr(args, "prompt_tests_file", None), field_name="prompt_tests_file")
+    args.conversation_file = _sanitize_json_path(getattr(args, "conversation_file", None), field_name="conversation_file")
+    args.targets_file = _sanitize_json_path(getattr(args, "targets_file", None), field_name="targets_file")
+    return args
+
+
+def _slugify_target_label(value: str | None, fallback: str) -> str:
+    raw = _sanitize_user_string(value, field_name="target_label", max_length=128) or fallback
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", raw).strip("-_.")
+    return slug or fallback
+
+
+def _load_targets_file(path: str | None) -> list[dict[str, object]]:
+    if not path:
+        return []
+
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise ValueError("targets file must contain a JSON array of target objects")
+
+    targets: list[dict[str, object]] = []
+    for index, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Target #{index} must be a JSON object")
+
+        target_type = str(item.get("type") or "").strip().lower()
+        if target_type not in {"api", "website", "repo"}:
+            raise ValueError(f"Target #{index} must declare type api, website, or repo")
+
+        target = dict(item)
+        target["type"] = target_type
+        target["label"] = _sanitize_user_string(target.get("label") or target.get("name"), field_name="target_label", max_length=128)
+        target["url"] = _sanitize_user_string(target.get("url") or target.get("target_url") or target.get("base_url"), field_name="target_url", max_length=4096)
+        target["path"] = _sanitize_user_string(target.get("path") or target.get("repo_path"), field_name="repo_path", max_length=4096)
+        target["repo_url"] = _sanitize_repo_url(target.get("repo_url") if isinstance(target.get("repo_url"), str) else None)
+        target["targets_file"] = None
+        targets.append(target)
+
+    return targets
+
+
+def _append_optional_arg(legacy_args: list[str], flag: str, value: object | None) -> None:
+    if value is None:
+        return
+    if isinstance(value, bool):
+        if value:
+            legacy_args.append(flag)
+        return
+    if isinstance(value, list):
+        for item in value:
+            if item is not None and str(item).strip():
+                legacy_args.extend([flag, str(item)])
+        return
+    text = str(value).strip()
+    if text:
+        legacy_args.extend([flag, text])
+
+
+def _build_batch_target_legacy_args(args: argparse.Namespace, target: dict[str, object], output_path: Path, artifact_dir: Path) -> list[str]:
+    def arg(name: str, default: object | None = None) -> object | None:
+        return getattr(args, name, default)
+
+    legacy_args: list[str] = ["--mode", str(target["type"]), "--output", str(output_path), "--artifact-dir", str(artifact_dir)]
+
+    if target.get("type") == "api":
+        _append_optional_arg(legacy_args, "--target-url", target.get("url") or target.get("target_url") or target.get("base_url") or arg("target_url") or arg("base_url"))
+        _append_optional_arg(legacy_args, "--base-url", target.get("base_url") or target.get("url") or arg("base_url"))
+        _append_optional_arg(legacy_args, "--target-preset", target.get("target_preset") or arg("target_preset"))
+        _append_optional_arg(legacy_args, "--target-profile-file", target.get("target_profile_file") or arg("target_profile_file"))
+        _append_optional_arg(legacy_args, "--target-model", target.get("target_model") or arg("target_model"))
+        _append_optional_arg(legacy_args, "--auth-header", target.get("auth_header") or arg("auth_header"))
+        _append_optional_arg(legacy_args, "--auth-scheme", target.get("auth_scheme") or arg("auth_scheme"))
+        for header in (target.get("header") or arg("header") or []):
+            _append_optional_arg(legacy_args, "--header", header)
+        _append_optional_arg(legacy_args, "--conversation-file", target.get("conversation_file") or arg("conversation_file"))
+        _append_optional_arg(legacy_args, "--attack-intensity", target.get("attack_intensity") or arg("attack_intensity"))
+        _append_optional_arg(legacy_args, "--category", target.get("category") or arg("category"))
+        _append_optional_arg(legacy_args, "--categories", target.get("categories") or arg("categories"))
+        _append_optional_arg(legacy_args, "--max-attacks", target.get("max_attacks") or arg("max_attacks"))
+        _append_optional_arg(legacy_args, "--dedupe-semantic-threshold", target.get("dedupe_semantic_threshold") or arg("dedupe_semantic_threshold"))
+        _append_optional_arg(legacy_args, "--benign-ratio", target.get("benign_ratio") or arg("benign_ratio"))
+        for plugin in (target.get("plugin") or arg("plugin") or []):
+            _append_optional_arg(legacy_args, "--plugin", plugin)
+        _append_optional_arg(legacy_args, "--payload-mutation-plugin", target.get("payload_mutation_plugin") or arg("payload_mutation_plugin"))
+        _append_optional_arg(legacy_args, "--payload-expand-to", target.get("payload_expand_to") or arg("payload_expand_to"))
+        _append_optional_arg(legacy_args, "--payload-seed-limit", target.get("payload_seed_limit") or arg("payload_seed_limit"))
+        _append_optional_arg(legacy_args, "--payload-family-file", target.get("payload_family_file") or arg("payload_family_file"))
+        for corpus_file in (target.get("external_corpus_file") or arg("external_corpus_file") or []):
+            _append_optional_arg(legacy_args, "--external-corpus-file", corpus_file)
+        _append_optional_arg(legacy_args, "--external-corpus-category", target.get("external_corpus_category") or arg("external_corpus_category"))
+        _append_optional_arg(legacy_args, "--objective", target.get("objective") or arg("objective"))
+        _append_optional_arg(legacy_args, "--agentic-iterations", target.get("agentic_iterations") or arg("agentic_iterations"))
+        _append_optional_arg(legacy_args, "--max-iterations", target.get("max_iterations") or arg("max_iterations"))
+        _append_optional_arg(legacy_args, "--agentic-seed-size", target.get("agentic_seed_size") or arg("agentic_seed_size"))
+        _append_optional_arg(legacy_args, "--agentic-variants", target.get("agentic_variants") or arg("agentic_variants"))
+        for strategy in (target.get("mutation_strategy") or arg("mutation_strategy") or []):
+            _append_optional_arg(legacy_args, "--mutation-strategy", strategy)
+        _append_optional_arg(legacy_args, "--agentic-no-early-stop", target.get("agentic_no_early_stop") or arg("agentic_no_early_stop"))
+    elif target.get("type") == "website":
+        _append_optional_arg(legacy_args, "--target-url", target.get("url") or target.get("target_url") or arg("target_url"))
+        _append_optional_arg(legacy_args, "--max-pages", target.get("max_pages") or arg("max_pages"))
+        _append_optional_arg(legacy_args, "--max-depth", target.get("max_depth") or arg("max_depth"))
+        _append_optional_arg(legacy_args, "--timeout-sec", target.get("timeout_sec") or arg("timeout_sec"))
+        _append_optional_arg(legacy_args, "--headed", target.get("headed") or arg("headed"))
+        for route in (target.get("required_route") or arg("required_route") or []):
+            _append_optional_arg(legacy_args, "--required-route", route)
+        _append_optional_arg(legacy_args, "--max-critical", target.get("max_critical") or arg("max_critical"))
+        _append_optional_arg(legacy_args, "--max-high", target.get("max_high") or arg("max_high"))
+        _append_optional_arg(legacy_args, "--min-pass-rate", target.get("min_pass_rate") or arg("min_pass_rate"))
+        _append_optional_arg(legacy_args, "--no-browser-fallback", target.get("no_browser_fallback") or arg("no_browser_fallback"))
+        _append_optional_arg(legacy_args, "--rules-file", target.get("rules_file") or arg("rules_file"))
+        _append_optional_arg(legacy_args, "--auth-workflow-file", target.get("auth_workflow_file") or arg("auth_workflow_file"))
+        for seed in (target.get("auth_seed_url") or arg("auth_seed_url") or []):
+            _append_optional_arg(legacy_args, "--auth-seed-url", seed)
+        _append_optional_arg(legacy_args, "--prompt-tests-file", target.get("prompt_tests_file") or arg("prompt_tests_file"))
+        for route in (target.get("protected_route") or arg("protected_route") or []):
+            _append_optional_arg(legacy_args, "--protected-route", route)
+        for profile in (target.get("protected_profile") or arg("protected_profile") or []):
+            _append_optional_arg(legacy_args, "--protected-profile", profile)
+        _append_optional_arg(legacy_args, "--baseline-summary", target.get("baseline_summary") or arg("baseline_summary"))
+        _append_optional_arg(legacy_args, "--trust-critical-penalty", target.get("trust_critical_penalty") or arg("trust_critical_penalty"))
+        _append_optional_arg(legacy_args, "--trust-high-penalty", target.get("trust_high_penalty") or arg("trust_high_penalty"))
+        _append_optional_arg(legacy_args, "--exploit-success-weight", target.get("exploit_success_weight") or arg("exploit_success_weight"))
+        _append_optional_arg(legacy_args, "--safe-min-trust", target.get("safe_min_trust") or arg("safe_min_trust"))
+        _append_optional_arg(legacy_args, "--safe-max-exploitability", target.get("safe_max_exploitability") or arg("safe_max_exploitability"))
+        _append_optional_arg(legacy_args, "--warning-min-trust", target.get("warning_min_trust") or arg("warning_min_trust"))
+        _append_optional_arg(legacy_args, "--warning-max-exploitability", target.get("warning_max_exploitability") or arg("warning_max_exploitability"))
+    elif target.get("type") == "repo":
+        _append_optional_arg(legacy_args, "--repo-path", target.get("path") or target.get("repo_path") or arg("repo_path"))
+        _append_optional_arg(legacy_args, "--repo-url", target.get("repo_url") or arg("repo_url"))
+        _append_optional_arg(legacy_args, "--threat-feed-file", target.get("threat_feed_file") or arg("threat_feed_file"))
+        _append_optional_arg(legacy_args, "--deps-scan", target.get("deps_scan") or arg("deps_scan"))
+        _append_optional_arg(legacy_args, "--scan-profile", target.get("scan_profile") or arg("scan_profile"))
+        _append_optional_arg(legacy_args, "--scan-profile-file", target.get("scan_profile_file") or arg("scan_profile_file"))
+        # repo_token is deliberately NOT forwarded through args — use ALETHEIA_GITHUB_TOKEN env var in child runs
+        _append_optional_arg(legacy_args, "--repo-include-test-fixtures", target.get("repo_include_test_fixtures") or arg("repo_include_test_fixtures"))
+        _append_optional_arg(legacy_args, "--gate-exceptions-file", target.get("gate_exceptions_file") or arg("gate_exceptions_file"))
+        _append_optional_arg(legacy_args, "--baseline-state-file", target.get("baseline_state_file") or arg("baseline_state_file"))
+        _append_optional_arg(legacy_args, "--baseline-action", target.get("baseline_action") or arg("baseline_action"))
+        _append_optional_arg(legacy_args, "--baseline-owner", target.get("baseline_owner") or arg("baseline_owner"))
+        _append_optional_arg(legacy_args, "--baseline-reason", target.get("baseline_reason") or arg("baseline_reason"))
+        _append_optional_arg(legacy_args, "--baseline-expires-at", target.get("baseline_expires_at") or arg("baseline_expires_at"))
+        _append_optional_arg(legacy_args, "--max-repo-critical", target.get("max_repo_critical") or arg("max_repo_critical"))
+        _append_optional_arg(legacy_args, "--max-repo-high", target.get("max_repo_high") or arg("max_repo_high"))
+        _append_optional_arg(legacy_args, "--max-deps-critical", target.get("max_deps_critical") or arg("max_deps_critical"))
+        _append_optional_arg(legacy_args, "--max-deps-high", target.get("max_deps_high") or arg("max_deps_high"))
+    else:
+        raise ValueError(f"Unsupported target type: {target.get('type')}")
+
+    return legacy_args
+
+
+def _load_summary_payload(path: Path) -> dict[str, object]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _target_component_key(target: dict[str, object], index: int) -> str:
+    label = target.get("label") or target.get("name") or f"target-{index}"
+    return f"{_slugify_target_label(str(label), f'target-{index}')}-{index:02d}"
+
+
+def _merge_batch_gates(target_summaries: list[dict[str, object]]) -> dict[str, object]:
+    violations: list[str] = []
+    passed = True
+    for item in target_summaries:
+        target_name = str(item.get("component_key") or item.get("id") or "target")
+        return_code = int(item.get("return_code") or 0)
+        if item.get("error"):
+            passed = False
+            violations.append(f"{target_name}:error")
+        if return_code != 0:
+            passed = False
+            violations.append(f"{target_name}:return_code_{return_code}")
+        gates = item.get("gates")
+        if isinstance(gates, dict) and not gates.get("pass", False):
+            passed = False
+            for violation in gates.get("violations") or []:
+                violations.append(f"{target_name}: {violation}")
+    return {"pass": passed, "violations": violations}
+
+
+def _run_targets_batch(args: argparse.Namespace, plugins: list[object] | None = None) -> dict:
+    targets = _load_targets_file(args.targets_file)
+    if not targets:
+        raise ValueError("targets file did not contain any targets")
+
+    artifact_dir = Path(getattr(args, "artifact_dir", "runs"))
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    batch_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    batch_root = artifact_dir / f"run-batch-{batch_stamp}"
+    batch_root.mkdir(parents=True, exist_ok=True)
+    target_root = batch_root / "targets"
+    target_root.mkdir(parents=True, exist_ok=True)
+
+    max_parallel = max(1, int(getattr(args, "max_parallel_targets", 2) or 2))
+    max_parallel = min(max_parallel, len(targets))
+
+    def _execute_target(index: int, target: dict[str, object]) -> dict[str, object]:
+        component_key = _target_component_key(target, index)
+        target_dir = target_root / component_key
+        target_dir.mkdir(parents=True, exist_ok=True)
+        summary_path = target_dir / "summary.json"
+        child_artifact_dir = target_dir / "artifacts"
+        child_artifact_dir.mkdir(parents=True, exist_ok=True)
+
+        child_argv = _build_batch_target_legacy_args(args, target, summary_path, child_artifact_dir)
+        rc = _legacy_cli(child_argv)
+        if not summary_path.exists():
+            raise RuntimeError(f"Target {component_key} did not produce a summary")
+
+        summary = _load_summary_payload(summary_path)
+        command_center_path = _write_command_center_artifacts(
+            summary_path=summary_path,
+            artifact_dir=child_artifact_dir,
+            dashboard_file=None,
+            baseline_path=getattr(args, "baseline", None),
+        )
+        return {
+            "id": str(target.get("id") or f"target-{index}"),
+            "type": target["type"],
+            "label": target.get("label") or target.get("name") or component_key,
+            "component_key": component_key,
+            "status": "completed" if rc == 0 else "failed",
+            "return_code": rc,
+            "artifact_dir": str(child_artifact_dir),
+            "summary_path": str(summary_path),
+            "command_center_path": str(command_center_path),
+            "gates": summary.get("gates") if isinstance(summary, dict) else None,
+            "summary": summary,
+        }
+
+    target_results: list[dict[str, object]] = []
+    with ThreadPoolExecutor(max_workers=max_parallel) as executor:
+        futures = {
+            executor.submit(_execute_target, index, target): (index, target)
+            for index, target in enumerate(targets, 1)
+        }
+        completed = 0
+        for future in as_completed(futures):
+            index, target = futures[future]
+            component_key = _target_component_key(target, index)
+            try:
+                result = future.result()
+            except Exception as exc:
+                result = {
+                    "id": str(target.get("id") or f"target-{index}"),
+                    "type": target["type"],
+                    "label": target.get("label") or target.get("name") or component_key,
+                    "component_key": component_key,
+                    "status": "failed",
+                    "return_code": 1,
+                    "artifact_dir": str(target_root / component_key / "artifacts"),
+                    "summary_path": str(target_root / component_key / "summary.json"),
+                    "command_center_path": None,
+                    "error": str(exc),
+                }
+            target_results.append(result)
+            completed += 1
+            print(
+                f"[batch {completed}/{len(targets)}] {component_key} {result['status']}",
+                file=sys.stderr,
+            )
+
+    target_results.sort(key=lambda item: str(item.get("component_key") or ""))
+    components = {
+        str(item["component_key"]): item["summary"]
+        for item in target_results
+        if isinstance(item.get("summary"), dict)
+    }
+    overall_gates = _merge_batch_gates(target_results)
+    batch_summary: dict[str, object] = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "combined",
+        "batch_mode": "targets-file",
+        "targets_file": str(args.targets_file),
+        "targets_total": len(targets),
+        "targets_completed": sum(1 for item in target_results if item.get("status") == "completed"),
+        "targets_failed": sum(1 for item in target_results if item.get("status") != "completed"),
+        "targets": [
+            {
+                "id": item.get("id"),
+                "type": item.get("type"),
+                "label": item.get("label"),
+                "component_key": item.get("component_key"),
+                "status": item.get("status"),
+                "return_code": item.get("return_code"),
+                "summary_path": item.get("summary_path"),
+                "command_center_path": item.get("command_center_path"),
+                "artifact_dir": item.get("artifact_dir"),
+                "error": item.get("error"),
+            }
+            for item in target_results
+        ],
+        "target_results": target_results,
+        "components": components,
+        "gates": overall_gates,
+    }
+
+    batch_summary["target_count"] = len(targets)
+    batch_summary["progress"] = {
+        "completed": batch_summary["targets_completed"],
+        "failed": batch_summary["targets_failed"],
+        "total": len(targets),
+    }
+
+    return batch_summary, batch_root
 
 
 def _apply_thresholds_to_legacy_args(legacy_args: list[str], thresholds_raw: str | None) -> None:
@@ -164,7 +518,7 @@ def _write_command_center_artifacts(
         summary,
         source_path=str(summary_path),
         baseline_summary=baseline_summary,
-        tool_version="0.2.1",
+        tool_version=TOOL_VERSION,
         git_commit=os.environ.get("GIT_COMMIT"),
     )
 
@@ -251,6 +605,7 @@ def _command_center_cli(argv: list[str]) -> int:
     run_parser.add_argument("--target-url")
     run_parser.add_argument("--repo-path", default=".")
     run_parser.add_argument("--repo-url")
+    run_parser.add_argument("--targets-file", help="JSON array of targets to execute in batch")
     run_parser.add_argument("--base-url", help="Override target base URL for API, agentic, or combined runs")
     run_parser.add_argument("--target-preset", choices=["aletheia", "openai"], default="aletheia")
     run_parser.add_argument("--target-profile-file", help="JSON target profile file for custom API-compatible providers")
@@ -266,6 +621,12 @@ def _command_center_cli(argv: list[str]) -> int:
         default=[],
         help="Runner plugin module, module:object, or file.py[:object]; repeatable",
     )
+    run_parser.add_argument(
+        "--max-parallel-targets",
+        type=int,
+        default=2,
+        help="Maximum number of targets to execute concurrently when --targets-file is provided",
+    )
 
     dashboard_parser = subparsers.add_parser("dashboard", help="Prepare/open dashboard from artifacts")
     dashboard_parser.add_argument("--artifact-dir", default="runs")
@@ -278,8 +639,8 @@ def _command_center_cli(argv: list[str]) -> int:
     dashboard_parser.add_argument(
         "--auth-mode",
         choices=["auto", "disabled", "basic", "api-key", "proxy"],
-        default="auto",
-        help="Hosted dashboard auth mode; auto enables auth when matching env vars are configured",
+        default="basic",
+        help="Hosted dashboard auth mode; default is basic to require auth in served mode",
     )
 
     compare_parser = subparsers.add_parser("compare", help="Compare current summary against baseline")
@@ -301,9 +662,20 @@ def _command_center_cli(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "run":
-        legacy_args: list[str] = ["--mode", args.mode, "--output", args.output, "--repo-path", args.repo_path]
+        legacy_args: list[str] = [
+            "--mode",
+            args.mode,
+            "--output",
+            args.output,
+            "--repo-path",
+            args.repo_path,
+            "--artifact-dir",
+            args.artifact_dir,
+        ]
         if args.repo_url:
             legacy_args.extend(["--repo-url", args.repo_url])
+        if args.targets_file:
+            legacy_args.extend(["--targets-file", args.targets_file])
         if args.target_url:
             legacy_args.extend(["--target-url", args.target_url])
         if args.base_url:
@@ -317,6 +689,7 @@ def _command_center_cli(argv: list[str]) -> int:
                 legacy_args.extend(["--baseline-state-file", args.baseline])
         _apply_thresholds_to_legacy_args(legacy_args, args.thresholds)
         _apply_target_profile_args_to_legacy_args(legacy_args, args)
+        legacy_args.extend(["--max-parallel-targets", str(args.max_parallel_targets)])
 
         rc = _legacy_cli(legacy_args)
 
@@ -349,6 +722,18 @@ def _command_center_cli(argv: list[str]) -> int:
         if not manifest.exists():
             manifest.write_text("[]\n", encoding="utf-8")
         if args.serve:
+            resolved_auth_mode = args.auth_mode
+            if resolved_auth_mode == "auto":
+                resolved_auth_mode = "basic"
+            if resolved_auth_mode == "disabled":
+                print(
+                    "SECURITY WARNING: hosted dashboard auth is disabled. Only run behind trusted network boundaries, TLS, and a hardened reverse proxy.",
+                    file=sys.stderr,
+                )
+            print(
+                "Hosted security recommendation: terminate TLS at a reverse proxy and forward only authenticated traffic.",
+                file=sys.stderr,
+            )
             print(f"Dashboard available at http://{args.host}:{args.port}/dashboard/", file=sys.stderr)
             serve_dashboard(
                 DashboardServerConfig(
@@ -357,7 +742,7 @@ def _command_center_cli(argv: list[str]) -> int:
                     dashboard_file=Path(args.dashboard_file),
                     host=args.host,
                     port=args.port,
-                    auth_mode=args.auth_mode,
+                    auth_mode=resolved_auth_mode,
                 )
             )
             return PASS
@@ -581,6 +966,7 @@ def _load_attacks_with_cli_options(category: str | None, threat_feed_file: str |
 
 
 def load_conversation_attacks(path: str | None) -> list[dict]:
+    path = _sanitize_json_path(path, field_name="conversation_file")
     if not path:
         return []
 
@@ -1082,49 +1468,16 @@ def _clamp_score(value: float) -> int:
 
 
 def _run_repo_audit_with_cli_options(args: argparse.Namespace) -> dict:
-    try:
-        return run_repo_audit(
-            args.repo_path,
-            repo_url=args.repo_url,
-            threat_feed_path=args.threat_feed_file,
-            include_test_fixtures=args.repo_include_test_fixtures,
-            deps_scan=args.deps_scan,
-        )
-    except TypeError as exc:
-        message = str(exc)
-        if "repo_url" in message:
-            try:
-                return run_repo_audit(
-                    args.repo_path,
-                    threat_feed_path=args.threat_feed_file,
-                    include_test_fixtures=args.repo_include_test_fixtures,
-                    deps_scan=args.deps_scan,
-                )
-            except TypeError:
-                return run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
-        if "deps_scan" in message:
-            try:
-                return run_repo_audit(
-                    args.repo_path,
-                    repo_url=args.repo_url,
-                    threat_feed_path=args.threat_feed_file,
-                    include_test_fixtures=args.repo_include_test_fixtures,
-                )
-            except TypeError as fallback_exc:
-                if "include_test_fixtures" not in str(fallback_exc):
-                    raise
-                return run_repo_audit(
-                    args.repo_path,
-                    repo_url=args.repo_url,
-                    threat_feed_path=args.threat_feed_file,
-                )
-        if "include_test_fixtures" not in message:
-            raise
-        return run_repo_audit(
-            args.repo_path,
-            repo_url=args.repo_url,
-            threat_feed_path=args.threat_feed_file,
-        )
+    return run_repo_audit(
+        args.repo_path,
+        repo_url=args.repo_url,
+        threat_feed_path=args.threat_feed_file,
+        include_test_fixtures=getattr(args, "repo_include_test_fixtures", False),
+        deps_scan=getattr(args, "deps_scan", "auto"),
+        repo_token=getattr(args, "repo_token", None),
+        scan_profile=getattr(args, "scan_profile", None),
+        scan_profile_file=getattr(args, "scan_profile_file", None),
+    )
 
 
 def _api_exploitability_score(results: list[dict]) -> int:
@@ -1229,6 +1582,7 @@ def _parse_exception_expiry(raw_value: str) -> datetime | None:
 
 
 def _load_gate_exceptions(path: str | None) -> dict:
+    path = _sanitize_json_path(path, field_name="gate_exceptions_file")
     if not path:
         return {
             "source": None,
@@ -1494,6 +1848,7 @@ def _apply_baseline_action(
 
 def load_custom_rules(path: str | None) -> list[CustomFindingRule]:
     """Load custom website finding rules from JSON file."""
+    path = _sanitize_json_path(path, field_name="rules_file")
     if not path:
         return []
 
@@ -1539,6 +1894,7 @@ def load_custom_rules(path: str | None) -> list[CustomFindingRule]:
 
 def load_auth_workflow(path: str | None) -> list[AuthStep]:
     """Load auth workflow steps from JSON file."""
+    path = _sanitize_json_path(path, field_name="auth_workflow_file")
     if not path:
         return []
 
@@ -1584,6 +1940,7 @@ def load_auth_workflow(path: str | None) -> list[AuthStep]:
 
 def load_prompt_injection_tests(path: str | None) -> list[PromptInjectionTest]:
     """Load prompt injection test payloads from JSON file."""
+    path = _sanitize_json_path(path, field_name="prompt_tests_file")
     if not path:
         return []
 
@@ -1734,7 +2091,38 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-path", default=".", help="Repository root path for --mode repo")
     parser.add_argument(
         "--repo-url",
-        help="Public GitHub repository URL or owner/repo shorthand for --mode repo",
+        help="GitHub repository URL (public or private) or owner/repo shorthand for --mode repo",
+    )
+    parser.add_argument(
+        "--repo-token",
+        default=None,
+        help="GitHub personal-access token for private repo cloning (or set ALETHEIA_GITHUB_TOKEN env var; token is never logged)",
+    )
+    parser.add_argument(
+        "--scan-profile",
+        choices=["light", "medium", "full", "custom"],
+        default=None,
+        help="Scanning depth for repo mode: light (secrets+CI+language), medium (default, adds dep hygiene+advisories), full (medium + semgrep/bandit/trivy/npm-audit), or custom (requires --scan-profile-file)",
+    )
+    parser.add_argument(
+        "--scan-profile-file",
+        default=None,
+        help='JSON file with {"scanners": [...]} list when --scan-profile custom',
+    )
+    parser.add_argument(
+        "--targets-file",
+        help="JSON array of targets to execute in batch (type/api|website|repo plus per-target settings)",
+    )
+    parser.add_argument(
+        "--artifact-dir",
+        default="runs",
+        help="Directory used for batch and command-center artifacts",
+    )
+    parser.add_argument(
+        "--max-parallel-targets",
+        type=int,
+        default=2,
+        help="Maximum number of targets to execute concurrently when --targets-file is provided",
     )
     parser.add_argument(
         "--threat-feed-file",
@@ -1833,9 +2221,25 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--agentic-no-early-stop", action="store_true", help="Do not stop agentic mode after first bypass")
     args = parser.parse_args(argv)
+    args = _sanitize_legacy_args(args)
     plugins = _load_runner_plugins_from_args(args)
 
     if args.mode == "combined":
+        if args.targets_file:
+            batch_summary, _batch_root = _run_targets_batch(args, plugins=plugins)
+            Path(args.output).write_text(json.dumps(batch_summary, indent=2), encoding="utf-8")
+            _write_command_center_artifacts(
+                summary_path=Path(args.output),
+                artifact_dir=Path(args.artifact_dir),
+                dashboard_file=None,
+                baseline_path=getattr(args, "baseline", None),
+            )
+            print(
+                f"\nDone. Batch targets complete. Overall gate: {'PASS' if batch_summary['gates']['pass'] else 'FAIL'}. Output: {args.output}",
+                file=sys.stderr,
+            )
+            return PASS if batch_summary["gates"]["pass"] else FAIL_THRESHOLD
+
         gate_exceptions_data = _load_gate_exceptions(args.gate_exceptions_file)
         baseline_state, baseline_error = _load_baseline_state(args.baseline_state_file)
         combined: dict = {

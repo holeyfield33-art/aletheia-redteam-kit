@@ -199,6 +199,36 @@ def test_dashboard_api_key_mode_requires_header(tmp_path: Path) -> None:
     assert authorized.status_code == 200
 
 
+def test_dashboard_api_rate_limit_applies_to_authenticated_requests(tmp_path: Path) -> None:
+    with _env_vars(
+        {
+            "ALETHEIA_DASHBOARD_API_KEY": "op-key",
+            "ALETHEIA_DASHBOARD_RATE_LIMIT_PER_MINUTE": "2",
+        }
+    ):
+        with _running_dashboard(tmp_path, auth_mode="api-key") as base_url:
+            headers = {"X-API-Key": "op-key"}
+            first = httpx.get(f"{base_url}/api/runs", headers=headers)
+            second = httpx.get(f"{base_url}/api/runs", headers=headers)
+            third = httpx.get(f"{base_url}/api/runs", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert third.status_code == 429
+    assert third.json()["error"] == "rate_limit_exceeded"
+
+
+def test_dashboard_rejects_runs_path_traversal(tmp_path: Path) -> None:
+    with _env_vars({"ALETHEIA_DASHBOARD_API_KEY": "op-key"}):
+        with _running_dashboard(tmp_path, auth_mode="api-key") as base_url:
+            response = httpx.get(
+                f"{base_url}/runs/%2e%2e/README.md",
+                headers={"X-API-Key": "op-key"},
+            )
+
+    assert response.status_code in {403, 404}
+
+
 def test_auth_manager_locks_after_repeated_login_failures() -> None:
     current_time = {"value": 0.0}
     manager = DashboardAuthManager(

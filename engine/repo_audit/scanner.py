@@ -6,15 +6,71 @@ from datetime import datetime, timezone
 from fnmatch import fnmatch
 from math import log2
 from pathlib import Path
+import stat
 import tempfile
 import shutil
 import subprocess
+import os
 import re
 import tomllib
 import json
 from collections import defaultdict
 from urllib.parse import urlparse
 from typing import Any
+
+try:  # pragma: no cover - unavailable on some platforms
+    import resource
+except Exception:  # pragma: no cover - defensive
+    resource = None
+
+# ---------------------------------------------------------------------------
+# Scan profile definitions
+# ---------------------------------------------------------------------------
+#
+# Each profile is a set of scanner names that will be executed.  The names
+# map onto the scanner functions that _audit_repo_root dispatches to.
+#
+# "light"   – secrets + CI config + language-risk patterns only (fastest)
+# "medium"  – light + dependency hygiene + advisory scans (default, was the
+#              only behaviour before Phase 3)
+# "full"    – medium + semgrep, bandit, trivy, npm-audit (all optional tools)
+# "custom"  – operator-supplied JSON profile file (see --scan-profile-file)
+#
+SCAN_PROFILE_LIGHT = {"secrets", "ci_config", "language_risks", "threat_feed"}
+SCAN_PROFILE_MEDIUM = SCAN_PROFILE_LIGHT | {"dep_hygiene", "dep_advisories"}
+SCAN_PROFILE_FULL = SCAN_PROFILE_MEDIUM | {"semgrep", "bandit", "trivy", "npm_audit"}
+
+SCAN_PROFILES: dict[str, set[str]] = {
+    "light": SCAN_PROFILE_LIGHT,
+    "medium": SCAN_PROFILE_MEDIUM,
+    "full": SCAN_PROFILE_FULL,
+}
+
+
+def _resolve_scan_profile(
+    profile: str | None,
+    profile_file: str | None = None,
+) -> set[str]:
+    """Return the set of enabled scanner names for *profile*.
+
+    If *profile* is ``"custom"`` the caller must supply *profile_file*, which
+    must be a JSON object with a ``"scanners"`` key listing scanner names.
+    """
+    if profile in {None, "medium", ""}:
+        return set(SCAN_PROFILE_MEDIUM)
+    if profile == "light":
+        return set(SCAN_PROFILE_LIGHT)
+    if profile == "full":
+        return set(SCAN_PROFILE_FULL)
+    if profile == "custom":
+        if not profile_file:
+            raise ValueError("--scan-profile-file is required when --scan-profile custom is used")
+        raw = json.loads(Path(profile_file).read_text(encoding="utf-8"))
+        scanners = raw.get("scanners") if isinstance(raw, dict) else raw
+        if not isinstance(scanners, list):
+            raise ValueError("scan profile file must contain a JSON object with a 'scanners' list")
+        return {str(s) for s in scanners}
+    raise ValueError(f"Unknown scan profile: {profile!r}; choose light, medium, full, or custom")
 
 
 @dataclass(frozen=True)
@@ -247,6 +303,9 @@ GENERATED_ARTIFACT_GLOBS = (
     "report.md",
     "runs/**",
 )
+
+GITHUB_OWNER_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
+GITHUB_REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 
 
 def is_test_file(file_path: str) -> bool:
@@ -1007,35 +1066,365 @@ def _normalize_public_github_repo_url(repo_url: str) -> str:
     host = parsed.netloc.lower()
     if host not in {"github.com", "www.github.com"}:
         raise ValueError("Only public github.com repository URLs are supported in this phase")
+    if parsed.username or parsed.password or parsed.port:
+        raise ValueError("GitHub repository URL must not include credentials or custom ports")
+    if parsed.query or parsed.fragment:
+        raise ValueError("GitHub repository URL must not include query strings or fragments")
 
     parts = [part for part in parsed.path.split("/") if part]
     if len(parts) < 2:
         raise ValueError("GitHub repository URL must include owner and repo name")
+    if len(parts) > 2:
+        raise ValueError("GitHub repository URL must point to the repository root")
 
     owner = parts[0]
     repo = parts[1]
     if repo.endswith(".git"):
         repo = repo[:-4]
+    if not GITHUB_OWNER_RE.fullmatch(owner):
+        raise ValueError("Invalid GitHub repository owner")
+    if not GITHUB_REPO_RE.fullmatch(repo):
+        raise ValueError("Invalid GitHub repository name")
     return f"https://github.com/{owner}/{repo}.git"
+
+
+def _clone_resource_limits() -> None:
+    if resource is None:
+        return
+    try:
+        resource.setrlimit(resource.RLIMIT_CPU, (120, 120))
+    except Exception:
+        pass
+    try:
+        resource.setrlimit(resource.RLIMIT_FSIZE, (200 * 1024 * 1024, 200 * 1024 * 1024))
+    except Exception:
+        pass
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (256, 256))
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Private-repo clone helpers (Phase 3)
+# ---------------------------------------------------------------------------
+
+def _make_askpass_script(token: str) -> Path:
+    """Write a minimal GIT_ASKPASS script that echoes the token securely.
+
+    The token is stored in a chmod-700 temp file so it never appears in
+    subprocess command-line arguments (visible in /proc/$PID/cmdline).
+    The file is deleted by the caller after the clone completes.
+    """
+    # Escape single quotes so the script can't be shell-injected.
+    safe_token = token.replace("'", "'\\''")
+    fd, path_str = tempfile.mkstemp(prefix="aletheia-git-cred-", suffix=".sh")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(f"#!/bin/sh\nprintf '%s' '{safe_token}'\n")
+    except Exception:
+        os.unlink(path_str)
+        raise
+    cred_path = Path(path_str)
+    cred_path.chmod(stat.S_IRWXU)
+    return cred_path
+
+
+def _clone_github_repo(
+    repo_url: str,
+    clone_root: Path,
+    *,
+    token: str | None = None,
+) -> tuple[Path, str]:
+    """Clone a GitHub repository (public or private) and return ``(clone_root, display_url)``.
+
+    When *token* is provided it is passed via ``GIT_ASKPASS`` so it never
+    appears in subprocess command-line arguments.  The display URL returned is
+    always the token-free HTTPS URL suitable for logging and summary output.
+    """
+    canonical_url = _normalize_public_github_repo_url(repo_url)
+    clone_root.mkdir(parents=True, exist_ok=True)
+    timeout_seconds = max(30, min(900, int(os.environ.get("ALETHEIA_REPO_CLONE_TIMEOUT_SEC", "180"))))
+    env = dict(os.environ)
+    env.setdefault("GIT_TERMINAL_PROMPT", "0")
+
+    cred_path: Path | None = None
+    if token:
+        cred_path = _make_askpass_script(token)
+        env["GIT_ASKPASS"] = str(cred_path)
+        env["GIT_USERNAME"] = "x-token-auth"
+
+    run_kwargs: dict[str, Any] = {
+        "capture_output": True,
+        "text": True,
+        "check": False,
+        "timeout": timeout_seconds,
+        "env": env,
+    }
+    if os.name != "nt" and resource is not None:
+        run_kwargs["preexec_fn"] = _clone_resource_limits
+
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--filter=blob:none",
+                "--depth",
+                "1",
+                "--single-branch",
+                canonical_url,
+                str(clone_root),
+            ],
+            **run_kwargs,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Unable to clone GitHub repository {canonical_url}: clone timed out after {timeout_seconds}s"
+        ) from exc
+    finally:
+        if cred_path and cred_path.exists():
+            cred_path.unlink(missing_ok=True)
+
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "unknown clone failure").strip()
+        raise RuntimeError(f"Unable to clone GitHub repository {canonical_url}: {details}")
+    return clone_root, canonical_url
+
+
+# ---------------------------------------------------------------------------
+# Optional external scanner integrations (Phase 3)
+# ---------------------------------------------------------------------------
+
+def _run_tool_json(
+    cmd: list[str],
+    cwd: str,
+    timeout: int,
+) -> tuple[dict | list | None, str | None]:
+    """Run *cmd* and return ``(parsed_json, error_reason)``."""
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        payload_text = result.stdout.strip()
+        if not payload_text:
+            return None, "empty_output"
+        return json.loads(payload_text), None
+    except subprocess.TimeoutExpired:
+        return None, "timeout"
+    except json.JSONDecodeError:
+        return None, "non_json_output"
+    except FileNotFoundError:
+        return None, "binary_not_found"
+
+
+def _scan_semgrep(repo_root: Path) -> tuple[list[Finding], dict]:
+    """Run ``semgrep --config auto`` and normalise findings (Phase 3)."""
+    tool_key = "semgrep"
+    semgrep_bin = shutil.which("semgrep")
+    if not semgrep_bin:
+        return [], {tool_key: {"status": "unavailable", "reason": "binary_not_found"}}
+
+    payload, err = _run_tool_json(
+        [semgrep_bin, "--config", "auto", "--json", "--no-git-ignore", "--quiet", "."],
+        cwd=str(repo_root),
+        timeout=300,
+    )
+    if payload is None:
+        status = "timeout" if err == "timeout" else "invalid_output"
+        return [], {tool_key: {"status": status, "reason": err or "unknown"}}
+
+    findings: list[Finding] = []
+    for item in (payload.get("results") or []) if isinstance(payload, dict) else []:
+        sev_raw = str((item.get("extra") or {}).get("severity") or "WARNING").upper()
+        severity = "HIGH" if sev_raw in {"ERROR", "HIGH"} else ("LOW" if sev_raw in {"INFO", "LOW"} else "MEDIUM")
+        findings.append(
+            Finding(
+                severity=severity,
+                type="semgrep_" + re.sub(r"[^a-z0-9_]", "_", str(item.get("check_id") or "finding").lower())[:64],
+                title=str((item.get("extra") or {}).get("message") or item.get("check_id") or "Semgrep finding"),
+                file=str(item.get("path") or "unknown"),
+                line=int((item.get("start") or {}).get("line") or 0) or None,
+                evidence=str((item.get("extra") or {}).get("lines") or "")[:256],
+                recommendation=str((item.get("extra") or {}).get("fix") or "Review semgrep finding and remediate per rule guidance."),
+            )
+        )
+    return findings, {
+        tool_key: {
+            "status": "executed",
+            "findings": len(findings),
+        }
+    }
+
+
+def _scan_bandit(repo_root: Path) -> tuple[list[Finding], dict]:
+    """Run ``bandit -r -f json`` and normalise findings (Phase 3)."""
+    tool_key = "bandit"
+    bandit_bin = shutil.which("bandit")
+    if not bandit_bin:
+        return [], {tool_key: {"status": "unavailable", "reason": "binary_not_found"}}
+
+    payload, err = _run_tool_json(
+        [bandit_bin, "-r", "-f", "json", "--quiet", "."],
+        cwd=str(repo_root),
+        timeout=180,
+    )
+    if payload is None:
+        status = "timeout" if err == "timeout" else "invalid_output"
+        return [], {tool_key: {"status": status, "reason": err or "unknown"}}
+
+    findings: list[Finding] = []
+    for item in (payload.get("results") or []) if isinstance(payload, dict) else []:
+        sev_raw = str(item.get("issue_severity") or "MEDIUM").upper()
+        severity = sev_raw if sev_raw in {"CRITICAL", "HIGH", "MEDIUM", "LOW"} else "MEDIUM"
+        findings.append(
+            Finding(
+                severity=severity,
+                type="bandit_" + re.sub(r"[^a-z0-9_]", "_", str(item.get("test_id") or "finding").lower()),
+                title=str(item.get("issue_text") or "Bandit finding"),
+                file=str(item.get("filename") or "unknown"),
+                line=int(item.get("line_number") or 0) or None,
+                evidence=str(item.get("code") or "")[:256],
+                recommendation="Review bandit finding and remediate per CWE guidance.",
+            )
+        )
+    return findings, {
+        tool_key: {
+            "status": "executed",
+            "findings": len(findings),
+        }
+    }
+
+
+def _scan_trivy(repo_root: Path) -> tuple[list[Finding], dict]:
+    """Run ``trivy fs --format json`` and normalise findings (Phase 3)."""
+    tool_key = "trivy"
+    trivy_bin = shutil.which("trivy")
+    if not trivy_bin:
+        return [], {tool_key: {"status": "unavailable", "reason": "binary_not_found"}}
+
+    payload, err = _run_tool_json(
+        [trivy_bin, "fs", "--format", "json", "--quiet", "."],
+        cwd=str(repo_root),
+        timeout=300,
+    )
+    if payload is None:
+        status = "timeout" if err == "timeout" else "invalid_output"
+        return [], {tool_key: {"status": status, "reason": err or "unknown"}}
+
+    findings: list[Finding] = []
+    for result_block in (payload.get("Results") or []) if isinstance(payload, dict) else []:
+        target_file = str(result_block.get("Target") or "unknown")
+        for vuln in result_block.get("Vulnerabilities") or []:
+            sev_raw = str(vuln.get("Severity") or "MEDIUM").upper()
+            severity = sev_raw if sev_raw in {"CRITICAL", "HIGH", "MEDIUM", "LOW"} else "MEDIUM"
+            vuln_id = str(vuln.get("VulnerabilityID") or "unknown")
+            pkg_name = str(vuln.get("PkgName") or "unknown")
+            findings.append(
+                Finding(
+                    severity=severity,
+                    type="trivy_vuln",
+                    title=f"{vuln_id} in {pkg_name}",
+                    file=target_file,
+                    line=None,
+                    evidence=str(vuln.get("Title") or vuln.get("Description") or "")[:256],
+                    recommendation=str(vuln.get("FixedVersion") and f"Upgrade {pkg_name} to {vuln['FixedVersion']}." or "Review Trivy advisory and apply available fix."),
+                )
+            )
+    return findings, {
+        tool_key: {
+            "status": "executed",
+            "findings": len(findings),
+        }
+    }
+
+
+def _scan_npm_audit(repo_root: Path) -> tuple[list[Finding], dict]:
+    """Run ``npm audit --json`` on any ``package.json`` found (Phase 3)."""
+    tool_key = "npm_audit"
+    npm_bin = shutil.which("npm")
+    if not npm_bin:
+        return [], {tool_key: {"status": "unavailable", "reason": "binary_not_found"}}
+    if not (repo_root / "package.json").exists():
+        return [], {tool_key: {"status": "skipped", "reason": "no_package_json"}}
+
+    payload, err = _run_tool_json(
+        [npm_bin, "audit", "--json"],
+        cwd=str(repo_root),
+        timeout=120,
+    )
+    if payload is None:
+        status = "timeout" if err == "timeout" else "invalid_output"
+        return [], {tool_key: {"status": status, "reason": err or "unknown"}}
+
+    findings: list[Finding] = []
+    # npm audit --json format (npm v7+)
+    for pkg_name, vuln in (payload.get("vulnerabilities") or {}).items():
+        if not isinstance(vuln, dict):
+            continue
+        sev_raw = str(vuln.get("severity") or "moderate").lower()
+        severity_map = {"critical": "CRITICAL", "high": "HIGH", "moderate": "MEDIUM", "low": "LOW"}
+        severity = severity_map.get(sev_raw, "MEDIUM")
+        via = vuln.get("via") or []
+        evidence_parts = [str(v.get("title") or v) for v in via if isinstance(v, dict)][:3]
+        findings.append(
+            Finding(
+                severity=severity,
+                type="npm_audit_vuln",
+                title=f"npm vulnerability in {pkg_name}",
+                file="package.json",
+                line=None,
+                evidence="; ".join(evidence_parts)[:256] or f"severity: {sev_raw}",
+                recommendation=f"Run 'npm audit fix' or upgrade {pkg_name} to a non-vulnerable version.",
+            )
+        )
+    return findings, {
+        tool_key: {
+            "status": "executed",
+            "findings": len(findings),
+        }
+    }
 
 
 def _clone_public_github_repo(repo_url: str, clone_root: Path) -> Path:
     canonical_url = _normalize_public_github_repo_url(repo_url)
     clone_root.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(
-        [
-            "git",
-            "clone",
-            "--depth",
-            "1",
-            "--single-branch",
-            canonical_url,
-            str(clone_root),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    timeout_seconds = max(30, min(900, int(os.environ.get("ALETHEIA_REPO_CLONE_TIMEOUT_SEC", "180"))))
+    env = dict(os.environ)
+    env.setdefault("GIT_TERMINAL_PROMPT", "0")
+    run_kwargs: dict[str, Any] = {
+        "capture_output": True,
+        "text": True,
+        "check": False,
+        "timeout": timeout_seconds,
+        "env": env,
+    }
+    if os.name != "nt" and resource is not None:
+        run_kwargs["preexec_fn"] = _clone_resource_limits
+
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "clone",
+                "--filter=blob:none",
+                "--depth",
+                "1",
+                "--single-branch",
+                canonical_url,
+                str(clone_root),
+            ],
+            **run_kwargs,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Unable to clone public GitHub repository {canonical_url}: clone timed out after {timeout_seconds}s"
+        ) from exc
     if result.returncode != 0:
         details = (result.stderr or result.stdout or "unknown clone failure").strip()
         raise RuntimeError(f"Unable to clone public GitHub repository {canonical_url}: {details}")
@@ -1048,18 +1437,55 @@ def _audit_repo_root(
     threat_feed_path: str | None,
     include_test_fixtures: bool,
     deps_scan: str,
+    enabled_scanners: set[str] | None = None,
 ) -> dict:
+    """Core scanning dispatch.  *enabled_scanners* is a set of scanner names
+    to run; when ``None`` the medium (default) profile is used."""
+    if enabled_scanners is None:
+        enabled_scanners = set(SCAN_PROFILE_MEDIUM)
+
     files = _iter_source_files(root)
 
     findings: list[Finding] = []
-    findings.extend(_scan_secrets(root, files, include_test_fixtures=include_test_fixtures))
-    findings.extend(_scan_ci_config(root))
-    findings.extend(_scan_dependency_hygiene(root))
-    dep_findings, dependency_summary = _scan_dependency_advisories(root, deps_scan=deps_scan)
+    if "secrets" in enabled_scanners:
+        findings.extend(_scan_secrets(root, files, include_test_fixtures=include_test_fixtures))
+    if "ci_config" in enabled_scanners:
+        findings.extend(_scan_ci_config(root))
+    if "dep_hygiene" in enabled_scanners:
+        findings.extend(_scan_dependency_hygiene(root))
+
+    # dep_advisories honours the legacy deps_scan knob inside the profile
+    dep_findings: list[Finding] = []
+    dependency_summary: dict = {"scan_mode": deps_scan, "tools": {}}
+    if "dep_advisories" in enabled_scanners:
+        dep_findings, dependency_summary = _scan_dependency_advisories(root, deps_scan=deps_scan)
     findings.extend(dep_findings)
-    findings.extend(_scan_language_risks(root, files))
+
+    if "language_risks" in enabled_scanners:
+        findings.extend(_scan_language_risks(root, files))
+
     threat_index, threat_feed_findings, threat_feed_source = _load_threat_feed(root, threat_feed_path)
-    findings.extend(threat_feed_findings)
+    if "threat_feed" in enabled_scanners:
+        findings.extend(threat_feed_findings)
+
+    # Optional external-tool scanners (Phase 3)
+    extra_tool_summary: dict[str, dict] = {}
+    if "semgrep" in enabled_scanners:
+        sg_findings, sg_meta = _scan_semgrep(root)
+        findings.extend(sg_findings)
+        extra_tool_summary.update(sg_meta)
+    if "bandit" in enabled_scanners:
+        bd_findings, bd_meta = _scan_bandit(root)
+        findings.extend(bd_findings)
+        extra_tool_summary.update(bd_meta)
+    if "trivy" in enabled_scanners:
+        tv_findings, tv_meta = _scan_trivy(root)
+        findings.extend(tv_findings)
+        extra_tool_summary.update(tv_meta)
+    if "npm_audit" in enabled_scanners:
+        na_findings, na_meta = _scan_npm_audit(root)
+        findings.extend(na_findings)
+        extra_tool_summary.update(na_meta)
 
     # Deduplicate same type/file/line/evidence to reduce noise.
     deduped: dict[tuple[str, str, int | None, str], Finding] = {}
@@ -1114,8 +1540,10 @@ def _audit_repo_root(
             "excluded_globs": [] if include_test_fixtures else list(TEST_FIXTURE_GLOBS),
             "allowlist_marker": TEST_FIXTURE_ALLOWLIST_MARKER,
         },
+        "enabled_scanners": sorted(enabled_scanners),
         "ignored_artifacts": list(GENERATED_ARTIFACT_GLOBS),
         "dependencies": dependency_summary,
+        "extra_tools": extra_tool_summary,
         "findings_total": len(filtered_findings),
         "findings_by_severity": by_severity,
         "findings_by_type": by_type,
@@ -1148,28 +1576,71 @@ def run_repo_audit(
     *,
     include_test_fixtures: bool = False,
     deps_scan: str = "auto",
+    repo_token: str | None = None,
+    scan_profile: str | None = None,
+    scan_profile_file: str | None = None,
 ) -> dict:
-    """Run static repository checks and return summary dictionary."""
+    """Run static repository checks and return summary dictionary.
+
+    Parameters
+    ----------
+    repo_path:
+        Local filesystem path to audit (default: current directory).
+    repo_url:
+        GitHub HTTPS URL to clone and audit.  Supports public repos as well
+        as private repos when *repo_token* is provided.
+    repo_token:
+        GitHub personal-access token (PAT) or fine-grained token with
+        ``Contents: read`` scope.  Passed via ``GIT_ASKPASS``; never logged
+        or stored in summary output.
+    scan_profile:
+        One of ``"light"``, ``"medium"`` (default), ``"full"``, or
+        ``"custom"`` (requires *scan_profile_file*).
+    scan_profile_file:
+        JSON file path for a custom profile.  Must contain
+        ``{"scanners": ["secrets", "bandit", ...]}``.  Only used when
+        *scan_profile* is ``"custom"``.
+    deps_scan:
+        Dependency-advisory scan mode: ``"auto"``, ``"full"``, or ``"off"``.
+        Overridden when *scan_profile* is ``"light"`` (sets to ``"off"``
+        implicitly via enabled_scanners).
+    """
+    # Resolve the active scanner set once so both code paths share it.
+    effective_deps_scan = deps_scan
+    if scan_profile == "light":
+        # light profile excludes dep_advisories; honour explicit override
+        effective_deps_scan = "off"
+    enabled_scanners = _resolve_scan_profile(scan_profile, scan_profile_file)
+
     if repo_url:
         with tempfile.TemporaryDirectory(prefix="aletheia-github-repo-") as temp_dir:
-            root = _clone_public_github_repo(repo_url, Path(temp_dir))
+            root, display_url = _clone_github_repo(
+                repo_url, Path(temp_dir), token=repo_token
+            )
             summary = _audit_repo_root(
                 root,
                 threat_feed_path=threat_feed_path,
                 include_test_fixtures=include_test_fixtures,
-                deps_scan=deps_scan,
+                deps_scan=effective_deps_scan,
+                enabled_scanners=enabled_scanners,
             )
+            is_private = bool(repo_token)
             summary["source"] = {
-                "kind": "github_public",
+                "kind": "github_private" if is_private else "github_public",
                 "value": repo_url,
-                "resolved": _normalize_public_github_repo_url(repo_url),
+                "resolved": display_url,
+                "authenticated": is_private,
             }
+            summary["scan_profile"] = scan_profile or "medium"
             return summary
 
     root = Path(repo_path).resolve()
-    return _audit_repo_root(
+    summary = _audit_repo_root(
         root,
         threat_feed_path=threat_feed_path,
         include_test_fixtures=include_test_fixtures,
-        deps_scan=deps_scan,
+        deps_scan=effective_deps_scan,
+        enabled_scanners=enabled_scanners,
     )
+    summary["scan_profile"] = scan_profile or "medium"
+    return summary

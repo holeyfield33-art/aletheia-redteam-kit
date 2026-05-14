@@ -794,7 +794,7 @@ def test_cli_combined_mode_writes_merged_summary(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1202,7 +1202,7 @@ def test_cli_combined_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1265,7 +1265,7 @@ def test_cli_repo_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1307,7 +1307,7 @@ def test_cli_repo_mode_accepts_repo_url(monkeypatch: pytest.MonkeyPatch, tmp_pat
     output = tmp_path / "repo_summary.json"
     captured = {}
 
-    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto"):
+    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto", **_kwargs):
         captured["repo_path"] = repo_path
         captured["repo_url"] = repo_url
         return {
@@ -1354,7 +1354,7 @@ def test_command_center_run_subcommand_accepts_repo_url(monkeypatch: pytest.Monk
     output = tmp_path / "repo_summary.json"
     captured = {}
 
-    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto"):
+    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto", **_kwargs):
         captured["repo_path"] = repo_path
         captured["repo_url"] = repo_url
         return {
@@ -1405,7 +1405,7 @@ def test_cli_repo_mode_baseline_approve_writes_state(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1470,7 +1470,7 @@ def test_cli_repo_mode_baseline_allows_only_known_violations(monkeypatch: pytest
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1514,7 +1514,7 @@ def test_cli_repo_mode_fails_when_dependency_high_over_limit(monkeypatch: pytest
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1799,3 +1799,178 @@ def test_cli_dashboard_serve_dispatches_hosted_server(monkeypatch: pytest.Monkey
     assert captured["artifact_dir"] == artifact_dir
     assert str(captured["dashboard_file"]) == "dashboard/index.html"
     assert captured["auth_mode"] == "api-key"
+
+
+def test_cli_dashboard_serve_defaults_to_basic_auth(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "runs"
+    captured: dict[str, object] = {}
+
+    def _fake_serve(config):
+        captured["auth_mode"] = config.auth_mode
+
+    monkeypatch.setattr(runner, "serve_dashboard", _fake_serve)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "dashboard",
+            "--artifact-dir",
+            str(artifact_dir),
+            "--serve",
+        ],
+    )
+
+    rc = runner.cli()
+
+    assert rc == 0
+    assert captured["auth_mode"] == "basic"
+
+
+def test_cli_combined_targets_file_batches_and_aggregates(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    targets_file = tmp_path / "targets.json"
+    targets_file.write_text(
+        json.dumps(
+            [
+                {"type": "api", "url": "https://api.example.com", "label": "api-one"},
+                {"type": "repo", "path": str(tmp_path / "repo-one"), "label": "repo-one"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    artifact_dir = tmp_path / "artifacts"
+    output = tmp_path / "batch_summary.json"
+    repo_dir = tmp_path / "repo-one"
+    repo_dir.mkdir()
+
+    class FakeClient:
+        base_url = "https://api.example.com"
+
+        def __init__(self, base_url=None, target_profile=None):
+            self.base_url = base_url or self.base_url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(runner, "AletheiaClient", FakeClient)
+    monkeypatch.setattr(
+        runner,
+        "load_attacks",
+        lambda category=None, threat_feed_file=None: [
+            {
+                "id": "BC_001",
+                "name": "Batch benign",
+                "category": "benign_controls",
+                "payload": "show uptime",
+                "expected_decision": "PROCEED",
+                "severity": "LOW",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        runner,
+        "run_attacks_with_backoff",
+        lambda client, attacks, plugins=None, plugin_args=None: [
+            {
+                "id": "BC_001",
+                "name": "Batch benign",
+                "category": "benign_controls",
+                "technique": "benign_operational_request",
+                "severity": "LOW",
+                "variant_kind": "seed",
+                "effectiveness_tier": "baseline",
+                "target_surface": "prompt_interface",
+                "mutation_strategy": None,
+                "family_id": None,
+                "source": None,
+                "expected_decision": "PROCEED",
+                "actual_decision": "PROCEED",
+                "match": True,
+                "request_id": "req-1",
+                "latency_ms": 1.0,
+                "receipt": {"sig": "x"},
+                "reason": None,
+                "error": None,
+                "status_code": 200,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        runner,
+        "reconcile_results",
+        lambda results, client: {
+            "total_reconciled": 0,
+            "unreconciled": 0,
+            "reconciliation_coverage_pct": 100.0,
+            "unreconciled_request_ids": [],
+            "endpoint": None,
+            "auth_mode": "unknown",
+        },
+    )
+    monkeypatch.setattr(runner, "build_gap_report", lambda results: {})
+    monkeypatch.setattr(runner, "build_category_gap_report", lambda results: {})
+    monkeypatch.setattr(
+        runner,
+        "run_repo_audit",
+        lambda repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto", **_kwargs: {
+            "generated_at": "2026-05-05T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": str(repo_path),
+            "files_scanned": 1,
+            "findings_total": 1,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0, "LOW": 0},
+            "findings_by_type": {"dummy": 1},
+            "risk_score": 90,
+            "gates": {"pass": True, "violations": []},
+            "findings": [
+                {
+                    "severity": "HIGH",
+                    "type": "dummy",
+                    "title": "Repo finding",
+                    "file": "repo.py",
+                    "line": 1,
+                    "evidence": "x",
+                    "recommendation": "y",
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "combined",
+            "--targets-file",
+            str(targets_file),
+            "--artifact-dir",
+            str(artifact_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    assert rc == 0
+
+    batch_summary = json.loads(output.read_text(encoding="utf-8"))
+    assert batch_summary["batch_mode"] == "targets-file"
+    assert batch_summary["targets_total"] == 2
+    assert batch_summary["targets_completed"] == 2
+    assert len(batch_summary["targets"]) == 2
+    assert set(batch_summary["components"].keys()) == {"api-one-01", "repo-one-02"}
+
+    batch_runs = sorted(artifact_dir.glob("run-batch-*"))
+    assert batch_runs
+    child_sqlites = list(batch_runs[0].glob("targets/*/artifacts/run-*/command_center.sqlite"))
+    assert child_sqlites
+
+    combined_runs = sorted(artifact_dir.glob("run-combined-*"))
+    assert combined_runs
+    combined_sqlite = combined_runs[0] / "command_center.sqlite"
+    assert combined_sqlite.exists()
+    with sqlite3.connect(combined_sqlite) as conn:
+        target_count = conn.execute("SELECT COUNT(*) FROM targets").fetchone()[0]
+        assert target_count == 2

@@ -6,7 +6,9 @@ import mimetypes
 import os
 import subprocess
 import sys
+import threading
 import logging
+import time
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -19,6 +21,45 @@ from engine.repo_audit.scanner import _normalize_public_github_repo_url
 from kit.auth import DashboardAuthManager, sanitize_next_path
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _has_control_chars(value: str) -> bool:
+    return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+
+
+def _sanitize_repo_url_input(value: str) -> str:
+    candidate = str(value or "").strip()
+    if not candidate:
+        raise ValueError("repo_url is required")
+    if len(candidate) > 512:
+        raise ValueError("repo_url is too long")
+    if _has_control_chars(candidate):
+        raise ValueError("repo_url contains invalid characters")
+    return candidate
+
+
+class _RequestRateLimiter:
+    def __init__(self, *, requests_per_minute: int, now_fn=time.time) -> None:
+        self._limit = max(1, int(requests_per_minute))
+        self._now_fn = now_fn
+        self._lock = threading.Lock()
+        self._windows: dict[str, tuple[float, int]] = {}
+
+    def allow(self, key: str) -> tuple[bool, int]:
+        now = float(self._now_fn())
+        key = str(key or "unknown")
+        with self._lock:
+            window_start, count = self._windows.get(key, (now, 0))
+            elapsed = now - window_start
+            if elapsed >= 60:
+                window_start = now
+                count = 0
+            count += 1
+            self._windows[key] = (window_start, count)
+            if count <= self._limit:
+                return True, 0
+            retry_after = max(1, int(60 - elapsed))
+            return False, retry_after
 
 
 @dataclass(frozen=True)
@@ -71,7 +112,7 @@ def _normalize_run_entries(config: DashboardServerConfig) -> list[dict[str, obje
 
 
 def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> dict[str, object]:
-    normalized_repo_url = _normalize_public_github_repo_url(repo_url)
+    normalized_repo_url = _normalize_public_github_repo_url(_sanitize_repo_url_input(repo_url))
     artifact_root = config.artifact_dir.resolve()
     repo_root = config.repo_root.resolve()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -141,6 +182,9 @@ def create_dashboard_handler(config: DashboardServerConfig):
     dashboard_file = config.dashboard_file.resolve()
     auth_manager = DashboardAuthManager.from_env(auth_mode=config.auth_mode, host=config.host)
     auth_manager.log_startup_warnings()
+    request_rate_limiter = _RequestRateLimiter(
+        requests_per_minute=int(os.environ.get("ALETHEIA_DASHBOARD_RATE_LIMIT_PER_MINUTE", "30"))
+    )
 
     def _render_login_page(*, next_path: str, error: str | None = None) -> bytes:
         status = f'<p class="status">{error}</p>' if error else ""
@@ -195,6 +239,16 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 return True
 
             outcome = auth_manager.authenticate_request(headers=self.headers, client_ip=self._client_ip())
+            limiter_key = outcome.principal if outcome.allowed and outcome.principal else self._client_ip()
+            allowed, retry_after = request_rate_limiter.allow(str(limiter_key))
+            if not allowed:
+                payload = {"ok": False, "error": "rate_limit_exceeded"}
+                self._send_json(
+                    payload,
+                    status=HTTPStatus.TOO_MANY_REQUESTS,
+                    extra_headers={"Retry-After": str(retry_after)},
+                )
+                return False
             if outcome.allowed:
                 return True
 
@@ -250,6 +304,8 @@ def create_dashboard_handler(config: DashboardServerConfig):
             self.wfile.write(payload)
 
         def _resolve_run_path(self, path_fragment: str) -> Path | None:
+            if ".." in path_fragment or _has_control_chars(path_fragment):
+                return None
             requested = (artifact_root / path_fragment.lstrip("/")).resolve()
             if os.path.commonpath([str(requested), str(artifact_root)]) != str(artifact_root):
                 return None
@@ -366,7 +422,7 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON body")
                 return
 
-            repo_url = str((payload or {}).get("repo_url") or "").strip()
+            repo_url = _sanitize_repo_url_input(str((payload or {}).get("repo_url") or ""))
             if not repo_url:
                 self.send_error(HTTPStatus.BAD_REQUEST, "repo_url is required")
                 return
@@ -388,6 +444,14 @@ def create_dashboard_handler(config: DashboardServerConfig):
 def serve_dashboard(config: DashboardServerConfig) -> None:
     handler = create_dashboard_handler(config)
     with ThreadingHTTPServer((config.host, config.port), handler) as server:
+        LOGGER.warning(
+            "dashboard.server.security tls=required reverse_proxy=recommended auth_mode=%s",
+            config.auth_mode,
+        )
+        if config.auth_mode == "disabled":
+            LOGGER.warning(
+                "dashboard.server.security auth disabled: exposure outside trusted internal networks is unsafe"
+            )
         LOGGER.info(
             "dashboard.server.start host=%s port=%s auth_mode=%s",
             config.host,

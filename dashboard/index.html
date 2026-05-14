@@ -1124,11 +1124,23 @@
         const gate = ((combined.gates || {}).pass ? "PASS" : "FAIL");
         const violations = ((combined.gates || {}).violations || []).length;
         const components = Object.keys(combined.components || {}).join(", ") || "(none)";
-        metaEl.innerHTML = [
+        const targets = Array.isArray(combined.targets) ? combined.targets.length : 0;
+        const lines = [
           "<div><b>Generated:</b> " + escapeHtml(generatedCombined) + "</div>",
           "<div><b>Combined Gate:</b> " + escapeHtml(gate) + " (violations: " + escapeHtml(violations) + ")</div>",
-          "<div><b>Components:</b> " + escapeHtml(components) + "</div>"
-        ].join("");
+          "<div><b>Components:</b> " + escapeHtml(components) + "</div>",
+          "<div><b>Targets:</b> " + escapeHtml(targets) + "</div>",
+        ];
+        if (combined.batch_mode === "targets-file") {
+          const total = Number(combined.targets_total || 0);
+          const completed = Number(combined.targets_completed || 0);
+          const failed = Number(combined.targets_failed || 0);
+          lines.push("<div><b>Batch:</b> " + escapeHtml(completed + "/" + total) + " completed" + (failed ? ", <span style='color:var(--danger)'>" + escapeHtml(failed) + " failed</span>" : "") + "</div>");
+          if (combined.targets_file) {
+            lines.push("<div><b>Targets file:</b> " + escapeHtml(String(combined.targets_file)) + "</div>");
+          }
+        }
+        metaEl.innerHTML = lines.join("");
         return;
       }
 
