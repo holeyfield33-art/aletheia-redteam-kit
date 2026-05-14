@@ -34,10 +34,10 @@ from uuid import uuid4
 
 import httpx
 
-from engine.agentic import AgenticConfig, run_agentic_loop
 from engine.gap_analysis import build_gap_report
 from engine.repo_audit import run_repo_audit
 from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
+from kit.agentic_runner import AgenticRunner, AgenticRunnerConfig
 from kit.command_center import (
     apply_finding_filter,
     compare_summaries,
@@ -56,6 +56,7 @@ from kit.web_audit.config import AuthBypassTarget, AuthStep, CustomFindingRule, 
 
 ATTACK_DIR = Path(__file__).parent.parent / "attacks"
 DEFAULT_OUTPUT = Path("summary.json")
+DEFAULT_AGENTIC_OUTPUT = Path("runs/agentic_results.json")
 DEFAULT_REQUEST_DELAY_SEC = 1.0
 DEFAULT_MAX_REQUEST_DELAY_SEC = 30.0
 RECONCILIATION_COVERAGE_THRESHOLD_PCT = 95.0
@@ -1393,7 +1394,8 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-deps-critical", type=int, default=0, help="Fail repo mode if dependency CRITICAL findings exceed this")
     parser.add_argument("--max-deps-high", type=int, default=10, help="Fail repo mode if dependency HIGH findings exceed this")
     parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
-    parser.add_argument("--agentic-iterations", type=int, default=4, help="Maximum iterations for agentic mode")
+    parser.add_argument("--agentic-iterations", type=int, default=4, help="Maximum iterations for legacy engine agentic mode")
+    parser.add_argument("--max-iterations", type=int, help="Maximum iterations for agentic mode (default: 10)")
     parser.add_argument("--agentic-seed-size", type=int, default=10, help="Number of seed attacks to initialize agentic mode")
     parser.add_argument("--agentic-variants", type=int, default=6, help="Maximum candidates evaluated per agentic iteration")
     parser.add_argument(
@@ -1610,36 +1612,31 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
         print(f"Loaded {len(attacks)} attacks for agentic optimization", file=sys.stderr)
 
+        output_path = Path(args.output)
+        if output_path == DEFAULT_OUTPUT:
+            output_path = DEFAULT_AGENTIC_OUTPUT
+        max_iterations = args.max_iterations if args.max_iterations is not None else 10
+
         with AletheiaClient(base_url=args.base_url) as client:
-            agentic = run_agentic_loop(
+            agentic = AgenticRunner(
                 client=client,
                 attacks=attacks,
                 run_attack_fn=run_attack,
-                config=AgenticConfig(
+                config=AgenticRunnerConfig(
                     objective=args.objective,
-                    iterations=args.agentic_iterations,
-                    seed_size=args.agentic_seed_size,
+                    max_iterations=max_iterations,
                     variants_per_round=args.agentic_variants,
-                    stop_on_first_bypass=not args.agentic_no_early_stop,
                     mutation_strategies=args.mutation_strategy,
+                    output_path=output_path,
                 ),
-            )
-            output = {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-                "engine_url": client.base_url,
-                "mode": "agentic",
-                "agentic": agentic,
-            }
+            ).run()
 
-        Path(args.output).write_text(json.dumps(output, indent=2))
-        best_result = agentic.get("best_result") or {}
+        best_result = (agentic.get("successful_payloads") or [{}])[0]
         print(
-            f"\nDone. Agentic iterations: {agentic['iterations_executed']}/{agentic['iterations_requested']}, "
-            f"best decision: {best_result.get('actual_decision', 'N/A')}. Output: {args.output}",
+            f"\nDone. Agentic iterations: {agentic['iterations_executed']}/{agentic['max_iterations']}, "
+            f"successful evasions: {len(agentic.get('successful_payloads', []))}. Output: {output_path}",
             file=sys.stderr,
         )
-        if agentic.get("execution_errors", 0) > 0:
-            return FAIL_ERROR
         return PASS
 
     if args.mode == "repo":

@@ -217,6 +217,46 @@ def test_cli_api_mode_forwards_threat_feed_file(monkeypatch: pytest.MonkeyPatch,
     assert captured["threat_feed_file"] == "sample_threat_feed.json"
 
 
+def test_cli_agentic_mode_uses_default_output_path(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeRunner:
+        def __init__(self, client, attacks, run_attack_fn, config):
+            captured["output_path"] = config.output_path
+            captured["max_iterations"] = config.max_iterations
+
+        def run(self):
+            path = captured["output_path"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('{"mode": "agentic", "iterations_executed": 1, "max_iterations": 10, "successful_payloads": []}', encoding="utf-8")
+            return {
+                "iterations_executed": 1,
+                "max_iterations": 10,
+                "successful_payloads": [],
+            }
+
+    class FakeClient:
+        def __init__(self, base_url=None):
+            self.base_url = base_url or "https://example.com"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(runner, "load_attacks", lambda category=None, threat_feed_file=None: [])
+    monkeypatch.setattr(runner, "AletheiaClient", FakeClient)
+    monkeypatch.setattr(runner, "AgenticRunner", FakeRunner)
+    monkeypatch.setattr("sys.argv", ["kit.runner", "--mode", "agentic"])
+
+    rc = runner.cli()
+
+    assert rc == 0
+    assert str(captured["output_path"]) == "runs/agentic_results.json"
+    assert captured["max_iterations"] == 10
+
+
 def test_cli_website_mode_writes_summary(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     output = tmp_path / "website_summary.json"
 
