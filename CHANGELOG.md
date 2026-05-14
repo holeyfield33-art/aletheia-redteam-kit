@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.3.0 (Phase 3 — Private Repo & Expanded Scanning)
+
+- **Private repo support**: `run_repo_audit` now accepts `repo_token` (PAT or fine-grained token with `Contents: read` scope). Token is passed via `GIT_ASKPASS` — it never appears in subprocess arguments, logs, or summary output. Also readable from `ALETHEIA_GITHUB_TOKEN` env var.
+- **Scan profiles**: Added `--scan-profile` CLI flag with four levels: `light` (secrets + CI + language), `medium` (default, adds dep hygiene + advisories), `full` (medium + semgrep + bandit + trivy + npm-audit), `custom` (arbitrary scanner set from `--scan-profile-file`).
+- **Semgrep integration**: `_scan_semgrep()` runs `semgrep --config auto --json` when available; findings normalised to `Finding` dataclass with severity mapping (ERROR→HIGH, WARNING→MEDIUM, INFO→LOW).
+- **Bandit integration**: `_scan_bandit()` runs `bandit -r -f json`; severity from `issue_severity` field.
+- **Trivy integration**: `_scan_trivy()` runs `trivy fs --format json`; severity from `Vulnerabilities[].Severity`.
+- **npm audit integration**: `_scan_npm_audit()` runs `npm audit --json` on repos containing a `package.json`; severity from `vulnerabilities.{pkg}.severity`.
+- All four new tool scanners follow the existing `_scan_dependency_advisories()` pattern: return `(list[Finding], dict)` and emit `{"status": "unavailable"}` when the binary is not on `PATH`.
+- Added `enabled_scanners` and `scan_profile` fields to repo audit summary output.
+- Added `extra_tools` dict to repo audit summary for per-tool execution metadata.
+- Runner `_sanitize_legacy_args` now reads `ALETHEIA_GITHUB_TOKEN` into `args.repo_token` when not passed explicitly; token is never forwarded through batch child-process args.
+- `_build_batch_target_legacy_args` forwards `--scan-profile` and `--scan-profile-file` to per-target runs.
+- Simplified `_run_repo_audit_with_cli_options` — removed brittle `TypeError`-based feature-detection shim; function now has a clean single call site.
+- Added 14 new tests covering scan profiles, tool-unavailable fallbacks, token masking, and CLI `--scan-profile` flag wiring.
+
 ## v1.2.0
 
 - Aligned release metadata to v1.2.0 across packaging and launch documentation.

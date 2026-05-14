@@ -121,6 +121,9 @@ def _sanitize_repo_url(value: str | None) -> str | None:
 
 def _sanitize_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
     args.repo_url = _sanitize_repo_url(getattr(args, "repo_url", None))
+    # repo_token is intentionally not logged; read from env if not passed explicitly
+    if not getattr(args, "repo_token", None):
+        args.repo_token = os.environ.get("ALETHEIA_GITHUB_TOKEN") or None
     args.threat_feed_file = _sanitize_json_path(getattr(args, "threat_feed_file", None), field_name="threat_feed_file")
     args.rules_file = _sanitize_json_path(getattr(args, "rules_file", None), field_name="rules_file")
     args.auth_workflow_file = _sanitize_json_path(getattr(args, "auth_workflow_file", None), field_name="auth_workflow_file")
@@ -256,6 +259,9 @@ def _build_batch_target_legacy_args(args: argparse.Namespace, target: dict[str, 
         _append_optional_arg(legacy_args, "--repo-url", target.get("repo_url") or arg("repo_url"))
         _append_optional_arg(legacy_args, "--threat-feed-file", target.get("threat_feed_file") or arg("threat_feed_file"))
         _append_optional_arg(legacy_args, "--deps-scan", target.get("deps_scan") or arg("deps_scan"))
+        _append_optional_arg(legacy_args, "--scan-profile", target.get("scan_profile") or arg("scan_profile"))
+        _append_optional_arg(legacy_args, "--scan-profile-file", target.get("scan_profile_file") or arg("scan_profile_file"))
+        # repo_token is deliberately NOT forwarded through args — use ALETHEIA_GITHUB_TOKEN env var in child runs
         _append_optional_arg(legacy_args, "--repo-include-test-fixtures", target.get("repo_include_test_fixtures") or arg("repo_include_test_fixtures"))
         _append_optional_arg(legacy_args, "--gate-exceptions-file", target.get("gate_exceptions_file") or arg("gate_exceptions_file"))
         _append_optional_arg(legacy_args, "--baseline-state-file", target.get("baseline_state_file") or arg("baseline_state_file"))
@@ -1462,49 +1468,16 @@ def _clamp_score(value: float) -> int:
 
 
 def _run_repo_audit_with_cli_options(args: argparse.Namespace) -> dict:
-    try:
-        return run_repo_audit(
-            args.repo_path,
-            repo_url=args.repo_url,
-            threat_feed_path=args.threat_feed_file,
-            include_test_fixtures=args.repo_include_test_fixtures,
-            deps_scan=args.deps_scan,
-        )
-    except TypeError as exc:
-        message = str(exc)
-        if "repo_url" in message:
-            try:
-                return run_repo_audit(
-                    args.repo_path,
-                    threat_feed_path=args.threat_feed_file,
-                    include_test_fixtures=args.repo_include_test_fixtures,
-                    deps_scan=args.deps_scan,
-                )
-            except TypeError:
-                return run_repo_audit(args.repo_path, threat_feed_path=args.threat_feed_file)
-        if "deps_scan" in message:
-            try:
-                return run_repo_audit(
-                    args.repo_path,
-                    repo_url=args.repo_url,
-                    threat_feed_path=args.threat_feed_file,
-                    include_test_fixtures=args.repo_include_test_fixtures,
-                )
-            except TypeError as fallback_exc:
-                if "include_test_fixtures" not in str(fallback_exc):
-                    raise
-                return run_repo_audit(
-                    args.repo_path,
-                    repo_url=args.repo_url,
-                    threat_feed_path=args.threat_feed_file,
-                )
-        if "include_test_fixtures" not in message:
-            raise
-        return run_repo_audit(
-            args.repo_path,
-            repo_url=args.repo_url,
-            threat_feed_path=args.threat_feed_file,
-        )
+    return run_repo_audit(
+        args.repo_path,
+        repo_url=args.repo_url,
+        threat_feed_path=args.threat_feed_file,
+        include_test_fixtures=getattr(args, "repo_include_test_fixtures", False),
+        deps_scan=getattr(args, "deps_scan", "auto"),
+        repo_token=getattr(args, "repo_token", None),
+        scan_profile=getattr(args, "scan_profile", None),
+        scan_profile_file=getattr(args, "scan_profile_file", None),
+    )
 
 
 def _api_exploitability_score(results: list[dict]) -> int:
@@ -2118,7 +2091,23 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-path", default=".", help="Repository root path for --mode repo")
     parser.add_argument(
         "--repo-url",
-        help="Public GitHub repository URL or owner/repo shorthand for --mode repo",
+        help="GitHub repository URL (public or private) or owner/repo shorthand for --mode repo",
+    )
+    parser.add_argument(
+        "--repo-token",
+        default=None,
+        help="GitHub personal-access token for private repo cloning (or set ALETHEIA_GITHUB_TOKEN env var; token is never logged)",
+    )
+    parser.add_argument(
+        "--scan-profile",
+        choices=["light", "medium", "full", "custom"],
+        default=None,
+        help="Scanning depth for repo mode: light (secrets+CI+language), medium (default, adds dep hygiene+advisories), full (medium + semgrep/bandit/trivy/npm-audit), or custom (requires --scan-profile-file)",
+    )
+    parser.add_argument(
+        "--scan-profile-file",
+        default=None,
+        help='JSON file with {"scanners": [...]} list when --scan-profile custom',
     )
     parser.add_argument(
         "--targets-file",

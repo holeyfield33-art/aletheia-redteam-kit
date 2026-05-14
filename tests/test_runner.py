@@ -794,7 +794,7 @@ def test_cli_combined_mode_writes_merged_summary(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1202,7 +1202,7 @@ def test_cli_combined_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1265,7 +1265,7 @@ def test_cli_repo_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatch, t
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1307,7 +1307,7 @@ def test_cli_repo_mode_accepts_repo_url(monkeypatch: pytest.MonkeyPatch, tmp_pat
     output = tmp_path / "repo_summary.json"
     captured = {}
 
-    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto"):
+    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto", **_kwargs):
         captured["repo_path"] = repo_path
         captured["repo_url"] = repo_url
         return {
@@ -1354,7 +1354,7 @@ def test_command_center_run_subcommand_accepts_repo_url(monkeypatch: pytest.Monk
     output = tmp_path / "repo_summary.json"
     captured = {}
 
-    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto"):
+    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto", **_kwargs):
         captured["repo_path"] = repo_path
         captured["repo_url"] = repo_url
         return {
@@ -1405,7 +1405,7 @@ def test_cli_repo_mode_baseline_approve_writes_state(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1470,7 +1470,7 @@ def test_cli_repo_mode_baseline_allows_only_known_violations(monkeypatch: pytest
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1514,7 +1514,7 @@ def test_cli_repo_mode_fails_when_dependency_high_over_limit(monkeypatch: pytest
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda path, threat_feed_path=None: {
+        lambda path, threat_feed_path=None, **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(path),
@@ -1914,7 +1914,7 @@ def test_cli_combined_targets_file_batches_and_aggregates(monkeypatch: pytest.Mo
     monkeypatch.setattr(
         runner,
         "run_repo_audit",
-        lambda repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto": {
+        lambda repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto", **_kwargs: {
             "generated_at": "2026-05-05T00:00:00+00:00",
             "mode": "repo",
             "repo_root": str(repo_path),
