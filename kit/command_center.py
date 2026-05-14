@@ -282,38 +282,135 @@ def normalize_summary_to_command_center(
         )
 
     elif mode == "combined":
-        for component_name, component in (summary.get("components") or {}).items():
-            metrics.append(
-                {
-                    "id": str(uuid.uuid4()),
+        component_lookup = dict(summary.get("components") or {})
+        target_rows = list(summary.get("targets") or [])
+        if target_rows:
+            # Batch-mode summaries carry explicit per-target rows; replace the
+            # default single-target placeholder so we don't double-count.
+            targets.clear()
+            for index, target_row in enumerate(target_rows, 1):
+                component_key = str(target_row.get("component_key") or target_row.get("id") or f"target-{index}")
+                component = component_lookup.get(component_key) or {}
+                target_record = {
+                    "id": str(target_row.get("id") or uuid.uuid4()),
                     "run_id": run_id,
-                    "scope_type": "component",
-                    "scope_key": component_name,
-                    "metric_name": "risk_score",
-                    "metric_value": _safe_float((summary.get("normalized_signals") or {}).get("component_risk", {}).get(component_name)),
-                    "metric_unit": "score",
-                    "created_at": started_at,
+                    "target_url": target_row.get("target_url") or (component.get("target_url") if isinstance(component, dict) else None),
+                    "repo_path": target_row.get("repo_path") or (component.get("repo_root") if isinstance(component, dict) else None),
+                    "scope": str(target_row.get("type") or component_key),
                 }
-            )
-            findings.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "run_id": run_id,
-                    "target_id": target_id,
-                    "category": component_name,
-                    "technique": "component_gate",
-                    "severity": "high" if not (component.get("gates") or {}).get("pass", True) else "low",
-                    "decision": "blocked" if not (component.get("gates") or {}).get("pass", True) else "proceeded",
-                    "finding_type": "regression",
-                    "title": f"component summary: {component_name}",
-                    "summary": json.dumps((component.get("gates") or {}), indent=2),
-                    "confidence": 0.9,
-                    "exploitability": _safe_float((summary.get("normalized_signals") or {}).get("component_exploitability", {}).get(component_name)),
-                    "trust_score": None,
-                    "created_at": started_at,
-                    "mismatch": not (component.get("gates") or {}).get("pass", True),
-                }
-            )
+                targets.append(target_record)
+
+                if isinstance(component, dict):
+                    if str(component.get("mode") or "") == "api":
+                        component_rows = list(component.get("results") or [])
+                        for row in component_rows:
+                            finding_id = str(uuid.uuid4())
+                            decision = _decision_label(row.get("actual_decision"))
+                            severity = str(row.get("severity") or "MEDIUM").lower()
+                            mismatch = not bool(row.get("match", False))
+                            finding_type = "anomaly" if str(row.get("actual_decision") or "").upper() in {"UNKNOWN", "ERROR"} else "attack"
+                            findings.append(
+                                {
+                                    "id": finding_id,
+                                    "run_id": run_id,
+                                    "target_id": target_record["id"],
+                                    "category": row.get("category") or component_key,
+                                    "technique": row.get("technique"),
+                                    "severity": severity,
+                                    "decision": decision,
+                                    "finding_type": finding_type,
+                                    "title": row.get("name") or row.get("id") or "attack finding",
+                                    "summary": row.get("reason") or row.get("error") or "",
+                                    "confidence": 0.9 if row.get("receipt") else 0.5,
+                                    "exploitability": 1.0 if decision == "proceeded" and str(row.get("expected_decision") or "").upper() == "DENIED" else 0.2,
+                                    "trust_score": None,
+                                    "created_at": started_at,
+                                    "mismatch": mismatch,
+                                }
+                            )
+                    else:
+                        component_rows = list(component.get("findings") or [])
+                        for row in component_rows:
+                            finding_id = str(uuid.uuid4())
+                            severity = str(row.get("severity") or "MEDIUM").lower()
+                            decision = "proceeded" if severity in {"critical", "high"} else "unknown"
+                            findings.append(
+                                {
+                                    "id": finding_id,
+                                    "run_id": run_id,
+                                    "target_id": target_record["id"],
+                                    "category": row.get("type") or component_key,
+                                    "technique": row.get("action") or row.get("type"),
+                                    "severity": severity,
+                                    "decision": decision,
+                                    "finding_type": "regression" if row.get("regression") else "attack",
+                                    "title": row.get("title") or row.get("id") or "finding",
+                                    "summary": row.get("observed") or row.get("message") or "",
+                                    "confidence": 0.8,
+                                    "exploitability": 0.8 if severity in {"critical", "high"} else 0.2,
+                                    "trust_score": _safe_float(component.get("trust_score"), default=0.0),
+                                    "created_at": started_at,
+                                    "mismatch": severity in {"critical", "high"},
+                                }
+                            )
+
+                metrics.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "scope_type": "component",
+                        "scope_key": component_key,
+                        "metric_name": "risk_score",
+                        "metric_value": _safe_float((summary.get("normalized_signals") or {}).get("component_risk", {}).get(component_key)),
+                        "metric_unit": "score",
+                        "created_at": started_at,
+                    }
+                )
+                metrics.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "scope_type": "component",
+                        "scope_key": component_key,
+                        "metric_name": "exploitability_score",
+                        "metric_value": _safe_float((summary.get("normalized_signals") or {}).get("component_exploitability", {}).get(component_key)),
+                        "metric_unit": "score",
+                        "created_at": started_at,
+                    }
+                )
+        else:
+            for component_name, component in component_lookup.items():
+                metrics.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "scope_type": "component",
+                        "scope_key": component_name,
+                        "metric_name": "risk_score",
+                        "metric_value": _safe_float((summary.get("normalized_signals") or {}).get("component_risk", {}).get(component_name)),
+                        "metric_unit": "score",
+                        "created_at": started_at,
+                    }
+                )
+                findings.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "target_id": target_id,
+                        "category": component_name,
+                        "technique": "component_gate",
+                        "severity": "high" if not (component.get("gates") or {}).get("pass", True) else "low",
+                        "decision": "blocked" if not (component.get("gates") or {}).get("pass", True) else "proceeded",
+                        "finding_type": "regression",
+                        "title": f"component summary: {component_name}",
+                        "summary": json.dumps((component.get("gates") or {}), indent=2),
+                        "confidence": 0.9,
+                        "exploitability": _safe_float((summary.get("normalized_signals") or {}).get("component_exploitability", {}).get(component_name)),
+                        "trust_score": None,
+                        "created_at": started_at,
+                        "mismatch": not (component.get("gates") or {}).get("pass", True),
+                    }
+                )
 
     gate_results.append(
         {
