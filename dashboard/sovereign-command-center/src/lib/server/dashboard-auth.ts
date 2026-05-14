@@ -277,7 +277,12 @@ export function verifySessionToken(
   }
   const [payloadToken, signature] = segments;
   const expectedSignature = crypto.createHmac("sha256", config.sessionSecret).update(payloadToken).digest("base64url");
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+  const providedSignature = Buffer.from(signature);
+  const expectedSignatureBuffer = Buffer.from(expectedSignature);
+  if (providedSignature.length !== expectedSignatureBuffer.length) {
+    return null;
+  }
+  if (!crypto.timingSafeEqual(providedSignature, expectedSignatureBuffer)) {
     return null;
   }
   try {

@@ -81,6 +81,26 @@ test("authorizeDashboardRequest accepts valid session cookies", () =>
     },
   ));
 
+test("authorizeDashboardRequest treats malformed session signatures as unauthorized", () =>
+  withEnv(
+    {
+      ALETHEIA_DASHBOARD_PASSWORD: "secret-pass",
+      ALETHEIA_DASHBOARD_SESSION_SECRET: "session-secret",
+    },
+    () => {
+      const config = resolveDashboardAuthConfig();
+      const request = new NextRequest("http://localhost/api/payloads", {
+        headers: {
+          cookie: `${config.sessionCookieName}=malformed.short`,
+        },
+      });
+
+      const result = authorizeDashboardRequest(request, config);
+      assert.equal(result.authorized, false);
+      assert.equal(result.reason, "login_required");
+    },
+  ));
+
 test("proxy redirects unauthenticated browser requests to login", () =>
   withEnv(
     {
