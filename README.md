@@ -159,6 +159,21 @@ Useful payload-corpus controls:
 - `--dedupe-semantic-threshold` removes near-duplicate payloads using token-overlap similarity.
 - `--benign-ratio 0.2` keeps roughly 20% `benign_controls` in capped runs to reduce noisy false positives.
 - `--payload-family-file` adds curated seed families without editing core recursive catalogs under `attacks/`.
+- `--external-corpus-file` imports additional corpora (Garak/JailbreakBench/HarmBench-style JSON) and normalizes them into attack rows.
+- `--external-corpus-category` sets fallback category when external rows omit category metadata.
+
+Example with external corpora adapters:
+
+    python -m kit.runner \
+        --mode api \
+        --plugin kit.payload_mutation_plugin \
+        --payload-mutation-plugin \
+        --payload-family-file attacks/templates/payload_families.json \
+        --external-corpus-file data/garak_prompts.json \
+        --external-corpus-file data/harmbench_cases.json \
+        --external-corpus-category prompt_injection \
+        --payload-expand-to 500 \
+        --max-attacks 500
 
 CI-style thresholded run:
 
@@ -173,6 +188,8 @@ Important API outputs:
 - `summary.json`: full run artifact
 - `categories`: blocked / proceeded totals per category
 - `gap_report`: custom-technique bypass analysis
+- `category_gap_report`: category-level bypass analysis and top category gaps
+- `effectiveness_tiers`: baseline/elevated/advanced distribution in the executed set
 - `results[*].technique`: explicit or inferred custom technique tag per attack
 - `results[*].request_id`: captured request id (or `null` when unavailable)
 - `unknown`: count of requests classified as unknown decisions

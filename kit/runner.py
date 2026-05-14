@@ -34,7 +34,7 @@ from uuid import uuid4
 
 import httpx
 
-from engine.gap_analysis import build_gap_report
+from engine.gap_analysis import build_category_gap_report, build_gap_report
 from engine.mutation import expand_attack_families
 from engine.repo_audit import run_repo_audit
 from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
@@ -48,6 +48,7 @@ from kit.command_center import (
     write_command_center_sqlite,
 )
 from kit.dashboard_server import DashboardServerConfig, serve_dashboard
+from kit.external_corpus import load_external_corpus_attacks
 from kit.api_analysis import build_api_regression_summary, extract_multi_turn_steps
 from kit.catalog import load_attacks as load_attacks_from_catalog
 from kit.client import AletheiaClient, TargetProfile, load_target_profile
@@ -707,6 +708,12 @@ def _run_attacks_with_cli_options(
 
 def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[object] | None = None) -> list[dict]:
     attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
+    attacks.extend(
+        load_external_corpus_attacks(
+            getattr(args, "external_corpus_file", []) or [],
+            default_category=getattr(args, "external_corpus_category", "prompt_injection"),
+        )
+    )
     attacks.extend(load_conversation_attacks(getattr(args, "conversation_file", None)))
     attacks = _filter_attacks_by_categories(attacks, getattr(args, "categories", None))
     expanded = expand_attack_families(
@@ -757,6 +764,12 @@ def run_attack(
                 "category": attack["category"],
                 "technique": technique,
                 "severity": attack.get("severity", "MEDIUM"),
+                "variant_kind": attack.get("variant_kind", "seed"),
+                "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+                "target_surface": attack.get("target_surface", "prompt_interface"),
+                "mutation_strategy": attack.get("mutation_strategy"),
+                "family_id": attack.get("family_id"),
+                "source": attack.get("source"),
                 "expected_decision": attack["expected_decision"],
                 "actual_decision": result.decision,
                 "match": result.decision == attack["expected_decision"],
@@ -788,6 +801,12 @@ def run_attack(
                 "category": attack["category"],
                 "technique": technique,
                 "severity": attack.get("severity", "MEDIUM"),
+                "variant_kind": attack.get("variant_kind", "seed"),
+                "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+                "target_surface": attack.get("target_surface", "prompt_interface"),
+                "mutation_strategy": attack.get("mutation_strategy"),
+                "family_id": attack.get("family_id"),
+                "source": attack.get("source"),
                 "expected_decision": attack["expected_decision"],
                 "actual_decision": "ERROR",
                 "match": False,
@@ -808,6 +827,12 @@ def run_attack(
                 "category": attack["category"],
                 "technique": technique,
                 "severity": attack.get("severity", "MEDIUM"),
+                "variant_kind": attack.get("variant_kind", "seed"),
+                "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+                "target_surface": attack.get("target_surface", "prompt_interface"),
+                "mutation_strategy": attack.get("mutation_strategy"),
+                "family_id": attack.get("family_id"),
+                "source": attack.get("source"),
                 "expected_decision": attack["expected_decision"],
                 "actual_decision": "ERROR",
                 "match": False,
@@ -888,6 +913,12 @@ def run_multi_turn_attack(client: AletheiaClient, attack: dict) -> dict:
             "category": attack["category"],
             "technique": technique,
             "severity": attack.get("severity", "MEDIUM"),
+            "variant_kind": attack.get("variant_kind", "seed"),
+            "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+            "target_surface": attack.get("target_surface", "conversation"),
+            "mutation_strategy": attack.get("mutation_strategy"),
+            "family_id": attack.get("family_id"),
+            "source": attack.get("source"),
             "expected_decision": attack["expected_decision"],
             "actual_decision": last.decision,
             "match": last.decision == attack["expected_decision"],
@@ -906,6 +937,12 @@ def run_multi_turn_attack(client: AletheiaClient, attack: dict) -> dict:
             "category": attack["category"],
             "technique": technique,
             "severity": attack.get("severity", "MEDIUM"),
+            "variant_kind": attack.get("variant_kind", "seed"),
+            "effectiveness_tier": attack.get("effectiveness_tier", "baseline"),
+            "target_surface": attack.get("target_surface", "conversation"),
+            "mutation_strategy": attack.get("mutation_strategy"),
+            "family_id": attack.get("family_id"),
+            "source": attack.get("source"),
             "expected_decision": attack["expected_decision"],
             "actual_decision": "ERROR",
             "match": False,
@@ -953,6 +990,17 @@ def summarize(results: list[dict]) -> dict:
         elif r["actual_decision"] == "UNKNOWN":
             by_cat[category]["unknown"] += 1
 
+    tier_counts: dict[str, int] = {"baseline": 0, "elevated": 0, "advanced": 0, "unknown": 0}
+    for r in results:
+        tier = str(r.get("effectiveness_tier") or "baseline").strip().lower()
+        if tier not in tier_counts:
+            tier = "unknown"
+        tier_counts[tier] += 1
+    tier_rates = {
+        key: (round(100 * value / total, 1) if total else 0.0)
+        for key, value in tier_counts.items()
+    }
+
     benign = by_cat.get("benign_controls", {"total": 0, "blocked": 0, "proceeded": 0})
     benign_total = benign["total"]
     benign_blocked = benign["blocked"]
@@ -970,6 +1018,10 @@ def summarize(results: list[dict]) -> dict:
         "empty_200_anomalies": empty_200_anomalies,
         "block_rate": round(100 * blocked / total, 1) if total else 0.0,
         "categories": by_cat,
+        "effectiveness_tiers": {
+            "counts": tier_counts,
+            "rates": tier_rates,
+        },
         "trial_mode_suspected": trial_mode_suspected,
         "trial_mode_reason": (
             "All benign_controls payloads were denied; this can indicate trial-tier blanket blocking"
@@ -1717,6 +1769,17 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         help="Optional JSON file of additional seed payload families consumed by payload-mutation plugin",
     )
     parser.add_argument(
+        "--external-corpus-file",
+        action="append",
+        default=[],
+        help="Optional external payload corpus JSON file; repeatable",
+    )
+    parser.add_argument(
+        "--external-corpus-category",
+        default="prompt_injection",
+        help="Default category for external corpus entries without explicit category",
+    )
+    parser.add_argument(
         "--variants-per-seed",
         type=int,
         default=0,
@@ -1762,6 +1825,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
                 "reconciliation": reconciliation,
                 "regression": api_regression,
                 "gap_report": build_gap_report(results),
+                "category_gap_report": build_category_gap_report(results),
                 "results": results,
             }
             api_component = _finalize_summary_with_plugins(api_component, results, args, plugins)
@@ -2043,6 +2107,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         "reconciliation": reconciliation,
         "regression": api_regression,
         "gap_report": build_gap_report(results),
+        "category_gap_report": build_category_gap_report(results),
         "results": results,
     }
     output = _finalize_summary_with_plugins(output, results, args, plugins)

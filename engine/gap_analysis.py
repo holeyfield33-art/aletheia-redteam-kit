@@ -74,3 +74,50 @@ def build_gap_report(results: list[dict]) -> dict:
         "techniques": techniques,
         "top_gaps": top_gaps,
     }
+
+
+def build_category_gap_report(results: list[dict]) -> dict:
+    """Build category-level missed-block report for summary output."""
+    totals: dict[str, int] = defaultdict(int)
+    missed: dict[str, int] = defaultdict(int)
+
+    for result in results:
+        category = str(result.get("category") or "unknown").strip().lower() or "unknown"
+        totals[category] += 1
+
+        expected = str(result.get("expected_decision", ""))
+        actual = str(result.get("actual_decision", ""))
+        if expected == "DENIED" and actual == "PROCEED":
+            missed[category] += 1
+
+    categories: dict[str, dict] = {}
+    for category in sorted(totals):
+        total = totals[category]
+        missed_blocks = missed.get(category, 0)
+        categories[category] = {
+            "total": total,
+            "missed_blocks": missed_blocks,
+            "bypass_rate": round((100 * missed_blocks / total), 1) if total else 0.0,
+        }
+
+    ranked = sorted(
+        categories.items(),
+        key=lambda item: (item[1]["bypass_rate"], item[1]["missed_blocks"], item[1]["total"], item[0]),
+        reverse=True,
+    )
+    top_gaps = [
+        {
+            "category": name,
+            "bypass_rate": stats["bypass_rate"],
+            "missed_blocks": stats["missed_blocks"],
+            "total": stats["total"],
+        }
+        for name, stats in ranked[:5]
+        if stats["missed_blocks"] > 0
+    ]
+
+    return {
+        "total_tests": len(results),
+        "categories": categories,
+        "top_gaps": top_gaps,
+    }
