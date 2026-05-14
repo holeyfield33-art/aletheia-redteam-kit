@@ -419,6 +419,10 @@ def test_prepare_attacks_for_execution_appends_external_corpus(tmp_path, monkeyp
 
     assert len(attacks) >= 1
     assert any(str(attack.get("source", "")).startswith("external_corpus:") for attack in attacks)
+    diagnostics = getattr(args, "_payload_corpus_diagnostics", {})
+    assert diagnostics.get("external_loaded") == 1
+    assert diagnostics.get("final_total", 0) >= 1
+    assert "source_mix" in diagnostics
 
 
 def test_cli_api_mode_applies_plugin_hooks(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

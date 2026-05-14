@@ -161,6 +161,7 @@ Useful payload-corpus controls:
 - `--payload-family-file` adds curated seed families without editing core recursive catalogs under `attacks/`.
 - `--external-corpus-file` imports additional corpora (Garak/JailbreakBench/HarmBench-style JSON) and normalizes them into attack rows.
 - `--external-corpus-category` sets fallback category when external rows omit category metadata.
+- External corpus rows now include `source_adapter` and `source_confidence` metadata for traceable normalization quality.
 
 Example with external corpora adapters:
 
@@ -190,6 +191,7 @@ Important API outputs:
 - `gap_report`: custom-technique bypass analysis
 - `category_gap_report`: category-level bypass analysis and top category gaps
 - `effectiveness_tiers`: baseline/elevated/advanced distribution in the executed set
+- `corpus_diagnostics`: pre-execution corpus mix, dedupe drops, source/adaptor mix, and achieved benign ratio
 - `results[*].technique`: explicit or inferred custom technique tag per attack
 - `results[*].request_id`: captured request id (or `null` when unavailable)
 - `unknown`: count of requests classified as unknown decisions

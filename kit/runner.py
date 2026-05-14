@@ -638,6 +638,29 @@ def _limit_attacks(attacks: list[dict], max_attacks: int | None) -> list[dict]:
     return [dict(attack) for attack in attacks[:limit]]
 
 
+def _count_by_key(rows: list[dict], key: str, fallback: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(key, fallback) or fallback).strip() or fallback
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _benign_ratio(rows: list[dict]) -> float:
+    if not rows:
+        return 0.0
+    benign_total = sum(
+        1
+        for row in rows
+        if str(row.get("category", "")).strip().lower() == "benign_controls"
+    )
+    return round(float(benign_total) / float(len(rows)), 4)
+
+
+def _record_corpus_diagnostics(args: argparse.Namespace, diagnostics: dict) -> None:
+    setattr(args, "_payload_corpus_diagnostics", diagnostics)
+
+
 def _load_runner_plugins_from_args(args: argparse.Namespace) -> list[object]:
     return load_runner_plugins(getattr(args, "plugin", []) or [])
 
@@ -707,23 +730,23 @@ def _run_attacks_with_cli_options(
 
 
 def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[object] | None = None) -> list[dict]:
-    attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
-    attacks.extend(
-        load_external_corpus_attacks(
-            getattr(args, "external_corpus_file", []) or [],
-            default_category=getattr(args, "external_corpus_category", "prompt_injection"),
-        )
+    catalog_attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
+    external_attacks = load_external_corpus_attacks(
+        getattr(args, "external_corpus_file", []) or [],
+        default_category=getattr(args, "external_corpus_category", "prompt_injection"),
     )
-    attacks.extend(load_conversation_attacks(getattr(args, "conversation_file", None)))
-    attacks = _filter_attacks_by_categories(attacks, getattr(args, "categories", None))
+    conversation_attacks = load_conversation_attacks(getattr(args, "conversation_file", None))
+
+    attacks = [*catalog_attacks, *external_attacks, *conversation_attacks]
+    filtered = _filter_attacks_by_categories(attacks, getattr(args, "categories", None))
     expanded = expand_attack_families(
-        attacks,
+        filtered,
         objective=getattr(args, "objective", "Bypass secret exfil detection"),
         intensity=getattr(args, "attack_intensity", "medium"),
     )
-    expanded = _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
+    plugin_expanded = _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
     deduped = dedupe_attacks_semantic(
-        expanded,
+        plugin_expanded,
         threshold=float(getattr(args, "dedupe_semantic_threshold", 0.92) or 0.92),
     )
     limited = limit_attacks_with_benign_ratio(
@@ -731,7 +754,30 @@ def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[objec
         max_attacks=int(getattr(args, "max_attacks", 0) or 0),
         benign_ratio=float(getattr(args, "benign_ratio", 0.2) or 0.2),
     )
-    return _limit_attacks(limited, getattr(args, "max_attacks", None))
+    final_attacks = _limit_attacks(limited, getattr(args, "max_attacks", None))
+
+    diagnostics = {
+        "catalog_loaded": len(catalog_attacks),
+        "external_loaded": len(external_attacks),
+        "conversation_loaded": len(conversation_attacks),
+        "pre_filter_total": len(attacks),
+        "post_category_filter": len(filtered),
+        "expanded_total": len(expanded),
+        "post_plugin_total": len(plugin_expanded),
+        "post_dedupe_total": len(deduped),
+        "final_total": len(final_attacks),
+        "max_attacks": int(getattr(args, "max_attacks", 0) or 0),
+        "benign_ratio_target": float(getattr(args, "benign_ratio", 0.2) or 0.2),
+        "benign_ratio_achieved": _benign_ratio(final_attacks),
+        "dropped_by_category_filter": max(0, len(attacks) - len(filtered)),
+        "dropped_by_dedupe": max(0, len(plugin_expanded) - len(deduped)),
+        "dropped_by_cap": max(0, len(deduped) - len(final_attacks)),
+        "source_mix": _count_by_key(final_attacks, "source", "catalog"),
+        "category_mix": _count_by_key(final_attacks, "category", "unknown"),
+        "adapter_mix": _count_by_key(final_attacks, "source_adapter", "none"),
+    }
+    _record_corpus_diagnostics(args, diagnostics)
+    return final_attacks
 
 
 def run_attack(
@@ -1822,6 +1868,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
                 "mode": "api",
                 "engine_url": client.base_url,
                 **api_summary,
+                "corpus_diagnostics": getattr(args, "_payload_corpus_diagnostics", {}),
                 "reconciliation": reconciliation,
                 "regression": api_regression,
                 "gap_report": build_gap_report(results),
@@ -2104,6 +2151,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "engine_url": client.base_url,
         **summary,
+        "corpus_diagnostics": getattr(args, "_payload_corpus_diagnostics", {}),
         "reconciliation": reconciliation,
         "regression": api_regression,
         "gap_report": build_gap_report(results),

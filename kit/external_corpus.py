@@ -4,6 +4,38 @@ import json
 from pathlib import Path
 
 
+def _infer_adapter_name(path: Path, item: dict) -> str:
+    stem = path.stem.lower()
+    if "harmbench" in stem:
+        return "harmbench"
+    if "jailbreakbench" in stem or "jbb" in stem:
+        return "jailbreakbench"
+    if "garak" in stem:
+        return "garak"
+
+    keys = {str(key).strip().lower() for key in item.keys()}
+    if {"behavior", "prompt"}.issubset(keys) or "harmful_request" in keys:
+        return "harmbench"
+    if "jailbreak_prompt" in keys or "jb_prompt" in keys:
+        return "jailbreakbench"
+    if "probe_class" in keys or "detector" in keys:
+        return "garak"
+    return "generic"
+
+
+def _adapter_confidence(adapter: str, item: dict) -> str:
+    if adapter == "generic":
+        return "low"
+    keys = {str(key).strip().lower() for key in item.keys()}
+    if adapter == "harmbench":
+        return "high" if "behavior" in keys else "medium"
+    if adapter == "jailbreakbench":
+        return "high" if "jailbreak_prompt" in keys or "jb_prompt" in keys else "medium"
+    if adapter == "garak":
+        return "high" if "probe_class" in keys else "medium"
+    return "low"
+
+
 def _read_json_rows(path: Path) -> list:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(raw, dict):
@@ -16,6 +48,28 @@ def _read_json_rows(path: Path) -> list:
 
 
 def _pick_payload(item: dict) -> str:
+    priority_keys = (
+        "jailbreak_prompt",
+        "jb_prompt",
+        "harmful_request",
+        "behavior",
+        "payload",
+        "prompt",
+        "text",
+        "question",
+        "input",
+        "content",
+        "query",
+        "goal",
+    )
+    for key in priority_keys:
+        value = item.get(key)
+        if value is None:
+            continue
+        payload = str(value).strip()
+        if payload:
+            return payload
+
     for key in ("payload", "prompt", "text", "question", "input", "content", "query", "goal"):
         value = item.get(key)
         if value is None:
@@ -45,6 +99,8 @@ def _infer_category(item: dict, default_category: str) -> str:
 
     attack_type = str(item.get("attack_type") or item.get("technique") or "").strip().lower()
     if "jailbreak" in attack_type:
+        return "jailbreak"
+    if "harm" in attack_type:
         return "jailbreak"
     if "tool" in attack_type:
         return "tool_abuse"
@@ -106,6 +162,8 @@ def load_external_corpus_attacks(paths: list[str] | None, *, default_category: s
             category = _infer_category(item, default_category)
             expected_decision = _infer_expected_decision(item, category)
             severity = _infer_severity(item, expected_decision)
+            adapter = _infer_adapter_name(path, item)
+            confidence = _adapter_confidence(adapter, item)
 
             attacks.append(
                 {
@@ -120,6 +178,8 @@ def load_external_corpus_attacks(paths: list[str] | None, *, default_category: s
                     "technique": item.get("technique") or item.get("attack_type"),
                     "difficulty": item.get("difficulty") or item.get("level"),
                     "source": f"external_corpus:{source_name}",
+                    "source_adapter": adapter,
+                    "source_confidence": confidence,
                     "variant_kind": str(item.get("variant_kind") or "seed"),
                 }
             )
