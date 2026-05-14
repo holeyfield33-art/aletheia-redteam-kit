@@ -153,6 +153,70 @@ def test_cli_rejects_removed_agentic_mode_flag(monkeypatch: pytest.MonkeyPatch) 
         runner.cli()
 
 
+def test_cli_api_mode_forwards_threat_feed_file(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    output = tmp_path / "summary.json"
+    captured: dict[str, str | None] = {"threat_feed_file": None}
+
+    def _fake_load_attacks(category=None, threat_feed_file=None):
+        captured["threat_feed_file"] = threat_feed_file
+        return [
+            {
+                "id": "BC_001",
+                "name": "Benign",
+                "category": "benign_controls",
+                "payload": "show uptime",
+                "expected_decision": "PROCEED",
+                "severity": "LOW",
+            }
+        ]
+
+    class FakeClient:
+        base_url = "https://example.com"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(runner, "load_attacks", _fake_load_attacks)
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "run_attacks_with_backoff", lambda client, attacks: [{
+        "id": "BC_001",
+        "name": "Benign",
+        "category": "benign_controls",
+        "technique": "benign_operational_request",
+        "severity": "LOW",
+        "expected_decision": "PROCEED",
+        "actual_decision": "PROCEED",
+        "match": True,
+        "request_id": "req-1",
+        "latency_ms": 1.0,
+        "receipt": {"sig": "x"},
+        "reason": None,
+        "error": None,
+    }])
+    monkeypatch.setattr(runner, "reconcile_results", lambda results, client: {"total_reconciled": 0, "unreconciled": 0, "reconciliation_coverage_pct": 100.0, "unreconciled_request_ids": [], "endpoint": None, "auth_mode": "unknown"})
+    monkeypatch.setattr(runner, "build_gap_report", lambda results: {})
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "api",
+            "--threat-feed-file",
+            "sample_threat_feed.json",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+
+    assert rc == 0
+    assert captured["threat_feed_file"] == "sample_threat_feed.json"
+
+
 def test_cli_website_mode_writes_summary(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     output = tmp_path / "website_summary.json"
 

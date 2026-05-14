@@ -475,9 +475,18 @@ def infer_custom_technique(attack: dict) -> str:
     return "unspecified"
 
 
-def load_attacks(category: str | None = None) -> list[dict]:
+def load_attacks(category: str | None = None, threat_feed_file: str | None = None) -> list[dict]:
     """Load attacks from catalog provider. category=None loads all."""
-    return load_attacks_from_catalog(category)
+    return load_attacks_from_catalog(category, threat_feed_file=threat_feed_file)
+
+
+def _load_attacks_with_cli_options(category: str | None, threat_feed_file: str | None) -> list[dict]:
+    try:
+        return load_attacks(category, threat_feed_file=threat_feed_file)
+    except TypeError as exc:
+        if "threat_feed_file" not in str(exc):
+            raise
+        return load_attacks(category)
 
 
 def run_attack(client: AletheiaClient, attack: dict, *, include_status_code: bool = False) -> dict:
@@ -1345,7 +1354,10 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         "--repo-url",
         help="Public GitHub repository URL or owner/repo shorthand for --mode repo",
     )
-    parser.add_argument("--threat-feed-file", help="Optional threat feed JSON for repo and combined modes")
+    parser.add_argument(
+        "--threat-feed-file",
+        help="Optional JSON array file of extra attack payloads for API/agentic execution; repo mode continues to pass this path to repo-audit threat-feed enrichment",
+    )
     parser.add_argument(
         "--deps-scan",
         choices=["off", "auto", "full"],
@@ -1405,7 +1417,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         hard_error = False
 
         # API component
-        attacks = load_attacks(args.category)
+        attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
         print(f"Loaded {len(attacks)} attacks for combined API component", file=sys.stderr)
         with AletheiaClient(base_url=args.base_url) as client:
             results = run_attacks_with_backoff(client, attacks)
@@ -1595,7 +1607,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         return PASS if gates.get("pass", False) else FAIL_THRESHOLD
 
     if args.mode == "agentic":
-        attacks = load_attacks(args.category)
+        attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
         print(f"Loaded {len(attacks)} attacks for agentic optimization", file=sys.stderr)
 
         with AletheiaClient(base_url=args.base_url) as client:
@@ -1685,7 +1697,7 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
             return FAIL_THRESHOLD
         return PASS
 
-    attacks = load_attacks(args.category)
+    attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
     print(f"Loaded {len(attacks)} attacks", file=sys.stderr)
 
     with AletheiaClient(base_url=args.base_url) as client:

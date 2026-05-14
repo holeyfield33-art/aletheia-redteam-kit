@@ -125,7 +125,29 @@ class FileSystemCatalogProvider(CatalogProvider):
         return attacks
 
 
-def load_attacks(category: str | None = None, provider: CatalogProvider | None = None) -> list[dict]:
+def _load_feed_attacks(path: Path) -> list[AttackSpec]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, list):
+        raise ValueError(f"Threat feed payload catalog must contain a JSON array: {path}")
+
+    attacks: list[AttackSpec] = []
+    for idx, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Threat feed attack #{idx} in {path} must be a JSON object")
+        attacks.append(AttackSpec.from_dict(item, default_category="threat_feed"))
+    return attacks
+
+
+def load_attacks(
+    category: str | None = None,
+    provider: CatalogProvider | None = None,
+    threat_feed_file: str | None = None,
+) -> list[dict]:
     """Backwards-compatible helper returning dict records for existing runner flow."""
     chosen_provider = provider or FileSystemCatalogProvider()
-    return [attack.to_dict() for attack in chosen_provider.fetch_attacks(category)]
+    attacks = chosen_provider.fetch_attacks(category)
+
+    if threat_feed_file:
+        attacks.extend(_load_feed_attacks(Path(threat_feed_file)))
+
+    return [attack.to_dict() for attack in attacks]

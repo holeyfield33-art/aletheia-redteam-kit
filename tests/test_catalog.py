@@ -78,3 +78,67 @@ def test_load_attacks_returns_runner_compatible_dicts(tmp_path) -> None:
     assert rows[0]["expected_decision"] == "PROCEED"
     assert rows[0]["risk_category"] == "control"
     assert rows[0]["difficulty"] == "easy"
+
+
+def test_load_attacks_appends_threat_feed_records(tmp_path) -> None:
+    attack_dir = tmp_path / "attacks"
+    attack_dir.mkdir()
+    (attack_dir / "sample.json").write_text(
+        json.dumps(
+            [
+                {
+                    "id": "S_001",
+                    "name": "Sample",
+                    "category": "sample",
+                    "payload": "test payload",
+                    "expected_decision": "PROCEED",
+                }
+            ]
+        )
+    )
+    threat_feed_file = tmp_path / "sample_threat_feed.json"
+    threat_feed_file.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "TF_001",
+                    "name": "Threat feed payload",
+                    "payload": "extra payload",
+                    "expected_decision": "DENIED",
+                    "severity": "HIGH",
+                    "notes": "Appended from external threat feed",
+                }
+            ]
+        )
+    )
+
+    provider = FileSystemCatalogProvider(attack_dir)
+    rows = load_attacks("sample", provider, threat_feed_file=str(threat_feed_file))
+
+    assert len(rows) == 2
+    assert rows[1]["id"] == "TF_001"
+    assert rows[1]["category"] == "threat_feed"
+
+
+def test_load_attacks_rejects_non_array_threat_feed(tmp_path) -> None:
+    attack_dir = tmp_path / "attacks"
+    attack_dir.mkdir()
+    (attack_dir / "sample.json").write_text(
+        json.dumps(
+            [
+                {
+                    "id": "S_001",
+                    "name": "Sample",
+                    "category": "sample",
+                    "payload": "test payload",
+                    "expected_decision": "PROCEED",
+                }
+            ]
+        )
+    )
+    threat_feed_file = tmp_path / "sample_threat_feed.json"
+    threat_feed_file.write_text(json.dumps({"payload": "broken"}))
+
+    provider = FileSystemCatalogProvider(attack_dir)
+    with pytest.raises(ValueError):
+        load_attacks("sample", provider, threat_feed_file=str(threat_feed_file))
