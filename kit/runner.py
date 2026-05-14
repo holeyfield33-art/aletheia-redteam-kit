@@ -815,11 +815,60 @@ def _extract_request_id_from_http_error(exc: httpx.HTTPStatusError) -> str | Non
 
 
 def _adjust_request_delay(delay_sec: float, status_code: int | None) -> float:
+    # Backward-compatible shim retained for legacy callers.
     if status_code == 429:
         return min(delay_sec * 2.0, DEFAULT_MAX_REQUEST_DELAY_SEC)
     if status_code is None:
         return delay_sec
     return DEFAULT_REQUEST_DELAY_SEC
+
+
+def _categorize_attack_error(exc: Exception, status_code: int | None = None) -> str:
+    if status_code == 429:
+        return "rate_limited"
+    if status_code is not None and 500 <= status_code < 600:
+        return "server_error"
+    if status_code in {401, 403}:
+        return "auth_error"
+    if status_code == 404:
+        return "not_found"
+    if status_code is not None and 400 <= status_code < 500:
+        return "client_error"
+    if isinstance(exc, (httpx.TimeoutException, TimeoutError)):
+        return "timeout"
+    if isinstance(exc, (httpx.ConnectError, httpx.NetworkError, httpx.RemoteProtocolError)):
+        return "network_error"
+    return "unknown_error"
+
+
+def _is_transient_error(error_category: str) -> bool:
+    return error_category in {"rate_limited", "server_error", "timeout", "network_error"}
+
+
+def _adjust_request_delay_from_result(delay_sec: float, result: dict) -> float:
+    """Tune request pacing using status and categorized runtime errors."""
+    status_code = result.get("status_code")
+    error_category = str(result.get("error_category") or "").strip().lower()
+    actual_decision = str(result.get("actual_decision") or "").strip().upper()
+
+    if status_code == 429 or error_category == "rate_limited":
+        return min(delay_sec * 2.0, DEFAULT_MAX_REQUEST_DELAY_SEC)
+
+    if error_category in {"server_error", "timeout", "network_error"}:
+        return min(delay_sec * 1.5, DEFAULT_MAX_REQUEST_DELAY_SEC)
+
+    if status_code is not None and 500 <= int(status_code) < 600:
+        return min(delay_sec * 1.5, DEFAULT_MAX_REQUEST_DELAY_SEC)
+
+    if actual_decision in {"PROCEED", "DENIED"}:
+        # Recover toward baseline gradually after successful calls.
+        return max(DEFAULT_REQUEST_DELAY_SEC, delay_sec * 0.85)
+
+    if error_category in {"auth_error", "client_error", "not_found"}:
+        # Non-transient errors should not continue to inflate pacing.
+        return DEFAULT_REQUEST_DELAY_SEC
+
+    return delay_sec
 
 
 def _needs_reconciliation(result: dict) -> bool:
@@ -1228,6 +1277,7 @@ def run_attack(
                 continue
 
             request_id = _extract_request_id_from_http_error(exc)
+            error_category = _categorize_attack_error(exc, status_code=status_code)
             latency_ms = (time.time() - started) * 1000
             row = {
                 "id": attack["id"],
@@ -1249,11 +1299,14 @@ def run_attack(
                 "receipt": None,
                 "reason": None,
                 "error": str(exc),
+                "error_category": error_category,
+                "error_is_transient": _is_transient_error(error_category),
             }
             if include_status_code:
                 row["status_code"] = status_code
             return _apply_result_plugins(row, attack, plugin_args, plugins)
         except Exception as exc:
+            error_category = _categorize_attack_error(exc, status_code=None)
             latency_ms = (time.time() - started) * 1000
             row = {
                 "id": attack["id"],
@@ -1275,6 +1328,8 @@ def run_attack(
                 "receipt": None,
                 "reason": None,
                 "error": str(exc),
+                "error_category": error_category,
+                "error_is_transient": _is_transient_error(error_category),
             }
             if include_status_code:
                 row["status_code"] = None
@@ -1311,7 +1366,7 @@ def run_attacks_with_backoff(
         )
         results.append(result)
 
-        delay_sec = _adjust_request_delay(delay_sec, result.get("status_code"))
+        delay_sec = _adjust_request_delay_from_result(delay_sec, result)
         result.pop("status_code", None)
 
     return results
@@ -1403,6 +1458,12 @@ def summarize(results: list[dict]) -> dict:
         for r in results
         if "Empty JSON response body from server (status 200)" in str(r.get("reason") or "")
     )
+    error_categories: dict[str, int] = {}
+    for r in results:
+        if str(r.get("actual_decision") or "").upper() != "ERROR":
+            continue
+        category = str(r.get("error_category") or "unknown_error").strip().lower() or "unknown_error"
+        error_categories[category] = error_categories.get(category, 0) + 1
 
     by_cat: dict[str, dict] = {}
     for r in results:
@@ -1449,6 +1510,7 @@ def summarize(results: list[dict]) -> dict:
         "proceeded": proceeded,
         "unknown": unknown,
         "errors": errors,
+        "error_categories": error_categories,
         "empty_200_anomalies": empty_200_anomalies,
         "block_rate": round(100 * blocked / total, 1) if total else 0.0,
         "categories": by_cat,

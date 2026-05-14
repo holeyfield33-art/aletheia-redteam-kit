@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import sqlite3
 
+import httpx
 import pytest
 
 from kit import runner
@@ -76,6 +77,86 @@ def test_run_attack_returns_error_record_without_crashing() -> None:
     assert result["actual_decision"] == "ERROR"
     assert result["match"] is False
     assert "rate limited" in result["error"]
+    assert result["error_category"] == "unknown_error"
+    assert result["error_is_transient"] is False
+
+
+def test_run_attack_categorizes_timeout_as_transient_error() -> None:
+    class FakeClient:
+        def audit(self, payload: str, action: str, origin: str):
+            raise httpx.TimeoutException("timed out")
+
+    attack = {
+        "id": "TA_TIMEOUT",
+        "name": "timeout test",
+        "category": "tool_abuse",
+        "expected_decision": "DENIED",
+        "payload": "run shell",
+    }
+
+    result = run_attack(FakeClient(), attack, include_status_code=True)
+    assert result["actual_decision"] == "ERROR"
+    assert result["error_category"] == "timeout"
+    assert result["error_is_transient"] is True
+    assert result["status_code"] is None
+
+
+def test_run_attack_categorizes_429_as_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeClient:
+        def audit(self, payload: str, action: str, origin: str):
+            request = httpx.Request("POST", "https://example.test/api/v1/audit")
+            response = httpx.Response(429, request=request)
+            raise httpx.HTTPStatusError("429 Too Many Requests", request=request, response=response)
+
+    attack = {
+        "id": "TA_429",
+        "name": "rate limit test",
+        "category": "tool_abuse",
+        "expected_decision": "DENIED",
+        "payload": "run shell",
+    }
+
+    # Avoid waiting on 5xx retry paths in case the implementation changes.
+    monkeypatch.setattr(runner.time, "sleep", lambda _sec: None)
+    result = run_attack(FakeClient(), attack, include_status_code=True)
+    assert result["actual_decision"] == "ERROR"
+    assert result["error_category"] == "rate_limited"
+    assert result["error_is_transient"] is True
+    assert result["status_code"] == 429
+
+
+def test_adjust_request_delay_from_result_handles_transient_and_recovery() -> None:
+    delay = 1.0
+    delay = runner._adjust_request_delay_from_result(
+        delay,
+        {"actual_decision": "ERROR", "error_category": "timeout", "status_code": None},
+    )
+    assert delay == pytest.approx(1.5)
+
+    delay = runner._adjust_request_delay_from_result(
+        delay,
+        {"actual_decision": "ERROR", "error_category": "rate_limited", "status_code": 429},
+    )
+    assert delay == pytest.approx(3.0)
+
+    delay = runner._adjust_request_delay_from_result(
+        delay,
+        {"actual_decision": "DENIED", "status_code": 200},
+    )
+    assert delay < 3.0
+
+
+def test_summarize_includes_error_category_counts() -> None:
+    summary = summarize(
+        [
+            {"category": "x", "actual_decision": "ERROR", "match": False, "error_category": "timeout"},
+            {"category": "x", "actual_decision": "ERROR", "match": False, "error_category": "timeout"},
+            {"category": "x", "actual_decision": "ERROR", "match": False, "error_category": "auth_error"},
+            {"category": "x", "actual_decision": "DENIED", "match": True},
+        ]
+    )
+    assert summary["error_categories"]["timeout"] == 2
+    assert summary["error_categories"]["auth_error"] == 1
 
 
 def test_run_attack_preserves_custom_technique() -> None:
