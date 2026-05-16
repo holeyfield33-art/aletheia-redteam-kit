@@ -45,6 +45,77 @@ class SecurityFinding:
     title: str
 
 
+def _load_zero_trust_policy(path: Path | None) -> dict[str, object]:
+    if path is None or not path.exists():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("zero trust policy file must contain a JSON object")
+    return raw
+
+
+def _parse_probe_names(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def _probe_expected_block(policy: dict[str, object], case_id: str, family: str) -> bool:
+    probes = policy.get("probes")
+    if not isinstance(probes, list):
+        return True
+    for row in probes:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("case_id") or "").strip() == case_id or str(row.get("family") or "").strip() == family:
+            return bool(row.get("expected_block", True))
+    return True
+
+
+def _run_probe_gates(
+    *,
+    probes: list[str],
+    evidence_dir: Path,
+    policy_file: Path | None,
+) -> dict[str, object]:
+    from kit.client import AletheiaClient
+    from kit.probes import ProbeCase, execute_probe_cases, load_probe_cases, summarize_probe_results
+
+    policy = _load_zero_trust_policy(policy_file)
+    client = AletheiaClient()
+    cases = load_probe_cases(probes)
+
+    adjusted_cases: list[ProbeCase] = []
+    for case in cases:
+        expected_block = _probe_expected_block(policy, case.case_id, case.family)
+        if expected_block == case.expected_block:
+            adjusted_cases.append(case)
+            continue
+        adjusted_cases.append(
+            ProbeCase(
+                case_id=case.case_id,
+                name=case.name,
+                family=case.family,
+                payload=case.payload,
+                expected_block=expected_block,
+                owasp_id=case.owasp_id,
+                nist_controls=case.nist_controls,
+                target_surface=case.target_surface,
+                action=case.action,
+                risk_class=case.risk_class,
+                tool_name=case.tool_name,
+                arguments=dict(case.arguments),
+            )
+        )
+
+    results = execute_probe_cases(client, adjusted_cases, evidence_root=evidence_dir)
+    summary = summarize_probe_results(results)
+    summary["results"] = [result.to_dict() for result in results]
+    summary["policy_source"] = str(policy_file) if policy_file else None
+    summary["evidence_root"] = str(evidence_dir.resolve())
+    return summary
+
+
 def _load_suppressions(path: Path | None, *, scanner: str) -> list[SuppressionEntry]:
     if path is None or not path.exists():
         return []
@@ -214,6 +285,9 @@ def main() -> int:
     parser.add_argument("--secret-allowlist", required=True)
     parser.add_argument("--semgrep-rules", required=True)
     parser.add_argument("--semgrep-suppressions", required=True)
+    parser.add_argument("--probes", help="Comma-separated probe families to execute (normalization,output,tool)")
+    parser.add_argument("--zero-trust-policy-file", help="Optional JSON policy file for probe expected_block contracts")
+    parser.add_argument("--evidence-dir", default="evidence", help="Directory used to persist probe evidence JSONL traces")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
 
@@ -221,6 +295,9 @@ def main() -> int:
     secret_allowlist = Path(args.secret_allowlist).resolve()
     semgrep_suppressions = Path(args.semgrep_suppressions).resolve()
     semgrep_rules = Path(args.semgrep_rules).resolve()
+    evidence_dir = Path(args.evidence_dir).resolve()
+    probe_names = _parse_probe_names(args.probes)
+    policy_file = Path(args.zero_trust_policy_file).resolve() if args.zero_trust_policy_file else None
     output = Path(args.output).resolve()
 
     secret_entries = _load_suppressions(secret_allowlist, scanner="trufflehog")
@@ -228,14 +305,30 @@ def main() -> int:
 
     trufflehog_findings = _run_trufflehog(repo_root, secret_entries)
     semgrep_findings = _run_semgrep(repo_root, semgrep_rules, semgrep_entries)
+    probe_summary: dict[str, object] | None = None
+    if probe_names:
+        probe_summary = _run_probe_gates(probes=probe_names, evidence_dir=evidence_dir, policy_file=policy_file)
 
     _write_report(output, trufflehog=trufflehog_findings, semgrep=semgrep_findings)
+    if probe_summary is not None:
+        report = json.loads(output.read_text(encoding="utf-8"))
+        report["probes"] = probe_summary
+        output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    if trufflehog_findings or semgrep_findings:
-        print(json.dumps({"trufflehog": len(trufflehog_findings), "semgrep": len(semgrep_findings)}, indent=2))
+    if trufflehog_findings or semgrep_findings or (probe_summary is not None and not bool(probe_summary.get("pass", False))):
+        print(
+            json.dumps(
+                {
+                    "trufflehog": len(trufflehog_findings),
+                    "semgrep": len(semgrep_findings),
+                    "probes": probe_summary["total"] if probe_summary is not None else 0,
+                },
+                indent=2,
+            )
+        )
         return 1
 
-    print(json.dumps({"trufflehog": 0, "semgrep": 0}, indent=2))
+    print(json.dumps({"trufflehog": 0, "semgrep": 0, "probes": 0}, indent=2))
     return 0
 
 
