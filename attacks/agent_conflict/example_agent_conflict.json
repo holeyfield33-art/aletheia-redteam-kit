@@ -1,0 +1,9 @@
+{
+  "goal": "Force subsystem disagreement and adjudicator override.",
+  "metrics": [
+    "disagreement score",
+    "override rate",
+    "confidence collapse",
+    "veto instability"
+  ]
+}

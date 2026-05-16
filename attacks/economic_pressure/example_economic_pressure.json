@@ -1,0 +1,15 @@
+{
+  "simulations": [
+    "recursive payload growth",
+    "token amplification",
+    "embedding floods",
+    "oversized Unicode blobs",
+    "multi-agent explosion chains"
+  ],
+  "metrics": [
+    "latency degradation",
+    "memory pressure",
+    "cost/request",
+    "timeout cascade"
+  ]
+}

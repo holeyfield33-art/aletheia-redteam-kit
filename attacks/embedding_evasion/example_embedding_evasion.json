@@ -1,0 +1,13 @@
+{
+  "baseline_similarity": 0.91,
+  "mutated_similarity": 0.37,
+  "verdict_changed": true,
+  "techniques": [
+    "homoglyphs",
+    "unicode confusables",
+    "multilingual pivots",
+    "synonym flooding",
+    "semantic dilution",
+    "spacing attacks"
+  ]
+}
