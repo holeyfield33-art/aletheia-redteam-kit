@@ -1376,9 +1376,7 @@ def _write_command_center_artifacts(
     mode = str(summary.get("mode") or "api")
     generated_at = str(summary.get("generated_at") or datetime.now(timezone.utc).isoformat())
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = artifact_dir / f"run-{mode}-{stamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = _make_unique_run_dir(artifact_dir, f"run-{mode}")
 
     baseline_summary: dict | None = None
     if baseline_path:
@@ -1472,15 +1470,21 @@ def _merge_batch_models(models: list[dict]) -> dict:
     return merged
 
 
+def _make_unique_run_dir(parent: Path, prefix: str) -> Path:
+    """Create a timestamped run directory that cannot collide within the same second."""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    run_dir = parent / f"{prefix}-{stamp}"
+    run_dir.mkdir(parents=True, exist_ok=False)
+    return run_dir
+
+
 def _run_targets_batch(args: argparse.Namespace, plugins: list[object] | None = None) -> tuple[dict, Path]:
     """Execute a batch of heterogeneous targets from a targets-file and aggregate results."""
     targets_raw: list[dict] = json.loads(Path(args.targets_file).read_text(encoding="utf-8"))
     artifact_dir = Path(args.artifact_dir).resolve()
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    batch_root = artifact_dir / f"run-batch-{stamp}"
-    batch_root.mkdir(parents=True, exist_ok=True)
+    batch_root = _make_unique_run_dir(artifact_dir, "run-batch")
 
     components: dict = {}
     target_summaries: list[dict] = []
@@ -1490,8 +1494,6 @@ def _run_targets_batch(args: argparse.Namespace, plugins: list[object] | None = 
         target_type = str(target.get("type") or "api").lower()
         label = str(target.get("label") or f"target-{idx:02d}")
         component_key = f"{label}-{idx:02d}"
-        target_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
         target_artifact_dir = batch_root / "targets" / label / "artifacts"
         target_artifact_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1534,8 +1536,7 @@ def _run_targets_batch(args: argparse.Namespace, plugins: list[object] | None = 
 
         components[component_key] = component_summary
 
-        run_dir = target_artifact_dir / f"run-{target_type}-{target_stamp}"
-        run_dir.mkdir(parents=True, exist_ok=True)
+        run_dir = _make_unique_run_dir(target_artifact_dir, f"run-{target_type}")
         summary_path = run_dir / "summary.json"
         summary_path.write_text(json.dumps(component_summary, indent=2, default=str), encoding="utf-8")
 
@@ -1553,9 +1554,7 @@ def _run_targets_batch(args: argparse.Namespace, plugins: list[object] | None = 
         })
 
     # Build combined model and write to a separate run-combined-* dir
-    combined_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    combined_run_dir = artifact_dir / f"run-combined-{combined_stamp}"
-    combined_run_dir.mkdir(parents=True, exist_ok=True)
+    combined_run_dir = _make_unique_run_dir(artifact_dir, "run-combined")
 
     combined_model = _merge_batch_models(all_models)
     combined_sqlite_path = combined_run_dir / "command_center.sqlite"

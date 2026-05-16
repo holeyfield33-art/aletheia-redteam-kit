@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 import sqlite3
 
@@ -2109,3 +2110,161 @@ def test_cli_combined_targets_file_batches_and_aggregates(monkeypatch: pytest.Mo
     with sqlite3.connect(combined_sqlite) as conn:
         target_count = conn.execute("SELECT COUNT(*) FROM targets").fetchone()[0]
         assert target_count == 2
+
+
+def test_cli_combined_targets_file_writes_distinct_combined_artifacts_within_same_second(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    targets_file = tmp_path / "targets.json"
+    targets_file.write_text(
+        json.dumps(
+            [
+                {"type": "api", "url": "https://api.example.com", "label": "api-one"},
+                {"type": "repo", "path": str(tmp_path / "repo-one"), "label": "repo-one"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    artifact_dir = tmp_path / "artifacts"
+    output = tmp_path / "batch_summary.json"
+    repo_dir = tmp_path / "repo-one"
+    repo_dir.mkdir()
+
+    class SameSecondDateTime:
+        _tick = 0
+
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(2026, 5, 5, 0, 0, 0, cls._tick, tzinfo=timezone.utc)
+            cls._tick += 1
+            if tz is None:
+                return value.replace(tzinfo=None)
+            return value.astimezone(tz)
+
+    class FakeClient:
+        base_url = "https://api.example.com"
+
+        def __init__(self, base_url=None, target_profile=None):
+            self.base_url = base_url or self.base_url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(runner, "datetime", SameSecondDateTime)
+    monkeypatch.setattr(runner, "AletheiaClient", FakeClient)
+    monkeypatch.setattr(
+        runner,
+        "load_attacks",
+        lambda category=None, threat_feed_file=None: [
+            {
+                "id": "BC_001",
+                "name": "Batch benign",
+                "category": "benign_controls",
+                "payload": "show uptime",
+                "expected_decision": "PROCEED",
+                "severity": "LOW",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        runner,
+        "run_attacks_with_backoff",
+        lambda client, attacks, plugins=None, plugin_args=None: [
+            {
+                "id": "BC_001",
+                "name": "Batch benign",
+                "category": "benign_controls",
+                "technique": "benign_operational_request",
+                "severity": "LOW",
+                "variant_kind": "seed",
+                "effectiveness_tier": "baseline",
+                "target_surface": "prompt_interface",
+                "mutation_strategy": None,
+                "family_id": None,
+                "source": None,
+                "expected_decision": "PROCEED",
+                "actual_decision": "PROCEED",
+                "match": True,
+                "request_id": "req-1",
+                "latency_ms": 1.0,
+                "receipt": {"sig": "x"},
+                "reason": None,
+                "error": None,
+                "status_code": 200,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        runner,
+        "reconcile_results",
+        lambda results, client: {
+            "total_reconciled": 0,
+            "unreconciled": 0,
+            "reconciliation_coverage_pct": 100.0,
+            "unreconciled_request_ids": [],
+            "endpoint": None,
+            "auth_mode": "unknown",
+        },
+    )
+    monkeypatch.setattr(runner, "build_gap_report", lambda results: {})
+    monkeypatch.setattr(runner, "build_category_gap_report", lambda results: {})
+    monkeypatch.setattr(
+        runner,
+        "run_repo_audit",
+        lambda repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto", **_kwargs: {
+            "generated_at": "2026-05-05T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": str(repo_path),
+            "files_scanned": 1,
+            "findings_total": 1,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0, "LOW": 0},
+            "findings_by_type": {"dummy": 1},
+            "risk_score": 90,
+            "gates": {"pass": True, "violations": []},
+            "findings": [
+                {
+                    "severity": "HIGH",
+                    "type": "dummy",
+                    "title": "Repo finding",
+                    "file": "repo.py",
+                    "line": 1,
+                    "evidence": "x",
+                    "recommendation": "y",
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "combined",
+            "--targets-file",
+            str(targets_file),
+            "--artifact-dir",
+            str(artifact_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+
+    assert rc == 0
+    runner._write_command_center_artifacts(
+        output,
+        artifact_dir,
+        dashboard_file=None,
+        baseline_path=None,
+    )
+    combined_runs = sorted(artifact_dir.glob("run-combined-*"))
+    assert len(combined_runs) == 2
+    for combined_run in combined_runs:
+        with sqlite3.connect(combined_run / "command_center.sqlite") as conn:
+            target_count = conn.execute("SELECT COUNT(*) FROM targets").fetchone()[0]
+            assert target_count == 2
