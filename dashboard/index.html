@@ -618,6 +618,15 @@
       <h2>Launch Queue</h2>
       <div class="button-row" style="margin-bottom:0.55rem;">
         <button id="refreshLaunchesBtn" type="button">Refresh launches</button>
+        <label>
+          Log tail
+          <select id="launchLogTailLines">
+            <option value="100">100 lines</option>
+            <option value="400" selected>400 lines</option>
+            <option value="1000">1000 lines</option>
+            <option value="2000">2000 lines</option>
+          </select>
+        </label>
       </div>
       <div class="run-list" id="launchesList"></div>
       <pre class="launch-log" id="launchLogView">No launch selected.</pre>
@@ -759,6 +768,7 @@
     const HOSTED_RUNS_API_PATH = "/api/runs";
     const HOSTED_LAUNCHES_API_PATH = "/api/launches";
     const LAUNCH_POLL_INTERVAL_MS = 5000;
+    const DEFAULT_LAUNCH_LOG_TAIL_LINES = 400;
     const AUTO_SCAN_CANDIDATES = [
       "./summary.json",
       "./summary_rerun.json",
@@ -794,6 +804,7 @@
       launchPollingTimer: null,
       launchPollInFlight: false,
       launchLogInFlight: false,
+      launchLogTailLines: DEFAULT_LAUNCH_LOG_TAIL_LINES,
       filters: {
         component: "auto",
         category: "all",
@@ -845,6 +856,7 @@
     const launchesListEl = document.getElementById("launchesList");
     const launchLogViewEl = document.getElementById("launchLogView");
     const refreshLaunchesBtnEl = document.getElementById("refreshLaunchesBtn");
+    const launchLogTailLinesEl = document.getElementById("launchLogTailLines");
     const detailMetaEl = document.getElementById("detailMeta");
     const baselineRunFilterEl = document.getElementById("baselineRunFilter");
     const useSelectedAsBaselineBtnEl = document.getElementById("useSelectedAsBaselineBtn");
@@ -1070,10 +1082,21 @@
       }
       state.launchLogInFlight = true;
       try {
-      const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id) + "/logs");
+      const query = "?tail_lines=" + encodeURIComponent(String(state.launchLogTailLines || DEFAULT_LAUNCH_LOG_TAIL_LINES));
+      const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id) + "/logs" + query);
       state.selectedLaunchId = id;
       renderLaunches();
-      setLaunchLog(payload.logs || "No logs available.");
+      const logText = String(payload.logs || "No logs available.");
+      const isTruncated = Boolean(payload.truncated);
+      const totalLines = Number(payload.total_lines || 0);
+      const tailLines = Number(payload.tail_lines || state.launchLogTailLines || DEFAULT_LAUNCH_LOG_TAIL_LINES);
+      if (isTruncated) {
+        setLaunchLog(
+          "Showing last " + String(tailLines) + " of " + String(totalLines) + " lines.\n\n" + logText
+        );
+      } else {
+        setLaunchLog(logText);
+      }
       if (!opts.silent) {
         setStatus("Loaded logs for launch " + id + ".");
       }
@@ -2756,6 +2779,18 @@
     });
     refreshLaunchesBtnEl.addEventListener("click", async function () {
       await refreshLaunches({ silent: false });
+    });
+    launchLogTailLinesEl.addEventListener("change", async function () {
+      const parsed = Number(launchLogTailLinesEl.value);
+      state.launchLogTailLines = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_LAUNCH_LOG_TAIL_LINES;
+      if (!state.selectedLaunchId) {
+        return;
+      }
+      try {
+        await fetchLaunchLogs(state.selectedLaunchId);
+      } catch (err) {
+        setStatus("Log tail update failed: " + (err && err.message ? err.message : String(err)));
+      }
     });
     launchesListEl.addEventListener("click", async function (event) {
       const actionButton = event.target.closest("button[data-launch-action]");
