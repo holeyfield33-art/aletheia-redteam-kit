@@ -96,29 +96,73 @@ Additional CARTO-aligned operator guidance:
 
 Current attack categories loaded from the recursive catalogs under `attacks/`:
 
+- `adversarial_token_sequence`
 - `agent_conflict`
+- `auth_context_confusion`
 - `benign_controls`
+- `chain_of_thought_leakage`
+- `classifier_evasion`
+- `content_type_confusion`
 - `context_poisoning`
+- `crawl_based_injection`
+- `dataset_poisoning`
 - `data_exfiltration`
 - `economic_pressure`
 - `embedding_evasion`
+- `environment_variable_leakage`
 - `encoding`
+- `function_calling_injection`
 - `hybrid_tool`
 - `jailbreak`
+- `key_leakage`
 - `memory_poisoning`
+- `metric_manipulation`
+- `misleading_confidence`
+- `model_weight_tampering`
+- `multimodal_injection`
 - `multi_turn`
 - `obfuscated`
+- `output_truncation_exploit`
+- `path_traversal_tool_call`
 - `policy_evasion`
+- `policy_shadowing`
 - `prompt_injection`
+- `rag_injection`
+- `reflected_prompt_injection`
+- `representation_injection`
+- `resource_exhaustion`
+- `response_boundary_injection`
+- `role_confusion`
+- `safety_bypass_indirect`
+- `sandbox_escape_attempt`
+- `social_engineering_output`
+- `spec_violation`
+- `steganographic_prompting`
+- `stored_prompt_injection`
+- `streaming_mode_desync`
 - `session_campaigns`
 - `side_channel`
+- `test_harness_escape`
 - `tool_abuse`
+- `tool_use_escalation`
+- `ui_injection`
 - `visual_renderer`
+
+Advanced attack classes are now modeled as first-class catalog categories under `attacks/advanced/`, with one JSON file per category so category filters map directly to filenames.
+
+The comprehensive v1.0 suite (81 tests across 9 categories) and coverage matrix are documented in [docs/test-case-catalog-v1.md](docs/test-case-catalog-v1.md).
+
+Examples:
+
+- `python -m kit.runner --category spec_violation --output spec_violation_summary.json`
+- `python -m kit.runner --category rag_injection --output rag_injection_summary.json`
+- `python -m kit.runner --category sandbox_escape_attempt --output sandbox_escape_summary.json`
 
 Catalog directories:
 
 - [Jailbreak catalogs](attacks/jailbreaks/)
 - [Injection catalogs](attacks/injections/)
+- [Advanced attack class catalogs](attacks/advanced/)
 - [Exfiltration catalogs](attacks/exfil/)
 - [Encoding catalogs](attacks/encoding/)
 - [Visual catalogs](attacks/visual/)

@@ -93,6 +93,18 @@ Current attack categories used by API and combined runs:
 - `tool_abuse`
 - `visual_renderer`
 
+Additional advanced categories are available under `attacks/advanced/`, including:
+
+- model-level classes such as `spec_violation`, `safety_bypass_indirect`, `representation_injection`, and `chain_of_thought_leakage`
+- protocol-level classes such as `response_boundary_injection`, `function_calling_injection`, `tool_use_escalation`, and `content_type_confusion`
+- cross-surface classes such as `stored_prompt_injection`, `reflected_prompt_injection`, `crawl_based_injection`, and `multimodal_injection`
+- supply-chain classes such as `model_weight_tampering`, `dataset_poisoning`, and `rag_injection`
+- identity/safety/runtime classes such as `auth_context_confusion`, `role_confusion`, `classifier_evasion`, `test_harness_escape`, `sandbox_escape_attempt`, and `environment_variable_leakage`
+
+Each advanced category is stored in a same-name JSON file, so category-targeted runs are direct:
+
+- `python -m kit.runner --category spec_violation --output spec_violation_summary.json`
+
 ## Audit Types Performed
 
 The command center supports these run types:

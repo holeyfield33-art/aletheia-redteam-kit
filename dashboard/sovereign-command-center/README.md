@@ -14,6 +14,7 @@ Next.js operator dashboard for local audit execution and adversarial endpoint te
 	- HTTP method fuzzing
 	- parameter injection modes (query/header/body)
 	- payload category filtering sourced from `attacks/*.json`
+	- payload category filtering sourced from recursive catalogs under `attacks/**/*.json` (including advanced classes in `attacks/advanced/`)
 	- saved test profiles (save/load/delete)
 	- result export and clear actions
 
@@ -39,7 +40,7 @@ npm run build
 - `POST /api/engine`
 	- runs sovereign audit orchestration for selected project/runtime/mode-selection
 - `GET /api/payloads`
-	- returns payload preview from `attacks/*.json`
+	- returns payload preview from recursive catalogs under `attacks/**/*.json`
 - `POST /api/test-endpoint`
 	- runs adversarial endpoint tests and returns normalized result rows
 
