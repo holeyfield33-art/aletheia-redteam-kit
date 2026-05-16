@@ -69,6 +69,60 @@ RECONCILIATION_COVERAGE_THRESHOLD_PCT = 95.0
 TOOL_VERSION = "1.2.0"
 
 
+def _sanitize_user_string(value: str | None, *, field_name: str, max_length: int = 2048) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    if len(normalized) > max_length:
+        raise ValueError(f"{field_name} is too long")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in normalized):
+        raise ValueError(f"{field_name} contains invalid control characters")
+    return normalized
+
+
+def _sanitize_json_path(value: str | None, *, field_name: str) -> str | None:
+    normalized = _sanitize_user_string(value, field_name=field_name, max_length=4096)
+    if not normalized:
+        return None
+    if not normalized.endswith(".json"):
+        raise ValueError(f"{field_name} must point to a .json file")
+    return normalized
+
+
+def _sanitize_repo_url(value: str | None) -> str | None:
+    normalized = _sanitize_user_string(value, field_name="repo_url", max_length=512)
+    if not normalized:
+        return None
+    if normalized.startswith("file://"):
+        raise ValueError("repo_url must be a public GitHub URL or owner/repo shorthand")
+    return normalized
+
+
+def _sanitize_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
+    """Sanitize and normalize legacy CLI arguments for runner compatibility."""
+    if not getattr(args, "repo_token", None):
+        args.repo_token = os.environ.get("ALETHEIA_GITHUB_TOKEN") or None
+
+    for field_name in (
+        "threat_feed_file",
+        "rules_file",
+        "auth_workflow_file",
+        "prompt_tests_file",
+        "conversation_file",
+        "targets_file",
+    ):
+        value = getattr(args, field_name, None)
+        if value:
+            setattr(args, field_name, _sanitize_json_path(value, field_name=field_name))
+
+    if hasattr(args, "repo_url"):
+        args.repo_url = _sanitize_repo_url(getattr(args, "repo_url", None))
+
+    return args
+
+
 def _parse_key_value_csv(raw: str | None) -> dict[str, str]:
     pairs: dict[str, str] = {}
     if not raw:
@@ -82,6 +136,103 @@ def _parse_key_value_csv(raw: str | None) -> dict[str, str]:
         if key:
             pairs[key] = value
     return pairs
+
+
+def load_attacks(category: str | None = None, threat_feed_file: str | None = None) -> list[dict]:
+    """Load attacks from the catalog provider."""
+    return load_attacks_from_catalog(category, threat_feed_file=threat_feed_file)
+
+
+def load_conversation_attacks(path: str | None) -> list[dict]:
+    path = _sanitize_json_path(path, field_name="conversation_file")
+    if not path:
+        return []
+
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(raw, dict):
+        rows = raw.get("conversations") or raw.get("attacks") or [raw]
+    else:
+        rows = raw
+
+    if not isinstance(rows, list):
+        raise ValueError("Conversation file must contain a JSON array or an object with conversations/attacks")
+
+    attacks: list[dict] = []
+    for index, row in enumerate(rows, 1):
+        if not isinstance(row, dict):
+            raise ValueError(f"Conversation attack #{index} must be a JSON object")
+        attack = dict(row)
+        attack.setdefault("id", f"CF_{index:03d}")
+        attack.setdefault("name", f"Conversation file attack {index}")
+        attack.setdefault("category", "multi_turn")
+        attack.setdefault("action", "chat")
+        attack.setdefault("origin", "redteam-kit")
+        attack.setdefault("expected_decision", attack.get("expected_verdict") or "DENIED")
+        attack.setdefault("severity", "HIGH")
+        attacks.append(attack)
+    return attacks
+
+
+def infer_custom_technique(attack: dict) -> str:
+    category = str(attack.get("category", "")).strip().lower()
+    payload = str(attack.get("payload", "")).strip().lower()
+
+    if category in {"multi_turn", "session_campaigns"}:
+        return "campaign_escalation"
+    if category == "context_poisoning":
+        return "context_injection"
+    if category == "embedding_evasion":
+        return "semantic_evasion"
+    if category == "agent_conflict":
+        return "agent_disagreement"
+    if category == "economic_pressure":
+        return "resource_amplification"
+    if category == "side_channel":
+        return "side_channel_fingerprinting"
+    if category == "semantic_drift":
+        return "trajectory_drift"
+
+    if "hypothetical" in payload or "suppose" in payload:
+        return "hypothetical_framing"
+    if "ignore previous" in payload or "override" in payload:
+        return "instruction_override"
+    if "base64" in payload:
+        return "encoding_evasion"
+    return "unspecified"
+
+
+def _extract_request_id_from_http_error(exc: httpx.HTTPStatusError) -> str | None:
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    return response.headers.get("x-request-id") or response.headers.get("request-id") or None
+
+
+def _categorize_attack_error(exc: Exception, *, status_code: int | None) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(exc, httpx.HTTPStatusError):
+        if status_code == 429:
+            return "rate_limited"
+        if status_code is not None and status_code >= 500:
+            return "server_error"
+        if status_code in {401, 403}:
+            return "auth_error"
+        return "http_error"
+    return "unknown_error"
+
+
+def _is_transient_error(error_category: str) -> bool:
+    return error_category in {"timeout", "rate_limited", "server_error"}
+
+
+def _adjust_request_delay_from_result(delay_sec: float, result: dict) -> float:
+    error_category = str(result.get("error_category") or "").strip().lower()
+    if result.get("actual_decision") == "ERROR" and _is_transient_error(error_category):
+        return min(DEFAULT_MAX_REQUEST_DELAY_SEC, max(DEFAULT_REQUEST_DELAY_SEC, delay_sec * 1.5))
+    if result.get("actual_decision") in {"DENIED", "PROCEED"} and delay_sec > DEFAULT_REQUEST_DELAY_SEC:
+        return max(DEFAULT_REQUEST_DELAY_SEC, delay_sec * 0.9)
+    return delay_sec
 
 
 def run_attack(
@@ -939,6 +1090,196 @@ def load_protected_profiles(values: list[str] | None) -> list[str]:
         if profile not in profiles:
             profiles.append(profile)
     return profiles
+
+
+def _load_runner_plugins_from_args(args: argparse.Namespace) -> list[object]:
+    return load_runner_plugins(getattr(args, "plugin", []) or [])
+
+
+def _apply_attack_plugins(attacks: list[dict], args: argparse.Namespace, plugins: list[object]) -> list[dict]:
+    updated = [dict(attack) for attack in attacks]
+    for plugin in plugins:
+        hook = getattr(plugin, "transform_attacks", None)
+        if not callable(hook):
+            continue
+        maybe_updated = hook(updated, args)
+        if maybe_updated is not None:
+            updated = maybe_updated
+        if not isinstance(updated, list):
+            raise TypeError(f"Plugin {plugin_name(plugin)} transform_attacks must return a list of attacks")
+    return updated
+
+
+def _apply_result_plugins(result: dict, attack: dict, args: argparse.Namespace | None, plugins: list[object] | None) -> dict:
+    updated = dict(result)
+    for plugin in plugins or []:
+        hook = getattr(plugin, "transform_result", None)
+        if not callable(hook):
+            continue
+        maybe_updated = hook(updated, attack, args)
+        if maybe_updated is not None:
+            updated = maybe_updated
+        if not isinstance(updated, dict):
+            raise TypeError(f"Plugin {plugin_name(plugin)} transform_result must return a dict result")
+    return updated
+
+
+def _finalize_summary_with_plugins(
+    summary: dict,
+    results: list[dict],
+    args: argparse.Namespace | None,
+    plugins: list[object] | None,
+) -> dict:
+    updated = dict(summary)
+    for plugin in plugins or []:
+        hook = getattr(plugin, "finalize_summary", None)
+        if not callable(hook):
+            continue
+        maybe_updated = hook(updated, results, args)
+        if maybe_updated is not None:
+            updated = maybe_updated
+        if not isinstance(updated, dict):
+            raise TypeError(f"Plugin {plugin_name(plugin)} finalize_summary must return a dict summary")
+    if plugins:
+        updated["plugins"] = [plugin_name(plugin) for plugin in plugins]
+    return updated
+
+
+def _load_attacks_with_cli_options(category: str | None, threat_feed_file: str | None) -> list[dict]:
+    try:
+        return load_attacks(category, threat_feed_file=threat_feed_file)
+    except TypeError as exc:
+        if "threat_feed_file" not in str(exc):
+            raise
+        return load_attacks(category)
+
+
+def _parse_category_filters(raw: str | None) -> set[str]:
+    if not raw:
+        return set()
+    values: set[str] = set()
+    for chunk in str(raw).split(","):
+        value = chunk.strip().lower()
+        if value:
+            values.add(value)
+    return values
+
+
+def _filter_attacks_by_categories(attacks: list[dict], categories_raw: str | None) -> list[dict]:
+    categories = _parse_category_filters(categories_raw)
+    if not categories:
+        return [dict(attack) for attack in attacks]
+    return [dict(attack) for attack in attacks if str(attack.get("category", "")).strip().lower() in categories]
+
+
+def _limit_attacks(attacks: list[dict], max_attacks: int | None) -> list[dict]:
+    limit = int(max_attacks or 0)
+    if limit <= 0:
+        return [dict(attack) for attack in attacks]
+    return [dict(attack) for attack in attacks[:limit]]
+
+
+def _count_by_key(rows: list[dict], key: str, fallback: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(key, fallback) or fallback).strip() or fallback
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _benign_ratio(rows: list[dict]) -> float:
+    if not rows:
+        return 0.0
+    benign_total = sum(1 for row in rows if str(row.get("category", "")).strip().lower() == "benign_controls")
+    return round(float(benign_total) / float(len(rows)), 4)
+
+
+def _run_attacks_with_cli_options(
+    client: AletheiaClient,
+    attacks: list[dict],
+    *,
+    plugins: list[object] | None,
+    plugin_args: argparse.Namespace | None,
+) -> list[dict]:
+    try:
+        return run_attacks_with_backoff(client, attacks, plugins=plugins, plugin_args=plugin_args)
+    except TypeError as exc:
+        if "plugins" not in str(exc) and "plugin_args" not in str(exc):
+            raise
+        return run_attacks_with_backoff(client, attacks)
+
+
+def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[object] | None = None) -> list[dict]:
+    catalog_attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
+    external_attacks = load_external_corpus_attacks(
+        getattr(args, "external_corpus_file", []) or [],
+        default_category=getattr(args, "external_corpus_category", "prompt_injection"),
+    )
+    conversation_attacks = load_conversation_attacks(getattr(args, "conversation_file", None))
+
+    attacks = [*catalog_attacks, *external_attacks, *conversation_attacks]
+    filtered = _filter_attacks_by_categories(attacks, getattr(args, "categories", None))
+    expanded = expand_attack_families(
+        filtered,
+        objective=getattr(args, "objective", "Bypass secret exfil detection"),
+        intensity=getattr(args, "attack_intensity", "medium"),
+    )
+    plugin_expanded = _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
+    deduped = dedupe_attacks_semantic(
+        plugin_expanded,
+        threshold=float(getattr(args, "dedupe_semantic_threshold", 0.92) or 0.92),
+    )
+    limited = limit_attacks_with_benign_ratio(
+        deduped,
+        max_attacks=int(getattr(args, "max_attacks", 0) or 0),
+        benign_ratio=float(getattr(args, "benign_ratio", 0.2) or 0.2),
+    )
+    final_attacks = _limit_attacks(limited, getattr(args, "max_attacks", None))
+
+    setattr(
+        args,
+        "_payload_corpus_diagnostics",
+        {
+            "catalog_loaded": len(catalog_attacks),
+            "external_loaded": len(external_attacks),
+            "conversation_loaded": len(conversation_attacks),
+            "pre_filter_total": len(attacks),
+            "post_category_filter": len(filtered),
+            "expanded_total": len(expanded),
+            "post_plugin_total": len(plugin_expanded),
+            "post_dedupe_total": len(deduped),
+            "final_total": len(final_attacks),
+            "max_attacks": int(getattr(args, "max_attacks", 0) or 0),
+            "benign_ratio_target": float(getattr(args, "benign_ratio", 0.2) or 0.2),
+            "benign_ratio_achieved": _benign_ratio(final_attacks),
+            "dropped_by_category_filter": max(0, len(attacks) - len(filtered)),
+            "dropped_by_dedupe": max(0, len(plugin_expanded) - len(deduped)),
+            "dropped_by_cap": max(0, len(deduped) - len(final_attacks)),
+            "source_mix": _count_by_key(final_attacks, "source", "catalog"),
+            "category_mix": _count_by_key(final_attacks, "category", "unknown"),
+            "adapter_mix": _count_by_key(final_attacks, "source_adapter", "none"),
+        },
+    )
+    return final_attacks
+
+
+def _build_target_profile_from_args(args: argparse.Namespace) -> TargetProfile:
+    return load_target_profile(
+        preset=getattr(args, "target_preset", "aletheia"),
+        profile_file=getattr(args, "target_profile_file", None),
+        base_url=getattr(args, "base_url", None) or getattr(args, "target_url", None),
+        model=getattr(args, "target_model", None),
+        auth_header=getattr(args, "auth_header", None),
+        auth_scheme=getattr(args, "auth_scheme", None),
+        extra_headers=getattr(args, "header", None),
+    )
+
+
+def _create_api_client(args: argparse.Namespace) -> AletheiaClient:
+    return AletheiaClient(
+        base_url=getattr(args, "base_url", None) or getattr(args, "target_url", None),
+        target_profile=_build_target_profile_from_args(args),
+    )
 
 
 def _legacy_cli(argv: list[str] | None = None) -> int:

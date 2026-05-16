@@ -31,6 +31,40 @@ dependencies = ["httpx>=0.27"]
     assert any(f["type"] == "api_key_literal" for f in summary["findings"])
 
 
+def test_repo_audit_downgrades_env_example_placeholders(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / ".env.example").write_text("API_KEY=your_key_here\n")
+
+    summary = run_repo_audit(tmp_path)
+
+    assert summary["findings_by_severity"]["HIGH"] == 0
+    assert summary["findings_by_type"].get("api_key_literal", 0) == 0
+
+
+def test_repo_audit_flags_high_entropy_production_secret(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "settings.py").write_text('SESSION_TOKEN = "a9Xk_12LmN-45pqR+stuVw8Y=zzA9Xk_12LmN-45"\n')
+
+    summary = run_repo_audit(tmp_path)
+
+    assert summary["findings_by_type"]["high_entropy_secret_literal"] >= 1
+    assert summary["findings_by_severity"]["HIGH"] >= 1
+
+
 def test_repo_audit_gate_fails_on_critical_private_key(tmp_path) -> None:
     (tmp_path / "pyproject.toml").write_text(
         """

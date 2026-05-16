@@ -94,11 +94,50 @@ Additional CARTO-aligned operator guidance:
 
 ## Attack Taxonomy
 
+Current attack categories loaded from the recursive catalogs under `attacks/`:
+
+- `agent_conflict`
+- `benign_controls`
+- `context_poisoning`
+- `data_exfiltration`
+- `economic_pressure`
+- `embedding_evasion`
+- `encoding`
+- `hybrid_tool`
+- `jailbreak`
+- `memory_poisoning`
+- `multi_turn`
+- `obfuscated`
+- `policy_evasion`
+- `prompt_injection`
+- `session_campaigns`
+- `side_channel`
+- `tool_abuse`
+- `visual_renderer`
+
+Catalog directories:
+
 - [Jailbreak catalogs](attacks/jailbreaks/)
 - [Injection catalogs](attacks/injections/)
 - [Exfiltration catalogs](attacks/exfil/)
 - [Encoding catalogs](attacks/encoding/)
 - [Visual catalogs](attacks/visual/)
+- [Session campaign catalogs](attacks/session_campaigns/)
+- [Context poisoning catalogs](attacks/context_poisoning/)
+- [Embedding evasion catalogs](attacks/embedding_evasion/)
+- [Side-channel catalogs](attacks/side_channel/)
+- [Economic pressure catalogs](attacks/economic_pressure/)
+- [Agent conflict catalogs](attacks/agent_conflict/)
+
+## Audit Modes
+
+Current audit modes performed by the toolkit:
+
+- `api`: adversarial payload audit against the configured model endpoint.
+- `website`: route crawl and active UI security audit with prompt/auth checks.
+- `repo`: static repository risk audit (secrets, language risk patterns, dependency and policy checks).
+- `combined`: unified command-center sweep that runs API + website + repo and emits one gated artifact.
+- `agentic`: iterative autonomous adversarial mode that mutates and requeues payloads.
 
 ## API red-team quick start
 

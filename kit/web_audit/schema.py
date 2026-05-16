@@ -61,6 +61,8 @@ class Finding:
         }
 
 
+# owner: web-audit-reporting
+# reason: stable deterministic finding IDs for report deduplication; not used for security decisions
 def _finding_id(finding_type: str, page_url: str, selector: str) -> str:
     material = f"{finding_type}|{page_url}|{selector}".encode("utf-8")
     return f"WA_{sha1(material).hexdigest()[:10].upper()}"

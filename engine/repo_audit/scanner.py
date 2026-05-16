@@ -296,6 +296,48 @@ TEST_FIXTURE_GLOBS = (
     "tests/**",
     "test/**",
 )
+SECRET_ALLOWLIST_FILE = ".aletheia-secret-allowlist"
+SECRET_LOW_TRUST_PATH_GLOBS = (
+    "*.md",
+    "*.sample",
+    "*.example",
+    ".env.example",
+    ".env.sample",
+    "docs/**",
+    "examples/**",
+    "test/**",
+    "tests/**",
+    "fixtures/**",
+    "fixture/**",
+)
+ENV_REFERENCE_PATTERNS = (
+    re.compile(r"\bprocess\.env\b"),
+    re.compile(r"\bos\.environ\b"),
+    re.compile(r"\bos\.getenv\b"),
+    re.compile(r"\bgetenv\b"),
+    re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}"),
+)
+PLACEHOLDER_SECRET_PATTERNS = (
+    re.compile(r"(?i)\byour_[a-z0-9_]*\b"),
+    re.compile(r"(?i)\bchangeme\b"),
+    re.compile(r"(?i)\bplaceholder\b"),
+    re.compile(r"(?i)\bdummy\b"),
+    re.compile(r"(?i)\btest_key\b"),
+    re.compile(r"(?i)\bxxx+\b"),
+    re.compile(r"\.\.\."),
+    re.compile(r"<[^>]+>"),
+    re.compile(r"\{\{[^}]+\}\}"),
+)
+SECRET_ENTROPY_THRESHOLD = 3.6
+
+
+@dataclass(frozen=True)
+class AllowlistEntry:
+    file_glob: str
+    finding_type: str
+    evidence_pattern: re.Pattern[str]
+    owner: str
+    reason: str
 GENERATED_ARTIFACT_GLOBS = (
     "summary.json",
     "summary_*.json",
@@ -391,7 +433,7 @@ def _iter_source_files(repo_root: Path) -> list[Path]:
         if not path.is_file():
             continue
         rel = path.relative_to(repo_root)
-        if rel.parts and rel.parts[0] in {".git", ".venv", "venv", "env", "node_modules", "dist", "build", "__pycache__", ".pytest_cache"}:
+        if _is_ignored_scan_path(rel):
             continue
         if any(fnmatch(str(rel).replace("\\", "/"), pattern) for pattern in GENERATED_ARTIFACT_GLOBS):
             continue
@@ -401,7 +443,8 @@ def _iter_source_files(repo_root: Path) -> list[Path]:
 
 
 def _is_ignored_scan_path(path: Path) -> bool:
-    return any(part in {".git", ".venv", "venv", "env", "node_modules", "dist", "build", "__pycache__", ".pytest_cache"} for part in path.parts)
+    ignored_parts = {".git", ".venv", "venv", "env", "node_modules", ".next", "dist", "build", "__pycache__", ".pytest_cache"}
+    return any(part in ignored_parts for part in path.parts)
 
 
 def _detect_dependency_manifests(repo_root: Path) -> dict[str, list[str]]:
@@ -437,6 +480,120 @@ def _is_allowlisted_fixture_line(rel_path: str, line: str) -> bool:
     return _matches_fixture_path(rel_path) and TEST_FIXTURE_ALLOWLIST_MARKER in line
 
 
+def _is_low_trust_secret_path(rel_path: str) -> bool:
+    normalized = rel_path.replace("\\", "/").lower()
+    if _matches_fixture_path(normalized):
+        return True
+    return any(fnmatch(normalized, pattern) for pattern in SECRET_LOW_TRUST_PATH_GLOBS)
+
+
+def _is_env_reference_line(line: str) -> bool:
+    return any(pattern.search(line) for pattern in ENV_REFERENCE_PATTERNS)
+
+
+def _is_placeholder_secret(candidate: str) -> bool:
+    normalized = candidate.strip().lower()
+    if not normalized:
+        return False
+    if normalized.startswith("<") and normalized.endswith(">"):
+        return True
+    if normalized in {"...", "xxx", "xxxx", "xxxxx", "test_key"}:
+        return True
+    return any(pattern.search(normalized) for pattern in PLACEHOLDER_SECRET_PATTERNS)
+
+
+def _has_mixed_character_classes(candidate: str) -> bool:
+    has_alpha = any(char.isalpha() for char in candidate)
+    has_digit = any(char.isdigit() for char in candidate)
+    has_symbol = any(char in "_-+/=" for char in candidate)
+    return has_alpha and has_digit and has_symbol
+
+
+def _extract_secret_candidate(line: str) -> str:
+    stripped = line.split("#", 1)[0].strip()
+    if not stripped:
+        return ""
+    if "=" in stripped:
+        stripped = stripped.split("=", 1)[1].strip()
+    elif ":" in stripped and re.search(r"(?i)(api[_-]?key|token|secret|password|session)", stripped):
+        stripped = stripped.split(":", 1)[1].strip()
+    matches = re.findall(r"['\"]([^'\"]{1,256})['\"]", stripped)
+    if matches:
+        return matches[0].strip()
+    return stripped.strip(" ,;")
+
+
+def _secret_finding_severity(rel_path: str, finding_type: str, candidate: str) -> str | None:
+    if _is_placeholder_secret(candidate):
+        return None
+
+    low_trust_path = _is_low_trust_secret_path(rel_path)
+    if finding_type in {"api_key_literal", "password_literal"}:
+        return "LOW" if low_trust_path else "HIGH"
+
+    if finding_type == "private_key_block":
+        return "LOW" if low_trust_path else "CRITICAL"
+
+    if low_trust_path:
+        return "LOW"
+
+    entropy = _shannon_entropy(candidate)
+    if _has_mixed_character_classes(candidate) and entropy >= SECRET_ENTROPY_THRESHOLD:
+        return "HIGH"
+    return "LOW"
+
+
+def _load_secret_allowlist(repo_root: Path) -> list[AllowlistEntry]:
+    allowlist_path = repo_root / SECRET_ALLOWLIST_FILE
+    if not allowlist_path.exists():
+        return []
+
+    entries: list[AllowlistEntry] = []
+    for raw_line in allowlist_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "# owner:" not in line or "# reason:" not in line:
+            continue
+
+        body, comment_blob = line.split("#", 1)
+        parts = [part.strip() for part in body.split("|")]
+        if len(parts) < 3:
+            continue
+
+        file_glob, finding_type, evidence_pattern = parts[:3]
+        owner_match = re.search(r"#\s*owner:\s*([^#]+)", f"#{comment_blob}", re.IGNORECASE)
+        reason_match = re.search(r"#\s*reason:\s*(.+)$", f"#{comment_blob}", re.IGNORECASE)
+        if not owner_match or not reason_match:
+            continue
+        try:
+            entries.append(
+                AllowlistEntry(
+                    file_glob=file_glob,
+                    finding_type=finding_type,
+                    evidence_pattern=re.compile(evidence_pattern or ".*"),
+                    owner=owner_match.group(1).strip(),
+                    reason=reason_match.group(1).strip(),
+                )
+            )
+        except re.error:
+            continue
+
+    return entries
+
+
+def _is_allowlisted_by_file(rel_path: str, finding_type: str, evidence: str, allowlist: list[AllowlistEntry]) -> bool:
+    normalized = rel_path.replace("\\", "/")
+    for entry in allowlist:
+        if not fnmatch(normalized, entry.file_glob):
+            continue
+        if entry.finding_type not in {"*", finding_type}:
+            continue
+        if entry.evidence_pattern.search(evidence):
+            return True
+    return False
+
+
 def _scan_secrets(
     repo_root: Path,
     files: list[Path],
@@ -444,6 +601,7 @@ def _scan_secrets(
     include_test_fixtures: bool = False,
 ) -> list[Finding]:
     findings: list[Finding] = []
+    allowlist = _load_secret_allowlist(repo_root)
     for path in files:
         rel = str(path.relative_to(repo_root))
         if not include_test_fixtures and _matches_fixture_path(rel):
@@ -455,11 +613,20 @@ def _scan_secrets(
         for idx, line in enumerate(text.splitlines(), 1):
             if _is_allowlisted_fixture_line(rel, line):
                 continue
+            if _is_env_reference_line(line):
+                continue
             for finding_type, title, pattern in SECRET_PATTERNS:
                 if pattern.search(line):
+                    evidence = line.strip()
+                    if _is_allowlisted_by_file(rel, finding_type, evidence, allowlist):
+                        continue
+                    candidate = _extract_secret_candidate(line)
+                    severity = _secret_finding_severity(rel, finding_type, candidate)
+                    if severity is None:
+                        continue
                     findings.append(
                         Finding(
-                            severity="CRITICAL" if finding_type == "private_key_block" else "HIGH",
+                            severity=severity,
                             type=finding_type,
                             title=title,
                             file=rel,
@@ -470,9 +637,16 @@ def _scan_secrets(
                     )
 
             if _contains_high_entropy_secret_literal(line):
+                evidence = line.strip()
+                if _is_allowlisted_by_file(rel, "high_entropy_secret_literal", evidence, allowlist):
+                    continue
+                candidate = _extract_secret_candidate(line)
+                severity = _secret_finding_severity(rel, "high_entropy_secret_literal", candidate)
+                if severity is None:
+                    continue
                 findings.append(
                     Finding(
-                        severity="HIGH",
+                        severity=severity,
                         type="high_entropy_secret_literal",
                         title="Potential high-entropy secret literal",
                         file=rel,
@@ -501,13 +675,12 @@ def _shannon_entropy(value: str) -> float:
 def _contains_high_entropy_secret_literal(line: str) -> bool:
     if "http://" in line or "https://" in line:
         return False
+    if _is_env_reference_line(line):
+        return False
     if not re.search(r"(?i)(api[_-]?key|token|secret|password|session)", line):
         return False
     for candidate in re.findall(r"['\"]([A-Za-z0-9_\-+/=]{20,})['\"]", line):
-        has_alpha = any(char.isalpha() for char in candidate)
-        has_digit = any(char.isdigit() for char in candidate)
-        has_symbol = any(char in "_-+/=" for char in candidate)
-        if (has_alpha and has_digit and has_symbol) and _shannon_entropy(candidate) >= 3.6:
+        if _has_mixed_character_classes(candidate) and _shannon_entropy(candidate) >= SECRET_ENTROPY_THRESHOLD:
             return True
     return False
 

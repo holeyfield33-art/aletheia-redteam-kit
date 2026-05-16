@@ -70,6 +70,39 @@ Sovereign overview workflow:
 16. Export filtered rows to hand off incidents or create follow-up attack expansions.
 17. Review API reconciliation coverage before closing transport/anomaly incidents.
 
+## Current Attack Types
+
+Current attack categories used by API and combined runs:
+
+- `agent_conflict`
+- `benign_controls`
+- `context_poisoning`
+- `data_exfiltration`
+- `economic_pressure`
+- `embedding_evasion`
+- `encoding`
+- `hybrid_tool`
+- `jailbreak`
+- `memory_poisoning`
+- `multi_turn`
+- `obfuscated`
+- `policy_evasion`
+- `prompt_injection`
+- `session_campaigns`
+- `side_channel`
+- `tool_abuse`
+- `visual_renderer`
+
+## Audit Types Performed
+
+The command center supports these run types:
+
+- `api`: payload-driven model attack audit.
+- `website`: browser route and UI control audit.
+- `repo`: static repository security and supply-chain audit.
+- `combined`: API + website + repo in one gated run.
+- `agentic`: iterative autonomous adversarial loop.
+
 ## Secure Exposure
 
 Recommended production settings:
