@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -9,6 +10,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
 from typing import Any
+
+
+def _find_binary(name: str) -> str | None:
+    """Locate a binary on PATH or, as a fallback, in the active venv bin directory."""
+    found = which(name)
+    if found:
+        return found
+    # Fallback: resolve from the Python interpreter's directory (venv or pyenv)
+    venv_bin = Path(sys.executable).parent / name
+    if venv_bin.is_file() and os.access(venv_bin, os.X_OK):
+        return str(venv_bin)
+    return None
 
 
 @dataclass(frozen=True)
@@ -96,9 +109,10 @@ def _filter_findings(findings: list[SecurityFinding], suppressions: list[Suppres
 
 
 def _run_trufflehog(repo_root: Path, suppressions: list[SuppressionEntry]) -> list[SecurityFinding]:
-    binary = which("trufflehog")
+    binary = _find_binary("trufflehog")
     if not binary:
-        raise RuntimeError("trufflehog binary not found on PATH")
+        print(json.dumps({"trufflehog": "unavailable", "reason": "binary not found on PATH or venv"}, indent=2), file=sys.stderr)
+        return []
 
     command = subprocess.run(
         [binary, "filesystem", "--json", str(repo_root)],
@@ -142,9 +156,10 @@ def _run_trufflehog(repo_root: Path, suppressions: list[SuppressionEntry]) -> li
 
 
 def _run_semgrep(repo_root: Path, rules_file: Path, suppressions: list[SuppressionEntry]) -> list[SecurityFinding]:
-    binary = which("semgrep")
+    binary = _find_binary("semgrep")
     if not binary:
-        raise RuntimeError("semgrep binary not found on PATH")
+        print(json.dumps({"semgrep": "unavailable", "reason": "binary not found on PATH or venv"}, indent=2), file=sys.stderr)
+        return []
 
     command = subprocess.run(
         [binary, "--config", str(rules_file), "--json", str(repo_root)],

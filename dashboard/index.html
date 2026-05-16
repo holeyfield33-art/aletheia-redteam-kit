@@ -618,6 +618,15 @@
       <h2>Launch Queue</h2>
       <div class="button-row" style="margin-bottom:0.55rem;">
         <button id="refreshLaunchesBtn" type="button">Refresh launches</button>
+        <label>
+          Log tail
+          <select id="launchLogTailLines">
+            <option value="100">100 lines</option>
+            <option value="400" selected>400 lines</option>
+            <option value="1000">1000 lines</option>
+            <option value="2000">2000 lines</option>
+          </select>
+        </label>
       </div>
       <div class="run-list" id="launchesList"></div>
       <pre class="launch-log" id="launchLogView">No launch selected.</pre>
@@ -742,6 +751,9 @@
       <div class="detail-top">
         <button id="copyReceiptBtn" type="button" disabled>Copy receipt JSON</button>
         <button id="verifyBtn" type="button" disabled>Verify signature</button>
+        <button id="openCampaignArtifactBtn" type="button" disabled>Open campaign manifest</button>
+        <button id="openLearningArtifactBtn" type="button" disabled>Open learning snapshot</button>
+        <button id="openMutationArtifactBtn" type="button" disabled>Open mutation effectiveness</button>
       </div>
       <pre id="receiptView">No selection.</pre>
       <h2 style="margin-top:0.9rem;">Inline regression diff</h2>
@@ -759,6 +771,7 @@
     const HOSTED_RUNS_API_PATH = "/api/runs";
     const HOSTED_LAUNCHES_API_PATH = "/api/launches";
     const LAUNCH_POLL_INTERVAL_MS = 5000;
+    const DEFAULT_LAUNCH_LOG_TAIL_LINES = 400;
     const AUTO_SCAN_CANDIDATES = [
       "./summary.json",
       "./summary_rerun.json",
@@ -793,6 +806,11 @@
       launchesHadRunning: false,
       launchPollingTimer: null,
       launchPollInFlight: false,
+      launchLogInFlight: false,
+      launchLogTailLines: DEFAULT_LAUNCH_LOG_TAIL_LINES,
+      mutationEffectivenessPath: "",
+      mutationEffectivenessData: null,
+      mutationEffectivenessLoadInFlight: false,
       filters: {
         component: "auto",
         category: "all",
@@ -814,6 +832,9 @@
     const dropZoneEl = document.getElementById("dropZone");
     const copyReceiptBtnEl = document.getElementById("copyReceiptBtn");
     const verifyBtnEl = document.getElementById("verifyBtn");
+    const openCampaignArtifactBtnEl = document.getElementById("openCampaignArtifactBtn");
+    const openLearningArtifactBtnEl = document.getElementById("openLearningArtifactBtn");
+    const openMutationArtifactBtnEl = document.getElementById("openMutationArtifactBtn");
     const verifyAllBtnEl = document.getElementById("verifyAllBtn");
     const autoScanBtnEl = document.getElementById("autoScanBtn");
     const repoUrlInputEl = document.getElementById("repoUrlInput");
@@ -844,6 +865,7 @@
     const launchesListEl = document.getElementById("launchesList");
     const launchLogViewEl = document.getElementById("launchLogView");
     const refreshLaunchesBtnEl = document.getElementById("refreshLaunchesBtn");
+    const launchLogTailLinesEl = document.getElementById("launchLogTailLines");
     const detailMetaEl = document.getElementById("detailMeta");
     const baselineRunFilterEl = document.getElementById("baselineRunFilter");
     const useSelectedAsBaselineBtnEl = document.getElementById("useSelectedAsBaselineBtn");
@@ -888,6 +910,35 @@
 
     function setLaunchLog(message) {
       launchLogViewEl.textContent = String(message || "No launch selected.");
+    }
+
+    function launchHealthSnapshot() {
+      const launches = Array.isArray(state.launches) ? state.launches : [];
+      const total = launches.length;
+      const running = launches.filter(function (item) { return Boolean(item && item.running); }).length;
+      const completed = launches.filter(function (item) {
+        return !item.running && String(item.status || "").toLowerCase() === "completed" && Number(item.exit_code || 0) === 0;
+      }).length;
+      const failed = launches.filter(function (item) {
+        if (!item || item.running) return false;
+        const status = String(item.status || "").toLowerCase();
+        const code = Number(item.exit_code || 0);
+        return status === "failed" || status === "wait_failed" || status === "terminated" || (status === "completed" && code !== 0);
+      }).length;
+      return { total: total, running: running, completed: completed, failed: failed };
+    }
+
+    function renderLaunchHealthMetaLine() {
+      const health = launchHealthSnapshot();
+      return "<div><b>Launch Queue:</b> total " +
+        escapeHtml(String(health.total)) +
+        " · running " +
+        escapeHtml(String(health.running)) +
+        " · completed " +
+        escapeHtml(String(health.completed)) +
+        " · failed " +
+        escapeHtml(String(health.failed)) +
+        "</div>";
     }
 
     function summarizeLaunchState(launch) {
@@ -969,6 +1020,19 @@
         }
 
         renderLaunches();
+        if (state.summary) {
+          renderMeta(state.summary);
+        }
+
+        const selectedLaunch = launches.find(function (item) {
+          return String((item && item.launch_id) || "") === String(state.selectedLaunchId || "");
+        });
+        if (selectedLaunch && selectedLaunch.running) {
+          try {
+            await fetchLaunchLogs(state.selectedLaunchId, { silent: true });
+          } catch (_) {
+          }
+        }
 
         const runningCount = launches.filter(function (item) { return Boolean(item && item.running); }).length;
         if (fromPoll && state.launchesHadRunning && runningCount === 0) {
@@ -1016,16 +1080,38 @@
       return payload;
     }
 
-    async function fetchLaunchLogs(launchId) {
+    async function fetchLaunchLogs(launchId, options) {
+      const opts = options || {};
       const id = String(launchId || "").trim();
       if (!id) {
         return;
       }
-      const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id) + "/logs");
+      if (state.launchLogInFlight) {
+        return;
+      }
+      state.launchLogInFlight = true;
+      try {
+      const query = "?tail_lines=" + encodeURIComponent(String(state.launchLogTailLines || DEFAULT_LAUNCH_LOG_TAIL_LINES));
+      const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id) + "/logs" + query);
       state.selectedLaunchId = id;
       renderLaunches();
-      setLaunchLog(payload.logs || "No logs available.");
-      setStatus("Loaded logs for launch " + id + ".");
+      const logText = String(payload.logs || "No logs available.");
+      const isTruncated = Boolean(payload.truncated);
+      const totalLines = Number(payload.total_lines || 0);
+      const tailLines = Number(payload.tail_lines || state.launchLogTailLines || DEFAULT_LAUNCH_LOG_TAIL_LINES);
+      if (isTruncated) {
+        setLaunchLog(
+          "Showing last " + String(tailLines) + " of " + String(totalLines) + " lines.\n\n" + logText
+        );
+      } else {
+        setLaunchLog(logText);
+      }
+      if (!opts.silent) {
+        setStatus("Loaded logs for launch " + id + ".");
+      }
+      } finally {
+        state.launchLogInFlight = false;
+      }
     }
 
     async function cancelLaunch(launchId) {
@@ -1088,10 +1174,27 @@
         .map(function (item, idx) {
           const mode = String(item.mode || "api");
           const generated = toIsoOrDash(item.generated_at);
+          const artifactSummary = summarizeArtifactAvailability(item);
+          const campaignPath = String(((item.campaign || {}).manifest_path) || "").trim();
+          const learningPath = String(item.learning_snapshot_path || "").trim();
+          const mutationPath = String(item.mutation_effectiveness_path || "").trim();
+          const quickLinks = [
+            campaignPath
+              ? '<a href="' + escapeHtml(toHostedRunArtifactPath(campaignPath)) + '" target="_blank" rel="noopener" data-run-artifact-open="1">campaign</a>'
+              : "",
+            learningPath
+              ? '<a href="' + escapeHtml(toHostedRunArtifactPath(learningPath)) + '" target="_blank" rel="noopener" data-run-artifact-open="1">learning</a>'
+              : "",
+            mutationPath
+              ? '<a href="' + escapeHtml(toHostedRunArtifactPath(mutationPath)) + '" target="_blank" rel="noopener" data-run-artifact-open="1">mutation</a>'
+              : "",
+          ].filter(Boolean).join(" | ");
           return (
             '<div class="run-item" data-run-index="' + escapeHtml(idx) + '">' +
             '<div><strong>' + escapeHtml(mode) + '</strong></div>' +
             '<div class="muted">' + escapeHtml(generated) + '</div>' +
+            (artifactSummary ? ('<div class="muted">Artifacts: ' + escapeHtml(artifactSummary) + '</div>') : '') +
+            (quickLinks ? ('<div class="muted">Quick links: ' + quickLinks + '</div>') : '') +
             '</div>'
           );
         })
@@ -1103,6 +1206,12 @@
           const selected = runs[index];
           if (!selected) return;
           renderAll(selected, { summaries: runs });
+        });
+      });
+
+      runListEl.querySelectorAll("[data-run-artifact-open]").forEach(function (node) {
+        node.addEventListener("click", function (event) {
+          event.stopPropagation();
         });
       });
 
@@ -1230,6 +1339,13 @@
     function commandCenterToSummary(model) {
       const runs = model.runs || [];
       const findings = model.findings || [];
+      const artifacts = Array.isArray(model.artifacts) ? model.artifacts : [];
+      function artifactPath(type) {
+        const row = artifacts.find(function (item) {
+          return String((item && item.artifact_type) || "") === type;
+        });
+        return row ? String(row.path || "") : "";
+      }
       const latest = runs[0] || {};
       const categories = {};
       let blocked = 0;
@@ -1277,6 +1393,9 @@
 
       const total = findings.length;
       const passRate = total ? ((total - unknown) / total) * 100 : 0;
+      const campaignManifestPath = artifactPath("campaign_manifest_json");
+      const learningSnapshotPath = artifactPath("learning_snapshot_json");
+      const mutationEffectivenessPath = artifactPath("mutation_effectiveness_json");
       return {
         generated_at: model.generated_at,
         mode: String(latest.mode || "api"),
@@ -1290,7 +1409,23 @@
         expectation_match_rate: passRate,
         categories: categories,
         results: results,
+        campaign: campaignManifestPath
+          ? { enabled: true, manifest_path: campaignManifestPath }
+          : undefined,
+        learning_snapshot_path: learningSnapshotPath || undefined,
+        mutation_effectiveness_path: mutationEffectivenessPath || undefined,
       };
+    }
+
+    function summarizeArtifactAvailability(summary) {
+      const campaignPath = String(((summary && summary.campaign) || {}).manifest_path || "").trim();
+      const learningPath = String((summary && summary.learning_snapshot_path) || "").trim();
+      const mutationPath = String((summary && summary.mutation_effectiveness_path) || "").trim();
+      const tags = [];
+      if (campaignPath) tags.push("campaign");
+      if (learningPath) tags.push("learning");
+      if (mutationPath) tags.push("mutation");
+      return tags.length ? tags.join(" + ") : "";
     }
 
     function resolveCombinedComponent(summary) {
@@ -1356,6 +1491,10 @@
     function renderMeta(summary) {
       if (state.combinedSummary) {
         const combined = state.combinedSummary;
+        const combinedApi = (combined.components || {}).api || {};
+        const combinedCampaignPath = String(((combinedApi.campaign || {}).manifest_path) || "").trim();
+        const combinedLearningPath = String(combinedApi.learning_snapshot_path || "").trim();
+        const combinedMutationPath = String(combinedApi.mutation_effectiveness_path || "").trim();
         const generatedCombined = toIsoOrDash(combined.generated_at);
         const gate = ((combined.gates || {}).pass ? "PASS" : "FAIL");
         const violations = ((combined.gates || {}).violations || []).length;
@@ -1376,6 +1515,16 @@
             lines.push("<div><b>Targets file:</b> " + escapeHtml(String(combined.targets_file)) + "</div>");
           }
         }
+        if (combinedCampaignPath) {
+          lines.push("<div><b>Campaign manifest:</b> " + escapeHtml(combinedCampaignPath) + "</div>");
+        }
+        if (combinedLearningPath) {
+          lines.push("<div><b>Learning snapshot:</b> " + escapeHtml(combinedLearningPath) + "</div>");
+        }
+        if (combinedMutationPath) {
+          lines.push("<div><b>Mutation effectiveness:</b> " + escapeHtml(combinedMutationPath) + "</div>");
+        }
+        lines.push(renderLaunchHealthMetaLine());
         metaEl.innerHTML = lines.join("");
         return;
       }
@@ -1398,7 +1547,7 @@
           "<div><b>Top vulnerable package:</b> " + escapeHtml(String(topPackage.name || "unknown")) + " (" + escapeHtml(Number(topPackage.advisory_count || 0)) + ", max severity: " + escapeHtml(String(topPackage.max_severity || "unknown")) + ")</div>"
         ] : []).concat((Number(depSignals.malware_suspect_total || 0) || Number(depSignals.tampering_risk_total || 0)) ? [
           "<div><b>Suspicious dependency signals:</b> malware " + escapeHtml(Number(depSignals.malware_suspect_total || 0)) + ", tampering " + escapeHtml(Number(depSignals.tampering_risk_total || 0)) + "</div>"
-        ] : []).join("");
+        ] : []).concat([renderLaunchHealthMetaLine()]).join("");
         return;
       }
 
@@ -1410,18 +1559,28 @@
           "<div><b>Generated:</b> " + escapeHtml(generatedWebsite) + "</div>",
           "<div><b>Target URL:</b> " + escapeHtml(targetUrl) + "</div>",
           "<div><b>Visited pages:</b> " + escapeHtml(crawl.pages_visited || 0) + "</div>"
-        ].join("");
+        ].concat([renderLaunchHealthMetaLine()]).join("");
         return;
       }
 
       const generated = toIsoOrDash(summary.generated_at);
       const engineUrl = summary.engine_url || "(unknown)";
       const attacksTotal = summary.attacks_total || (summary.results || []).length || 0;
+      const campaignPath = String(((summary.campaign || {}).manifest_path) || "").trim();
+      const learningPath = String(summary.learning_snapshot_path || "").trim();
+      const mutationPath = String(summary.mutation_effectiveness_path || "").trim();
       metaEl.innerHTML = [
         "<div><b>Generated:</b> " + escapeHtml(generated) + "</div>",
         "<div><b>Engine URL:</b> " + escapeHtml(engineUrl) + "</div>",
         "<div><b>Total attacks:</b> " + escapeHtml(attacksTotal) + "</div>"
-      ].join("");
+      ].concat(campaignPath ? [
+        "<div><b>Campaign manifest:</b> " + escapeHtml(campaignPath) + "</div>"
+      ] : []).concat(learningPath ? [
+        "<div><b>Learning snapshot:</b> " + escapeHtml(learningPath) + "</div>"
+      ] : []).concat(mutationPath ? [
+        "<div><b>Mutation effectiveness:</b> " + escapeHtml(mutationPath) + "</div>"
+      ] : [])
+      ].concat([renderLaunchHealthMetaLine()]).join("");
     }
 
     function renderStats(summary) {
@@ -2232,6 +2391,51 @@
       }).join("");
     }
 
+    function normalizeMutationEffectiveness(raw) {
+      if (!raw || typeof raw !== "object") {
+        return null;
+      }
+      const normalized = {};
+      Object.keys(raw).forEach(function (name) {
+        const row = raw[name] || {};
+        const success = Number(row.success || row.bypasses || 0);
+        const blocked = Number(row.blocked || 0);
+        const attempts = success + blocked;
+        normalized[name] = {
+          attempts: attempts,
+          bypasses: success,
+          bypass_rate: attempts ? (100 * success / attempts) : 0,
+        };
+      });
+      return normalized;
+    }
+
+    async function loadMutationEffectivenessFromArtifact(summary) {
+      const rawPath = String((summary && summary.mutation_effectiveness_path) || "").trim();
+      if (!rawPath) {
+        return null;
+      }
+      if (state.mutationEffectivenessLoadInFlight && state.mutationEffectivenessPath === rawPath) {
+        return null;
+      }
+      if (state.mutationEffectivenessPath === rawPath && state.mutationEffectivenessData) {
+        return state.mutationEffectivenessData;
+      }
+
+      state.mutationEffectivenessLoadInFlight = true;
+      try {
+        const payload = await fetchJson(toHostedRunArtifactPath(rawPath));
+        const normalized = normalizeMutationEffectiveness(payload);
+        state.mutationEffectivenessPath = rawPath;
+        state.mutationEffectivenessData = normalized;
+        return normalized;
+      } catch (_) {
+        return null;
+      } finally {
+        state.mutationEffectivenessLoadInFlight = false;
+      }
+    }
+
     function renderMutationAnalytics(summary) {
       if (!isApiSummary(summary)) {
         mutationAnalyticsEl.innerHTML = '<div class="empty-note">Mutation analytics are available for API agentic summaries.</div>';
@@ -2240,7 +2444,19 @@
 
       const analytics = (summary.agentic && summary.agentic.mutation_analytics)
         || summary.mutation_analytics
+        || state.mutationEffectivenessData
         || null;
+      if ((!analytics || typeof analytics !== "object") && String(summary.mutation_effectiveness_path || "").trim()) {
+        mutationAnalyticsEl.innerHTML = '<div class="empty-note">Loading mutation effectiveness artifact...</div>';
+        loadMutationEffectivenessFromArtifact(summary).then(function (loaded) {
+          if (loaded && state.summary === summary) {
+            renderMutationAnalytics(summary);
+          } else if (state.summary === summary && !loaded) {
+            mutationAnalyticsEl.innerHTML = '<div class="empty-note">Mutation effectiveness artifact could not be loaded.</div>';
+          }
+        });
+        return;
+      }
       if (!analytics || typeof analytics !== "object") {
         mutationAnalyticsEl.innerHTML = '<div class="empty-note">No mutation analytics present in this summary.</div>';
         return;
@@ -2452,6 +2668,9 @@
       state.combinedSummary = isCombinedSummary(summary) ? summary : null;
       state.summary = resolveCombinedComponent(summary);
       state.selected = null;
+      state.mutationEffectivenessData = null;
+      state.mutationEffectivenessPath = "";
+      state.mutationEffectivenessLoadInFlight = false;
       state.summaries = (options && Array.isArray(options.summaries) && options.summaries.length)
         ? options.summaries
         : (isApiSummary(state.summary) ? [state.summary] : []);
@@ -2466,6 +2685,7 @@
       techniqueFilterEl.value = state.filters.technique;
       copyReceiptBtnEl.disabled = true;
       verifyBtnEl.disabled = true;
+      refreshArtifactActionButtons();
       detailMetaEl.textContent = "No selection context.";
       receiptViewEl.textContent = "No selection.";
       regressionDiffViewEl.textContent = "No baseline selected.";
@@ -2516,8 +2736,66 @@
       return "./runs/" + text;
     }
 
+    function toHostedRunArtifactPath(rawPath) {
+      const text = String(rawPath || "").trim();
+      if (!text) return "";
+      if (text.startsWith("/runs/")) {
+        return text;
+      }
+      if (text.startsWith("./runs/")) {
+        return "/runs/" + text.slice("./runs/".length);
+      }
+      if (text.startsWith("runs/")) {
+        return "/runs/" + text.slice("runs/".length);
+      }
+      if (text.startsWith("/")) {
+        const marker = "/runs/";
+        const markerIndex = text.lastIndexOf(marker);
+        if (markerIndex >= 0) {
+          return text.slice(markerIndex);
+        }
+        return "";
+      }
+      return "/runs/" + text;
+    }
+
+    function currentArtifactPath(kind) {
+      const summary = state.summary || {};
+      if (kind === "campaign") {
+        return String(((summary.campaign || {}).manifest_path) || "").trim();
+      }
+      if (kind === "learning") {
+        return String(summary.learning_snapshot_path || "").trim();
+      }
+      if (kind === "mutation") {
+        return String(summary.mutation_effectiveness_path || "").trim();
+      }
+      return "";
+    }
+
+    function refreshArtifactActionButtons() {
+      const campaignPath = currentArtifactPath("campaign");
+      const learningPath = currentArtifactPath("learning");
+      const mutationPath = currentArtifactPath("mutation");
+      openCampaignArtifactBtnEl.disabled = !campaignPath;
+      openLearningArtifactBtnEl.disabled = !learningPath;
+      openMutationArtifactBtnEl.disabled = !mutationPath;
+    }
+
+    function openArtifact(kind, label) {
+      const rawPath = currentArtifactPath(kind);
+      if (!rawPath) {
+        setStatus("No " + label + " artifact path available for this run.");
+        return;
+      }
+      const targetPath = toHostedRunArtifactPath(rawPath);
+      window.open(targetPath, "_blank", "noopener");
+      setStatus("Opened " + label + " artifact: " + targetPath);
+    }
+
     async function discoverRunSummaryPaths() {
       const paths = new Set(AUTO_SCAN_CANDIDATES);
+      const catalogEntries = [];
       const indexSources = [HOSTED_RUNS_API_PATH, RUNS_INDEX_PATH];
 
       for (const indexPath of indexSources) {
@@ -2528,6 +2806,17 @@
             : (Array.isArray(indexJson.files) ? indexJson.files : []);
           files.forEach(function (file) {
             if (file && typeof file === "object") {
+              const normalizedEntry = {
+                summary: toRunArtifactPath(file.summary),
+                command_center: toRunArtifactPath(file.command_center),
+                sqlite: toRunArtifactPath(file.sqlite),
+                campaign_manifest: toRunArtifactPath(file.campaign_manifest),
+                learning_snapshot: toRunArtifactPath(file.learning_snapshot),
+                mutation_effectiveness: toRunArtifactPath(file.mutation_effectiveness),
+                mode: String(file.mode || ""),
+                generated_at: file.generated_at,
+              };
+              catalogEntries.push(normalizedEntry);
               const summaryPath = String(file.summary || file.command_center || "").trim();
               if (!summaryPath) return;
               paths.add(toRunArtifactPath(summaryPath));
@@ -2544,7 +2833,39 @@
         }
       }
 
+      state.runCatalog = catalogEntries;
+
       return Array.from(paths);
+    }
+
+    function mergeRunCatalogArtifacts(summary, path) {
+      const normalizedPath = toRunArtifactPath(path);
+      const catalogRows = Array.isArray(state.runCatalog) ? state.runCatalog : [];
+      const entry = catalogRows.find(function (row) {
+        return String(row.summary || "") === normalizedPath || String(row.command_center || "") === normalizedPath;
+      });
+      if (!entry || !summary || typeof summary !== "object") {
+        return summary;
+      }
+
+      const merged = Object.assign({}, summary);
+      const campaignPath = String(entry.campaign_manifest || "").trim();
+      const learningPath = String(entry.learning_snapshot || "").trim();
+      const mutationPath = String(entry.mutation_effectiveness || "").trim();
+
+      if (campaignPath && !String((((merged.campaign || {}).manifest_path) || "")).trim()) {
+        merged.campaign = Object.assign({}, merged.campaign || {}, {
+          enabled: true,
+          manifest_path: campaignPath,
+        });
+      }
+      if (learningPath && !String(merged.learning_snapshot_path || "").trim()) {
+        merged.learning_snapshot_path = learningPath;
+      }
+      if (mutationPath && !String(merged.mutation_effectiveness_path || "").trim()) {
+        merged.mutation_effectiveness_path = mutationPath;
+      }
+      return merged;
     }
 
     async function autoScanRuns() {
@@ -2556,9 +2877,9 @@
         try {
           const summary = await fetchJson(path);
           if (isDashboardRenderableSummary(summary)) {
-            summaries.push(summary);
+            summaries.push(mergeRunCatalogArtifacts(summary, path));
           } else if (isCommandCenterModel(summary)) {
-            summaries.push(commandCenterToSummary(summary));
+            summaries.push(mergeRunCatalogArtifacts(commandCenterToSummary(summary), path));
           }
         } catch (_) {
         }
@@ -2702,6 +3023,18 @@
     refreshLaunchesBtnEl.addEventListener("click", async function () {
       await refreshLaunches({ silent: false });
     });
+    launchLogTailLinesEl.addEventListener("change", async function () {
+      const parsed = Number(launchLogTailLinesEl.value);
+      state.launchLogTailLines = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_LAUNCH_LOG_TAIL_LINES;
+      if (!state.selectedLaunchId) {
+        return;
+      }
+      try {
+        await fetchLaunchLogs(state.selectedLaunchId);
+      } catch (err) {
+        setStatus("Log tail update failed: " + (err && err.message ? err.message : String(err)));
+      }
+    });
     launchesListEl.addEventListener("click", async function (event) {
       const actionButton = event.target.closest("button[data-launch-action]");
       const row = event.target.closest("[data-launch-id]");
@@ -2740,6 +3073,15 @@
     });
     copyReceiptBtnEl.addEventListener("click", copySelectedReceipt);
     verifyBtnEl.addEventListener("click", verifySelected);
+    openCampaignArtifactBtnEl.addEventListener("click", function () {
+      openArtifact("campaign", "campaign manifest");
+    });
+    openLearningArtifactBtnEl.addEventListener("click", function () {
+      openArtifact("learning", "learning snapshot");
+    });
+    openMutationArtifactBtnEl.addEventListener("click", function () {
+      openArtifact("mutation", "mutation effectiveness");
+    });
     verifyAllBtnEl.addEventListener("click", verifyAll);
     focusWeakBtnEl.addEventListener("click", function () {
       if (!isApiSummary(state.summary)) {
@@ -2790,6 +3132,9 @@
         const display = resolveCombinedComponent(state.combinedSummary);
         state.summary = display;
         state.selected = null;
+        state.mutationEffectivenessData = null;
+        state.mutationEffectivenessPath = "";
+        state.mutationEffectivenessLoadInFlight = false;
         state.filters.category = "all";
         state.filters.decision = "all";
         state.filters.technique = "all";
@@ -2810,6 +3155,7 @@
         renderGapReport(display);
         renderMissionBoard(display);
         renderRows(display);
+        refreshArtifactActionButtons();
         saveFilterState();
         setVerifyStatus("");
       }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from collections import deque
 import json
 import mimetypes
 import os
@@ -23,6 +24,8 @@ from kit.auth import DashboardAuthManager, sanitize_next_path
 
 LOGGER = logging.getLogger(__name__)
 LAUNCH_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+DEFAULT_LAUNCH_LOG_TAIL_LINES = 400
+MAX_LAUNCH_LOG_TAIL_LINES = 5000
 
 
 class ProcessTracker:
@@ -99,6 +102,27 @@ def _sanitize_repo_url_input(value: str) -> str:
     return candidate
 
 
+def _parse_tail_lines(query: str) -> int:
+    raw = parse_qs(query).get("tail_lines", [str(DEFAULT_LAUNCH_LOG_TAIL_LINES)])[0]
+    try:
+        value = int(str(raw).strip())
+    except ValueError as exc:
+        raise ValueError("tail_lines must be an integer") from exc
+    if value <= 0:
+        raise ValueError("tail_lines must be greater than zero")
+    return min(value, MAX_LAUNCH_LOG_TAIL_LINES)
+
+
+def _read_log_tail(log_path: Path, *, tail_lines: int) -> tuple[str, int]:
+    buffer: deque[str] = deque(maxlen=max(1, int(tail_lines)))
+    total_lines = 0
+    with log_path.open("r", encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            buffer.append(line)
+            total_lines += 1
+    return "".join(buffer), total_lines
+
+
 class _RequestRateLimiter:
     def __init__(self, *, requests_per_minute: int, now_fn=time.time) -> None:
         self._limit = max(1, int(requests_per_minute))
@@ -159,6 +183,9 @@ def _normalize_run_entries(config: DashboardServerConfig) -> list[dict[str, obje
         summary_rel = str(item.get("summary") or "").strip()
         command_center_rel = str(item.get("command_center") or "").strip()
         sqlite_rel = str(item.get("sqlite") or "").strip()
+        campaign_manifest_rel = str(item.get("campaign_manifest") or "").strip()
+        learning_snapshot_rel = str(item.get("learning_snapshot") or "").strip()
+        mutation_effectiveness_rel = str(item.get("mutation_effectiveness") or "").strip()
         normalized.append(
             {
                 "generated_at": item.get("generated_at"),
@@ -166,6 +193,9 @@ def _normalize_run_entries(config: DashboardServerConfig) -> list[dict[str, obje
                 "summary": f"/runs/{summary_rel}" if summary_rel else None,
                 "command_center": f"/runs/{command_center_rel}" if command_center_rel else None,
                 "sqlite": f"/runs/{sqlite_rel}" if sqlite_rel else None,
+                "campaign_manifest": f"/runs/{campaign_manifest_rel}" if campaign_manifest_rel else None,
+                "learning_snapshot": f"/runs/{learning_snapshot_rel}" if learning_snapshot_rel else None,
+                "mutation_effectiveness": f"/runs/{mutation_effectiveness_rel}" if mutation_effectiveness_rel else None,
             }
         )
     normalized.sort(key=lambda row: str(row.get("generated_at") or ""))
@@ -465,14 +495,27 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 if launch_id is None:
                     self.send_error(HTTPStatus.BAD_REQUEST, "invalid launch_id")
                     return
+                try:
+                    tail_lines = _parse_tail_lines(parsed.query)
+                except ValueError as exc:
+                    self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
                 log_path = self._resolve_run_path(f".launches/{launch_id}/launch.log")
                 if log_path is None or not log_path.exists():
                     self.send_error(HTTPStatus.NOT_FOUND, "Log not found")
                     return
 
                 try:
-                    logs = log_path.read_text(encoding="utf-8", errors="replace")
-                    self._send_json({"launch_id": launch_id, "logs": logs})
+                    logs, total_lines = _read_log_tail(log_path, tail_lines=tail_lines)
+                    self._send_json(
+                        {
+                            "launch_id": launch_id,
+                            "logs": logs,
+                            "tail_lines": tail_lines,
+                            "total_lines": total_lines,
+                            "truncated": total_lines > tail_lines,
+                        }
+                    )
                 except IOError as exc:
                     self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, f"Failed to read logs: {exc}")
                 return
