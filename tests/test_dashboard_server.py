@@ -362,6 +362,46 @@ def test_dashboard_launch_logs_rejects_invalid_tail_lines(monkeypatch: pytest.Mo
     assert logs.status_code == 400
 
 
+def test_dashboard_list_launches_hydrates_from_artifact_directories(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    launch_id = "repo-20260516T010203Z-persisted1"
+
+    with _env_vars({"ALETHEIA_DASHBOARD_API_KEY": "op-key"}):
+        with _running_dashboard(workspace_root, auth_mode="api-key") as base_url:
+            launch_root = workspace_root / "runs" / ".launches" / launch_id
+            launch_root.mkdir(parents=True, exist_ok=True)
+            (launch_root / "launch.log").write_text("line-1\n", encoding="utf-8")
+            response = httpx.get(f"{base_url}/api/launches", headers={"X-API-Key": "op-key"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    launches = payload.get("launches") or []
+    launch = next((item for item in launches if item.get("launch_id") == launch_id), None)
+    assert launch is not None
+    assert launch["mode"] == "repo"
+    assert launch["log_path"] == f".launches/{launch_id}/launch.log"
+
+
+def test_dashboard_launch_status_hydrates_from_artifact_directories(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    launch_id = "repo-20260516T010203Z-persisted2"
+
+    with _env_vars({"ALETHEIA_DASHBOARD_API_KEY": "op-key"}):
+        with _running_dashboard(workspace_root, auth_mode="api-key") as base_url:
+            launch_root = workspace_root / "runs" / ".launches" / launch_id
+            launch_root.mkdir(parents=True, exist_ok=True)
+            (launch_root / "summary.json").write_text("{}", encoding="utf-8")
+            response = httpx.get(f"{base_url}/api/launches/{launch_id}", headers={"X-API-Key": "op-key"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["launch_id"] == launch_id
+    assert payload["status"] == "completed"
+    assert payload["running"] is False
+
+
 def test_auth_manager_locks_after_repeated_login_failures() -> None:
     current_time = {"value": 0.0}
     manager = DashboardAuthManager(
