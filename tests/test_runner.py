@@ -264,7 +264,7 @@ def test_cli_api_mode_forwards_threat_feed_file(monkeypatch: pytest.MonkeyPatch,
             return False
 
     monkeypatch.setattr(runner, "load_attacks", _fake_load_attacks)
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(runner, "run_attacks_with_backoff", lambda client, attacks: [{
         "id": "BC_001",
         "name": "Benign",
@@ -320,7 +320,7 @@ def test_cli_agentic_mode_uses_default_output_path(monkeypatch: pytest.MonkeyPat
             }
 
     class FakeClient:
-        def __init__(self, base_url=None):
+        def __init__(self, base_url=None, target_profile=None, **_kw):
             self.base_url = base_url or "https://example.com"
 
         def __enter__(self):
@@ -833,7 +833,7 @@ def test_cli_combined_mode_writes_merged_summary(monkeypatch: pytest.MonkeyPatch
     output = tmp_path / "combined_summary.json"
 
     class FakeClient:
-        def __init__(self, base_url: str | None = None):
+        def __init__(self, base_url: str | None = None, target_profile=None, **_kw):
             self.base_url = base_url or "https://api.example.com"
 
         def __enter__(self):
@@ -945,7 +945,7 @@ def test_cli_api_mode_threshold_failure(monkeypatch: pytest.MonkeyPatch, tmp_pat
             }
         ],
     )
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -989,7 +989,7 @@ def test_cli_api_mode_threshold_pass(monkeypatch: pytest.MonkeyPatch, tmp_path) 
             }
         ],
     )
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -1195,7 +1195,7 @@ def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeyp
             }
         ],
     )
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -1253,7 +1253,7 @@ def test_cli_api_mode_skips_auth_required_reconciliation_gap(monkeypatch: pytest
             }
         ],
     )
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -1293,7 +1293,7 @@ def test_cli_combined_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatc
     )
 
     class FakeClient:
-        def __init__(self, base_url: str | None = None):
+        def __init__(self, base_url: str | None = None, target_profile=None, **_kw):
             self.base_url = base_url or "https://api.example.com"
 
         def __enter__(self):

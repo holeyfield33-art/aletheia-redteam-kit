@@ -231,7 +231,8 @@ def _is_transient_error(error_category: str) -> bool:
 def _adjust_request_delay_from_result(delay_sec: float, result: dict) -> float:
     error_category = str(result.get("error_category") or "").strip().lower()
     if result.get("actual_decision") == "ERROR" and _is_transient_error(error_category):
-        return min(DEFAULT_MAX_REQUEST_DELAY_SEC, max(DEFAULT_REQUEST_DELAY_SEC, delay_sec * 1.5))
+        multiplier = 2.0 if error_category == "rate_limited" else 1.5
+        return min(DEFAULT_MAX_REQUEST_DELAY_SEC, max(DEFAULT_REQUEST_DELAY_SEC, delay_sec * multiplier))
     if result.get("actual_decision") in {"DENIED", "PROCEED"} and delay_sec > DEFAULT_REQUEST_DELAY_SEC:
         return max(DEFAULT_REQUEST_DELAY_SEC, delay_sec * 0.9)
     return delay_sec
@@ -544,6 +545,78 @@ def summarize(results: list[dict]) -> dict:
             if trial_mode_suspected
             else None
         ),
+    }
+
+
+def reconcile_results(rows: list[dict], client: object) -> dict:
+    """Attempt to resolve UNKNOWN/ERROR decisions via async receipt lookup.
+
+    Mutates *rows* in-place with the resolved decision when one is found.
+    Returns a summary dict describing reconciliation coverage.
+    """
+    _SESSION_AUTH_MODES = {"session_cookie_required"}
+    # SANDBOX_BLOCKED is an API-layer alias for DENIED
+    _DECISION_MAP = {"SANDBOX_BLOCKED": "DENIED"}
+    _UNRESOLVED = {"UNKNOWN", "ERROR"}
+
+    # Build a deduplicated map of request_id → row indices that need lookup
+    by_request_id: dict[str, list[int]] = {}
+    for idx, row in enumerate(rows):
+        rid = row.get("request_id")
+        if rid and row.get("actual_decision") in _UNRESOLVED:
+            by_request_id.setdefault(rid, []).append(idx)
+
+    if not by_request_id:
+        return {
+            "total_reconciled": 0,
+            "reconcilable_total": 0,
+            "unreconciled": 0,
+            "reconciliation_coverage_pct": 100.0,
+            "unreconciled_request_ids": [],
+            "skipped_request_ids": [],
+            "endpoint": None,
+            "auth_mode": None,
+        }
+
+    reconciled_ids: list[str] = []
+    unreconciled_ids: list[str] = []
+    skipped_request_ids: list[str] = []
+    last_endpoint: str | None = None
+    last_auth_mode: str | None = None
+
+    for request_id, indices in by_request_id.items():
+        lookup = client.lookup_decision(request_id)
+        auth_mode = str(getattr(lookup, "auth_mode", None) or "unknown")
+        endpoint = getattr(lookup, "endpoint", None)
+        last_endpoint = endpoint
+        last_auth_mode = auth_mode
+
+        if auth_mode in _SESSION_AUTH_MODES:
+            skipped_request_ids.append(request_id)
+            continue
+
+        decision = getattr(lookup, "decision", None)
+        if decision is not None:
+            normalized = _DECISION_MAP.get(str(decision), str(decision))
+            for i in indices:
+                rows[i]["actual_decision"] = normalized
+                rows[i]["match"] = rows[i].get("expected_decision") == normalized
+            reconciled_ids.append(request_id)
+        else:
+            unreconciled_ids.append(request_id)
+
+    reconcilable_total = len(reconciled_ids) + len(unreconciled_ids)
+    coverage = (len(reconciled_ids) / reconcilable_total * 100.0) if reconcilable_total > 0 else 100.0
+
+    return {
+        "total_reconciled": len(reconciled_ids),
+        "reconcilable_total": reconcilable_total,
+        "unreconciled": len(unreconciled_ids),
+        "reconciliation_coverage_pct": round(coverage, 1),
+        "unreconciled_request_ids": unreconciled_ids,
+        "skipped_request_ids": skipped_request_ids,
+        "endpoint": last_endpoint,
+        "auth_mode": last_auth_mode,
     }
 
 
@@ -1289,6 +1362,224 @@ def _write_campaign_manifest_if_enabled(args: argparse.Namespace, output_path: P
     return str(destination)
 
 
+def _write_command_center_artifacts(
+    summary_path: Path,
+    artifact_dir: Path,
+    dashboard_file: Path | None,
+    baseline_path: str | None,
+) -> Path:
+    """Read summary_path, write SQLite + JSON command-center artifacts, update index.json."""
+    artifact_dir = Path(artifact_dir).resolve()
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    mode = str(summary.get("mode") or "api")
+    generated_at = str(summary.get("generated_at") or datetime.now(timezone.utc).isoformat())
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = artifact_dir / f"run-{mode}-{stamp}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    baseline_summary: dict | None = None
+    if baseline_path:
+        bp = Path(baseline_path)
+        if bp.exists():
+            try:
+                baseline_summary = json.loads(bp.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    model = normalize_summary_to_command_center(
+        summary,
+        source_path=str(summary_path),
+        baseline_summary=baseline_summary,
+    )
+
+    sqlite_path = run_dir / "command_center.sqlite"
+
+    # Inject a self-referential sqlite artifact so callers can locate the db
+    _now = datetime.now(timezone.utc).isoformat()
+    run_id = (model.get("runs") or [{}])[0].get("id") or ""
+    seen_keys: set[tuple[str, str]] = {(a["artifact_type"], a["path"]) for a in model.get("artifacts") or []}
+    sqlite_key = ("sqlite", str(sqlite_path))
+    if sqlite_key not in seen_keys:
+        import uuid as _uuid
+        (model.setdefault("artifacts", [])).append({
+            "id": str(_uuid.uuid4()),
+            "run_id": run_id,
+            "artifact_type": "sqlite",
+            "path": str(sqlite_path),
+            "mime_type": "application/x-sqlite3",
+            "sha256": None,
+            "created_at": _now,
+        })
+
+    write_command_center_sqlite(model, sqlite_path)
+
+    cc_json_path = run_dir / "command_center.json"
+    cc_json_path.write_text(json.dumps(model, indent=2, default=str), encoding="utf-8")
+
+    # Update index.json
+    index_path = artifact_dir / "index.json"
+    index: list[dict] = []
+    if index_path.exists():
+        try:
+            raw = json.loads(index_path.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                index = raw
+        except json.JSONDecodeError:
+            pass
+
+    try:
+        summary_rel = str(summary_path.resolve().relative_to(artifact_dir))
+    except ValueError:
+        summary_rel = str(summary_path.resolve())
+
+    entry: dict = {
+        "generated_at": generated_at,
+        "mode": mode,
+        "summary": summary_rel,
+        "command_center": str(cc_json_path.relative_to(artifact_dir)),
+        "sqlite": str(sqlite_path.relative_to(artifact_dir)),
+    }
+    index.append(entry)
+    index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+    return run_dir
+
+
+def _merge_batch_models(models: list[dict]) -> dict:
+    """Merge multiple command-center models into one combined model."""
+    merged: dict = {
+        "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "runs": [],
+        "targets": [],
+        "findings": [],
+        "findings_evidence": [],
+        "metrics": [],
+        "artifacts": [],
+        "gate_results": [],
+        "tags": [],
+        "finding_tags": [],
+        "notes": [],
+        "views": {"v_run_summary": [], "v_category_summary": []},
+        "baseline": None,
+    }
+    for model in models:
+        for key in ("runs", "targets", "findings", "findings_evidence", "metrics",
+                    "artifacts", "gate_results", "tags", "finding_tags", "notes"):
+            merged[key].extend(model.get(key) or [])
+    return merged
+
+
+def _run_targets_batch(args: argparse.Namespace, plugins: list[object] | None = None) -> tuple[dict, Path]:
+    """Execute a batch of heterogeneous targets from a targets-file and aggregate results."""
+    targets_raw: list[dict] = json.loads(Path(args.targets_file).read_text(encoding="utf-8"))
+    artifact_dir = Path(args.artifact_dir).resolve()
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    batch_root = artifact_dir / f"run-batch-{stamp}"
+    batch_root.mkdir(parents=True, exist_ok=True)
+
+    components: dict = {}
+    target_summaries: list[dict] = []
+    all_models: list[dict] = []
+
+    for idx, target in enumerate(targets_raw, 1):
+        target_type = str(target.get("type") or "api").lower()
+        label = str(target.get("label") or f"target-{idx:02d}")
+        component_key = f"{label}-{idx:02d}"
+        target_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+        target_artifact_dir = batch_root / "targets" / label / "artifacts"
+        target_artifact_dir.mkdir(parents=True, exist_ok=True)
+
+        if target_type == "api":
+            target_url = str(target.get("url") or "")
+            attacks = _prepare_attacks_for_execution(args, plugins=plugins or [])
+            with AletheiaClient(base_url=target_url) as client:
+                results = run_attacks_with_backoff(client, attacks, plugins=plugins, plugin_args=args)
+                reconciliation = reconcile_results(results, client)
+            component_summary: dict = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "mode": "api",
+                "engine_url": target_url,
+                "target_url": target_url,
+                "reconciliation": reconciliation,
+                "gap_report": build_gap_report(results),
+                "category_gap_report": build_category_gap_report(results),
+                **summarize(results),
+                "results": results,
+                "gates": {"pass": True, "violations": []},
+            }
+        elif target_type == "repo":
+            repo_path = Path(str(target.get("path") or ".")).resolve()
+            component_summary = run_repo_audit(
+                repo_path,
+                repo_url=str(target.get("url") or "") or None,
+                threat_feed_path=getattr(args, "threat_feed_file", None),
+                include_test_fixtures=getattr(args, "repo_include_test_fixtures", False),
+                deps_scan=getattr(args, "deps_scan", "auto"),
+            )
+            if "mode" not in component_summary:
+                component_summary["mode"] = "repo"
+        else:
+            component_summary = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "mode": target_type,
+                "error": f"Unknown target type: {target_type}",
+                "gates": {"pass": False, "violations": [f"unknown_type:{target_type}"]},
+            }
+
+        components[component_key] = component_summary
+
+        run_dir = target_artifact_dir / f"run-{target_type}-{target_stamp}"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        summary_path = run_dir / "summary.json"
+        summary_path.write_text(json.dumps(component_summary, indent=2, default=str), encoding="utf-8")
+
+        model = normalize_summary_to_command_center(component_summary, source_path=str(summary_path))
+        sqlite_path = run_dir / "command_center.sqlite"
+        write_command_center_sqlite(model, sqlite_path)
+        all_models.append(model)
+
+        target_summaries.append({
+            "label": label,
+            "type": target_type,
+            "component_key": component_key,
+            "status": "completed",
+            "sqlite": str(sqlite_path),
+        })
+
+    # Build combined model and write to a separate run-combined-* dir
+    combined_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    combined_run_dir = artifact_dir / f"run-combined-{combined_stamp}"
+    combined_run_dir.mkdir(parents=True, exist_ok=True)
+
+    combined_model = _merge_batch_models(all_models)
+    combined_sqlite_path = combined_run_dir / "command_center.sqlite"
+    write_command_center_sqlite(combined_model, combined_sqlite_path)
+
+    all_gates_pass = all(
+        (comp.get("gates") or {}).get("pass", True)
+        for comp in components.values()
+    )
+    batch_summary: dict = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "combined",
+        "batch_mode": "targets-file",
+        "targets_total": len(targets_raw),
+        "targets_completed": len(target_summaries),
+        "targets": target_summaries,
+        "components": components,
+        "gates": {"pass": all_gates_pass, "violations": []},
+    }
+
+    return batch_summary, batch_root
+
+
+
 def _build_target_profile_from_args(args: argparse.Namespace) -> TargetProfile:
     return load_target_profile(
         preset=getattr(args, "target_preset", "aletheia"),
@@ -1543,15 +1834,9 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         if args.targets_file:
             batch_summary, _batch_root = _run_targets_batch(args, plugins=plugins)
             Path(args.output).write_text(json.dumps(batch_summary, indent=2), encoding="utf-8")
-            _write_command_center_artifacts(
-                summary_path=Path(args.output),
-                artifact_dir=Path(args.artifact_dir),
-                dashboard_file=None,
-                baseline_path=getattr(args, "baseline", None),
-            )
             print(
-                f"\nDone. Batch targets complete. Overall gate: {'PASS' if batch_summary['gates']['pass'] else 'FAIL'}. Output: {args.output}",
-                file=sys.stderr,
+            f"\nDone. Batch targets complete. Overall gate: {'PASS' if batch_summary['gates']['pass'] else 'FAIL'}. Output: {args.output}",
+            file=sys.stderr,
             )
             return PASS if batch_summary["gates"]["pass"] else FAIL_THRESHOLD
 
@@ -2071,7 +2356,8 @@ def _command_center_cli(argv: list[str]) -> int:
     if command == "run":
         # Subparser for run modes
         parser.add_argument("--mode", choices=["api", "website", "agentic", "repo", "combined"], default="api")
-        
+        parser.add_argument("--targets-file", default=None, help="JSON file listing multiple targets to batch")
+
         # Mode-specific arguments
         parser.add_argument("--base-url", help="API base URL for api/agentic modes")
         parser.add_argument("--target-url", help="Website URL for website/combined modes")
@@ -2082,37 +2368,70 @@ def _command_center_cli(argv: list[str]) -> int:
         parser.add_argument("--max-pages", type=int, help="Max pages for website audit")
         parser.add_argument("--max-depth", type=int, help="Max depth for website audit")
         parser.add_argument("--output", default="summary.json", help="Output file path")
-        
+        parser.add_argument("--baseline", default=None, help="Baseline summary.json for regression comparison")
+
         parsed = parser.parse_args(args)
         mode = parsed.mode
-        
-        # Convert to dict for subprocess launcher
-        parsed_dict = vars(parsed)
-        
-        exit_code, result = _launch_runner_subprocess(mode, parsed_dict)
-        
-        if parsed.cli_only or result.get("error"):
-            # Print result for CI/logging
-            print(json.dumps(result, indent=2), file=sys.stderr)
-            return exit_code
-        else:
-            # Print async result
-            print(json.dumps(result, indent=2))
+
+        if parsed.cli_only:
+            # Run in-process via _legacy_cli then write command-center artifacts
+            legacy_argv: list[str] = ["--mode", mode, "--output", parsed.output]
+            if getattr(parsed, "base_url", None):
+                legacy_argv += ["--base-url", parsed.base_url]
+            if getattr(parsed, "target_url", None):
+                legacy_argv += ["--target-url", parsed.target_url]
+            if getattr(parsed, "repo_url", None):
+                legacy_argv += ["--repo-url", parsed.repo_url]
+            if getattr(parsed, "repo_path", None) and parsed.repo_path != ".":
+                legacy_argv += ["--repo-path", parsed.repo_path]
+            if getattr(parsed, "category", None):
+                legacy_argv += ["--category", parsed.category]
+            if getattr(parsed, "max_attacks", None):
+                legacy_argv += ["--max-attacks", str(parsed.max_attacks)]
+            rc = _legacy_cli(legacy_argv)
+            if rc == 0:
+                summary_path = Path(parsed.output)
+                if summary_path.exists():
+                    artifact_dir = Path(parsed.artifact_dir).resolve()
+                    _write_command_center_artifacts(
+                        summary_path,
+                        artifact_dir,
+                        dashboard_file=None,
+                        baseline_path=getattr(parsed, "baseline", None),
+                    )
+            return rc
+        elif getattr(parsed, "targets_file", None):
+            batch_summary, batch_root = _run_targets_batch(parsed)
+            output_path = Path(parsed.output)
+            output_path.write_text(json.dumps(batch_summary, indent=2, default=str), encoding="utf-8")
+            print(json.dumps({"status": "batch_complete", "batch_root": str(batch_root)}, indent=2))
             return 0
+        else:
+            # Async subprocess launch
+            parsed_dict = vars(parsed)
+            exit_code, result = _launch_runner_subprocess(mode, parsed_dict)
+            print(json.dumps(result, indent=2))
+            return exit_code
     
     elif command == "dashboard":
+        parser.add_argument("--dashboard-file", default=None, help="Path to dashboard index.html")
+        parser.set_defaults(auth_mode="basic")
+
         parsed = parser.parse_args(args)
-        
+
         artifact_dir = Path(parsed.artifact_dir).resolve()
         artifact_dir.mkdir(parents=True, exist_ok=True)
-        
+
         repo_root = Path.cwd()
-        dashboard_file = repo_root / "dashboard" / "index.html"
-        
+        if parsed.dashboard_file:
+            dashboard_file = Path(parsed.dashboard_file)
+        else:
+            dashboard_file = repo_root / "dashboard" / "index.html"
+
         if not dashboard_file.exists():
             print(f"Dashboard file not found: {dashboard_file}", file=sys.stderr)
             return 1
-        
+
         config = DashboardServerConfig(
             repo_root=repo_root,
             artifact_dir=artifact_dir,
@@ -2149,7 +2468,7 @@ def _command_center_cli(argv: list[str]) -> int:
         baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
         current = json.loads(current_path.read_text(encoding="utf-8"))
         
-        comparison = compare_summaries(baseline, current)
+        comparison = compare_summaries(current, baseline)
         
         if parsed.output:
             Path(parsed.output).write_text(json.dumps(comparison, indent=2), encoding="utf-8")
@@ -2163,54 +2482,49 @@ def _command_center_cli(argv: list[str]) -> int:
         parser.add_argument("--input", required=True, help="Input summary.json")
         parser.add_argument("--format", choices=["csv", "json"], default="csv", help="Export format")
         parser.add_argument("--output", required=True, help="Output file")
-        
+        parser.add_argument("--filter", dest="filter_expr", default=None, help="Filter expression e.g. category=prompt_injection")
+
         parsed = parser.parse_args(args)
-        
+
         input_path = Path(parsed.input)
         if not input_path.exists():
             print(f"Input file not found: {input_path}", file=sys.stderr)
             return 1
-        
+
         summary = json.loads(input_path.read_text(encoding="utf-8"))
         results = summary.get("results") or summary.get("components", {}).get("api", {}).get("results", [])
-        
-        rows = export_rows(results, output_format=parsed.format)
+
+        if parsed.filter_expr:
+            results = apply_finding_filter(results, parsed.filter_expr)
+
         output_path = Path(parsed.output)
-        output_path.write_text(rows, encoding="utf-8")
+        export_rows(results, output_path, parsed.format)
         print(f"Exported {len(results)} rows to {parsed.output}", file=sys.stderr)
-        
+
         return 0
     
     elif command == "gate":
         parser.add_argument("--input", required=True, help="Input summary.json")
-        parser.add_argument("--mode", default="combined", help="Gate evaluation mode")
-        parser.add_argument("--exceptions-file", help="Gate exceptions file")
-        parser.add_argument("--baseline-state-file", help="Baseline state file")
+        parser.add_argument("--thresholds", default=None, help="Threshold expression e.g. max_unknown=5,min_pass_rate=80")
         parser.add_argument("--output", help="Output gate result JSON")
-        
+
         parsed = parser.parse_args(args)
-        
+
         input_path = Path(parsed.input)
         if not input_path.exists():
             print(f"Input file not found: {input_path}", file=sys.stderr)
             return 1
-        
+
         summary = json.loads(input_path.read_text(encoding="utf-8"))
-        
-        # Apply gate evaluation
-        gate_result = evaluate_gates(
-            summary,
-            mode=parsed.mode,
-            exceptions_file=parsed.exceptions_file,
-            baseline_state_file=parsed.baseline_state_file,
-        )
-        
+
+        gate_result = evaluate_gates(summary, parsed.thresholds)
+
         if parsed.output:
             Path(parsed.output).write_text(json.dumps(gate_result, indent=2), encoding="utf-8")
             print(f"Gate result written to {parsed.output}", file=sys.stderr)
         else:
             print(json.dumps(gate_result, indent=2))
-        
+
         gate_pass = gate_result.get("pass", False)
         return 0 if gate_pass else 1
     
