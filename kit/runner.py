@@ -1923,6 +1923,57 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     args = _sanitize_legacy_args(args)
     plugins = _load_runner_plugins_from_args(args)
 
+    if args.scenario:
+        with _create_api_client(args) as client:
+            scenario_result = run_scenario(
+                client,
+                str(args.scenario).strip().upper(),
+                evidence_root=Path(args.evidence_dir),
+            )
+
+        scenario_summary = scenario_result.to_dict()
+        Path(args.output).write_text(json.dumps(scenario_summary, indent=2), encoding="utf-8")
+        if args.sarif_output:
+            sarif_report = build_sarif_report(
+                [
+                    {
+                        "case_id": stage.stage.stage_id,
+                        "finding_type": scenario_result.finding_type,
+                        "severity": scenario_result.severity,
+                        "owasp_id": stage.stage.owasp_id,
+                        "nist_controls": list(stage.stage.nist_controls),
+                        "gate_decision": stage.gate_decision,
+                    }
+                    for stage in scenario_result.stages
+                ],
+                tool_name="aletheia-redteam-kit",
+                owner="redteam-kit",
+                exception_expiry=None,
+            )
+            write_sarif_report(Path(args.sarif_output), sarif_report)
+        if any(stage.gate_decision != "blocked" for stage in scenario_result.stages):
+            return FAIL_THRESHOLD
+        return PASS
+
+    if args.probes:
+        probe_names = [item.strip() for item in str(args.probes).split(",") if item.strip()]
+        with _create_api_client(args) as client:
+            probe_summary = _run_probe_registry(
+                client,
+                probe_names,
+                policy_file=args.zero_trust_policy_file,
+                evidence_root=Path(args.evidence_dir),
+            )
+
+        Path(args.output).write_text(json.dumps(probe_summary, indent=2), encoding="utf-8")
+        if not probe_summary.get("pass", False):
+            print(
+                f"Probe gate failure: {len(probe_summary.get('violations', []))} violated expected_block contracts.",
+                file=sys.stderr,
+            )
+            return FAIL_THRESHOLD
+        return PASS
+
     if args.mode == "combined":
         if args.targets_file:
             batch_summary, _batch_root = _run_targets_batch(args, plugins=plugins)

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "probes": [
+    {"family": "homoglyph_substitution", "owasp_id": "LLM01", "nist_controls": ["NIST-800-207:never_trust_input", "NIST-800-207:continuous_verification"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "zero_width_injection", "owasp_id": "LLM01", "nist_controls": ["NIST-800-207:never_trust_input", "NIST-800-207:continuous_verification"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "thin_space_injection", "owasp_id": "LLM01", "nist_controls": ["NIST-800-207:never_trust_input", "NIST-800-207:continuous_verification"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "mixed_unicode_normal_forms", "owasp_id": "LLM01", "nist_controls": ["NIST-800-207:never_trust_input", "NIST-800-207:continuous_verification"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "percent_wrapping", "owasp_id": "LLM01", "nist_controls": ["NIST-800-207:never_trust_input", "NIST-800-207:continuous_verification"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "base64_wrapping", "owasp_id": "LLM01", "nist_controls": ["NIST-800-207:never_trust_input", "NIST-800-207:continuous_verification"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "html_entity_wrapping", "owasp_id": "LLM01", "nist_controls": ["NIST-800-207:never_trust_input", "NIST-800-207:continuous_verification"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "schema_breaking_json", "owasp_id": "LLM02", "nist_controls": ["NIST-800-207:output_validation", "NIST-800-207:schema_enforcement"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "function_call_smuggling", "owasp_id": "LLM02", "nist_controls": ["NIST-800-207:output_validation", "NIST-800-207:schema_enforcement"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "html_js_boundary_break", "owasp_id": "LLM02", "nist_controls": ["NIST-800-207:output_validation", "NIST-800-207:schema_enforcement"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "path_traversal", "owasp_id": "LLM07", "nist_controls": ["NIST-800-207:least_privilege", "NIST-800-207:tool_rbac", "NIST-800-207:parameter_validation", "NIST-800-207:execution_sandboxing"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "type_confusion", "owasp_id": "LLM07", "nist_controls": ["NIST-800-207:least_privilege", "NIST-800-207:tool_rbac", "NIST-800-207:parameter_validation", "NIST-800-207:execution_sandboxing"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "oversized_arguments", "owasp_id": "LLM07", "nist_controls": ["NIST-800-207:least_privilege", "NIST-800-207:tool_rbac", "NIST-800-207:parameter_validation", "NIST-800-207:execution_sandboxing"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "recursive_call_chain", "owasp_id": "LLM08", "nist_controls": ["NIST-800-207:least_privilege", "NIST-800-207:tool_rbac", "NIST-800-207:parameter_validation", "NIST-800-207:execution_sandboxing"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"family": "scope_escalation", "owasp_id": "LLM08", "nist_controls": ["NIST-800-207:least_privilege", "NIST-800-207:tool_rbac", "NIST-800-207:parameter_validation", "NIST-800-207:execution_sandboxing"], "expected_block": true, "evidence": ["request_sha256", "output_sha256"]},
+    {"scenario_id": "A", "owasp_id": "LLM01", "nist_controls": ["NIST-800-207:never_trust_input", "NIST-800-207:provenance_checks"], "expected_block": true, "evidence": ["stage_evidence"]},
+    {"scenario_id": "B", "owasp_id": "LLM02", "nist_controls": ["NIST-800-207:output_validation", "NIST-800-207:output_sandboxing"], "expected_block": true, "evidence": ["stage_evidence"]},
+    {"scenario_id": "C", "owasp_id": "LLM07", "nist_controls": ["NIST-800-207:parameter_validation", "NIST-800-207:tool_rbac"], "expected_block": true, "evidence": ["stage_evidence"]},
+    {"scenario_id": "D", "owasp_id": "LLM01", "nist_controls": ["NIST-800-207:multimodal_isolation"], "expected_block": true, "evidence": ["stage_evidence"]},
+    {"scenario_id": "E", "owasp_id": "LLM03", "nist_controls": ["NIST-800-207:provenance_checks", "NIST-800-207:embedding_validation"], "expected_block": true, "evidence": ["stage_evidence"]}
+  ]
+}

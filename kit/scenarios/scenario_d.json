@@ -1,0 +1,17 @@
+{
+  "scenario_id": "D",
+  "name": "Multimodal safety collapse",
+  "description": "Stubbed multimodal stage; marked not implemented rather than faked.",
+  "stages": [
+    {
+      "stage_id": "D-1",
+      "name": "Multimodal ingress",
+      "kind": "not_implemented",
+      "payload_template": "Stub multimodal step for image / OCR / audio ingestion.",
+      "expected_block": true,
+      "owasp_id": "LLM01",
+      "nist_controls": ["NIST-800-207:multimodal_isolation"],
+      "risk_class": "network"
+    }
+  ]
+}
