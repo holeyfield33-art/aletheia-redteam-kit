@@ -1175,11 +1175,26 @@
           const mode = String(item.mode || "api");
           const generated = toIsoOrDash(item.generated_at);
           const artifactSummary = summarizeArtifactAvailability(item);
+          const campaignPath = String(((item.campaign || {}).manifest_path) || "").trim();
+          const learningPath = String(item.learning_snapshot_path || "").trim();
+          const mutationPath = String(item.mutation_effectiveness_path || "").trim();
+          const quickLinks = [
+            campaignPath
+              ? '<a href="' + escapeHtml(toHostedRunArtifactPath(campaignPath)) + '" target="_blank" rel="noopener" data-run-artifact-open="1">campaign</a>'
+              : "",
+            learningPath
+              ? '<a href="' + escapeHtml(toHostedRunArtifactPath(learningPath)) + '" target="_blank" rel="noopener" data-run-artifact-open="1">learning</a>'
+              : "",
+            mutationPath
+              ? '<a href="' + escapeHtml(toHostedRunArtifactPath(mutationPath)) + '" target="_blank" rel="noopener" data-run-artifact-open="1">mutation</a>'
+              : "",
+          ].filter(Boolean).join(" | ");
           return (
             '<div class="run-item" data-run-index="' + escapeHtml(idx) + '">' +
             '<div><strong>' + escapeHtml(mode) + '</strong></div>' +
             '<div class="muted">' + escapeHtml(generated) + '</div>' +
             (artifactSummary ? ('<div class="muted">Artifacts: ' + escapeHtml(artifactSummary) + '</div>') : '') +
+            (quickLinks ? ('<div class="muted">Quick links: ' + quickLinks + '</div>') : '') +
             '</div>'
           );
         })
@@ -1191,6 +1206,12 @@
           const selected = runs[index];
           if (!selected) return;
           renderAll(selected, { summaries: runs });
+        });
+      });
+
+      runListEl.querySelectorAll("[data-run-artifact-open]").forEach(function (node) {
+        node.addEventListener("click", function (event) {
+          event.stopPropagation();
         });
       });
 
@@ -2718,9 +2739,6 @@
     function toHostedRunArtifactPath(rawPath) {
       const text = String(rawPath || "").trim();
       if (!text) return "";
-      if (text.startsWith("http://") || text.startsWith("https://")) {
-        return text;
-      }
       if (text.startsWith("/runs/")) {
         return text;
       }
@@ -2736,7 +2754,7 @@
         if (markerIndex >= 0) {
           return text.slice(markerIndex);
         }
-        return text;
+        return "";
       }
       return "/runs/" + text;
     }
