@@ -428,7 +428,7 @@ export default function Home() {
       const record = (await response.json()) as LaunchAuditRecord;
       setStatus(`Run ${runId.slice(0, 8)} status: ${record.status}`);
 
-      if (TERMINAL_LAUNCH_STATES.has(record.status)) {
+      if (record.status === "completed" || record.status === "failed") {
         return record;
       }
 
