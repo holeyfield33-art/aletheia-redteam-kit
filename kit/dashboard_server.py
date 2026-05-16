@@ -31,9 +31,59 @@ MAX_LAUNCH_LOG_TAIL_LINES = 5000
 class ProcessTracker:
     """Track subprocess launches and their status."""
     
-    def __init__(self) -> None:
+    def __init__(self, artifact_root: Path) -> None:
         self._lock = threading.Lock()
+        self._artifact_root = artifact_root
         self._processes: dict[str, dict] = {}
+
+    def _is_pid_running(self, pid: int | None) -> bool:
+        if pid is None:
+            return False
+        try:
+            os.kill(int(pid), 0)
+            return True
+        except (OSError, ProcessLookupError, ValueError, TypeError):
+            return False
+
+    def _hydrate_launch_from_disk(self, launch_id: str) -> dict | None:
+        if not LAUNCH_ID_PATTERN.fullmatch(str(launch_id or "")):
+            return None
+
+        launch_dir = (self._artifact_root / ".launches" / launch_id).resolve()
+        artifact_root = self._artifact_root.resolve()
+        if os.path.commonpath([str(launch_dir), str(artifact_root)]) != str(artifact_root):
+            return None
+        if not launch_dir.exists() or not launch_dir.is_dir():
+            return None
+
+        output_rel = f".launches/{launch_id}/summary.json"
+        log_rel = f".launches/{launch_id}/launch.log"
+        launch_log_path = launch_dir / "launch.log"
+        launch_summary_path = launch_dir / "summary.json"
+
+        mode = str(launch_id).split("-", 1)[0] if "-" in str(launch_id) else "repo"
+        started_at = datetime.fromtimestamp(launch_dir.stat().st_mtime, tz=timezone.utc).isoformat()
+        status = "completed" if launch_summary_path.exists() else "started"
+
+        return {
+            "ok": True,
+            "launch_id": launch_id,
+            "mode": mode,
+            "status": status,
+            "output_path": output_rel,
+            "log_path": log_rel if launch_log_path.exists() else None,
+            "dashboard": "/dashboard/",
+            "registered_at": started_at,
+        }
+
+    def _build_status(self, meta: dict) -> dict:
+        status = dict(meta)
+        running = self._is_pid_running(status.get("pid"))
+        status["running"] = running
+        if not running and str(status.get("status") or "").lower() == "started":
+            if status.get("pid") is not None:
+                status["status"] = "completed"
+        return status
     
     def register(self, launch_id: str, process_meta: dict) -> None:
         """Register a subprocess launch."""
@@ -47,26 +97,29 @@ class ProcessTracker:
         """Get status of a launch."""
         with self._lock:
             meta = self._processes.get(launch_id)
-            if not meta:
-                return None
-            
-            status = dict(meta)
-            pid = status.get("pid")
-            
-            # Check if process is still running
-            if pid is not None:
-                try:
-                    os.kill(pid, 0)  # Signal 0 = check if process exists
-                    status["running"] = True
-                except (OSError, ProcessLookupError):
-                    status["running"] = False
-            
-            return status
+            if meta is None:
+                hydrated = self._hydrate_launch_from_disk(launch_id)
+                if hydrated is None:
+                    return None
+                self._processes[launch_id] = hydrated
+                meta = hydrated
+            return self._build_status(meta)
     
     def list_launches(self) -> list[dict]:
         """List all tracked launches."""
         with self._lock:
-            return list(self._processes.values())
+            launch_root = self._artifact_root / ".launches"
+            if launch_root.exists() and launch_root.is_dir():
+                for child in launch_root.iterdir():
+                    if not child.is_dir():
+                        continue
+                    launch_id = child.name
+                    if launch_id in self._processes:
+                        continue
+                    hydrated = self._hydrate_launch_from_disk(launch_id)
+                    if hydrated is not None:
+                        self._processes[launch_id] = hydrated
+            return [self._build_status(meta) for meta in self._processes.values()]
     
     def terminate(self, launch_id: str) -> bool:
         """Terminate a process if still running."""
@@ -281,7 +334,7 @@ def create_dashboard_handler(config: DashboardServerConfig):
     request_rate_limiter = _RequestRateLimiter(
         requests_per_minute=int(os.environ.get("ALETHEIA_DASHBOARD_RATE_LIMIT_PER_MINUTE", "30"))
     )
-    process_tracker = ProcessTracker()
+    process_tracker = ProcessTracker(artifact_root)
 
     def _parse_launch_id(path: str, *, suffix: str | None = None) -> str | None:
         base_prefix = "/api/launches/"
