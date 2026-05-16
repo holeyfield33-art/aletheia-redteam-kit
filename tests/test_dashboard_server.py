@@ -10,6 +10,7 @@ from pathlib import Path
 
 import bcrypt
 import httpx
+import pytest
 
 from kit.auth import DashboardAuthConfig, DashboardAuthManager
 from kit.dashboard_server import (
@@ -54,6 +55,7 @@ def test_launch_public_repo_audit_builds_runner_command(monkeypatch, tmp_path: P
     assert result["resolved_repo_url"] == "https://github.com/example/public-repo.git"
     assert result["pid"] == 4242
     assert "--repo-url" in captured["command"]
+    assert "run" not in captured["command"]
     assert captured["cwd"] == str(tmp_path.resolve())
     assert (tmp_path / "runs" / ".launches").exists()
 
@@ -227,6 +229,48 @@ def test_dashboard_rejects_runs_path_traversal(tmp_path: Path) -> None:
             )
 
     assert response.status_code in {403, 404}
+
+
+def test_dashboard_launch_logs_endpoint_uses_specific_route(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    launch_id = "repo-20260516T010203Z-abcd1234"
+
+    def _fake_launch(config, repo_url, tracker=None):
+        launch_root = config.artifact_dir / ".launches" / launch_id
+        launch_root.mkdir(parents=True, exist_ok=True)
+        (launch_root / "launch.log").write_text("audit started\naudit done\n", encoding="utf-8")
+        payload = {
+            "ok": True,
+            "status": "started",
+            "launch_id": launch_id,
+            "repo_url": repo_url,
+            "resolved_repo_url": "https://github.com/example/public-repo.git",
+            "output_path": f".launches/{launch_id}/summary.json",
+            "log_path": f".launches/{launch_id}/launch.log",
+            "pid": 99999,
+            "dashboard": "/dashboard/",
+        }
+        if tracker is not None:
+            tracker.register(launch_id, payload)
+        return payload
+
+    monkeypatch.setattr("kit.dashboard_server._launch_public_repo_audit", _fake_launch)
+
+    with _env_vars({"ALETHEIA_DASHBOARD_API_KEY": "op-key"}):
+        with _running_dashboard(tmp_path, auth_mode="api-key") as base_url:
+            headers = {"X-API-Key": "op-key"}
+            launch = httpx.post(
+                f"{base_url}/api/repo-audit",
+                json={"repo_url": "https://github.com/example/public-repo"},
+                headers=headers,
+            )
+            assert launch.status_code == 202
+
+            logs = httpx.get(f"{base_url}/api/launches/{launch_id}/logs", headers=headers)
+
+    assert logs.status_code == 200
+    payload = logs.json()
+    assert payload["launch_id"] == launch_id
+    assert "audit done" in payload["logs"]
 
 
 def test_auth_manager_locks_after_repeated_login_failures() -> None:
