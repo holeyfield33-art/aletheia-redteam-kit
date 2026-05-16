@@ -26,6 +26,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -1874,6 +1875,281 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
             )
             return FAIL_THRESHOLD
     return PASS
+
+
+def _launch_runner_subprocess(mode: str, parsed_args: dict) -> tuple[int, dict]:
+    """Launch a runner subprocess and return exit code and result metadata."""
+    artifact_root = Path(parsed_args.get("artifact_dir") or "runs").resolve()
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    launch_id = f"{mode}-{stamp}-{uuid4().hex[:8]}"
+    launch_root = artifact_root / ".launches" / launch_id
+    launch_root.mkdir(parents=True, exist_ok=True)
+    
+    output_path = launch_root / "summary.json"
+    log_path = launch_root / "launch.log"
+    
+    # Launch legacy CLI args directly to avoid recursively invoking the `run` wrapper.
+    command = [
+        sys.executable,
+        "-m",
+        "kit.runner",
+        "--mode",
+        mode,
+    ]
+    
+    # Map common arguments to --mode args
+    if mode in {"api", "agentic"}:
+        if parsed_args.get("base_url"):
+            command.extend(["--base-url", parsed_args["base_url"]])
+        if parsed_args.get("max_attacks"):
+            command.extend(["--max-attacks", str(parsed_args["max_attacks"])])
+        if parsed_args.get("category"):
+            command.extend(["--category", parsed_args["category"]])
+    
+    if mode in {"website", "combined"}:
+        if parsed_args.get("target_url"):
+            command.extend(["--target-url", parsed_args["target_url"]])
+        if parsed_args.get("max_pages"):
+            command.extend(["--max-pages", str(parsed_args["max_pages"])])
+        if parsed_args.get("max_depth"):
+            command.extend(["--max-depth", str(parsed_args["max_depth"])])
+    
+    if mode in {"repo", "combined"}:
+        if parsed_args.get("repo_url"):
+            command.extend(["--repo-url", parsed_args["repo_url"]])
+        elif parsed_args.get("repo_path"):
+            command.extend(["--repo-path", parsed_args["repo_path"]])
+    
+    command.extend([
+        "--artifact-dir",
+        str(artifact_root),
+        "--output",
+        str(output_path),
+        "--cli-only",
+    ])
+    
+    # Capture environment for subprocess
+    env = os.environ.copy()
+    
+    result_meta = {
+        "ok": True,
+        "status": "started",
+        "launch_id": launch_id,
+        "mode": mode,
+        "output_path": str(output_path.relative_to(artifact_root)),
+        "log_path": str(log_path.relative_to(artifact_root)),
+        "dashboard": "/dashboard/",
+    }
+    
+    try:
+        with open(log_path, "ab") as log_file:
+            process = subprocess.Popen(
+                command,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                env=env,
+            )
+        result_meta["pid"] = process.pid
+        result_meta["started_at"] = datetime.now(timezone.utc).isoformat()
+    except Exception as exc:
+        result_meta["ok"] = False
+        result_meta["error"] = str(exc)
+        result_meta["status"] = "failed"
+        return 1, result_meta
+    
+    # If --cli-only is set in the parsed args, wait for subprocess
+    if parsed_args.get("cli_only"):
+        try:
+            exit_code = process.wait(timeout=None)
+            result_meta["exit_code"] = exit_code
+            result_meta["status"] = "completed"
+            
+            # Load output if available
+            if output_path.exists():
+                try:
+                    result_meta["output"] = json.loads(output_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, IOError):
+                    pass
+            
+            return exit_code, result_meta
+        except Exception as exc:
+            result_meta["error"] = str(exc)
+            result_meta["status"] = "wait_failed"
+            return 1, result_meta
+    else:
+        # For async dashboard submission, return immediately
+        return 0, result_meta
+
+
+def _command_center_cli(argv: list[str]) -> int:
+    """Handle new command-center CLI commands: run, dashboard, compare, export, gate."""
+    if not argv:
+        print("Usage: python -m kit.runner {run,dashboard,compare,export,gate} ...", file=sys.stderr)
+        return 1
+    
+    command = argv[0]
+    args = argv[1:]
+    
+    # Parse common arguments for all commands
+    parser = argparse.ArgumentParser(description=f"Aletheia {command} command")
+    parser.add_argument("--artifact-dir", default="runs", help="Directory for artifacts and runs")
+    parser.add_argument("--host", default="127.0.0.1", help="Server host for dashboard")
+    parser.add_argument("--port", type=int, default=8080, help="Server port for dashboard")
+    parser.add_argument("--serve", action="store_true", help="Serve dashboard via HTTP")
+    parser.add_argument("--auth-mode", default="auto", help="Dashboard auth mode: auto, disabled, basic, api-key, proxy")
+    parser.add_argument("--cli-only", action="store_true", help="Block until subprocess completes (for CI)")
+    
+    if command == "run":
+        # Subparser for run modes
+        parser.add_argument("--mode", choices=["api", "website", "agentic", "repo", "combined"], default="api")
+        
+        # Mode-specific arguments
+        parser.add_argument("--base-url", help="API base URL for api/agentic modes")
+        parser.add_argument("--target-url", help="Website URL for website/combined modes")
+        parser.add_argument("--repo-url", help="GitHub repo URL for repo/combined modes")
+        parser.add_argument("--repo-path", default=".", help="Local repo path for repo mode")
+        parser.add_argument("--category", help="Attack category filter")
+        parser.add_argument("--max-attacks", type=int, help="Maximum attacks to run")
+        parser.add_argument("--max-pages", type=int, help="Max pages for website audit")
+        parser.add_argument("--max-depth", type=int, help="Max depth for website audit")
+        parser.add_argument("--output", default="summary.json", help="Output file path")
+        
+        parsed = parser.parse_args(args)
+        mode = parsed.mode
+        
+        # Convert to dict for subprocess launcher
+        parsed_dict = vars(parsed)
+        
+        exit_code, result = _launch_runner_subprocess(mode, parsed_dict)
+        
+        if parsed.cli_only or result.get("error"):
+            # Print result for CI/logging
+            print(json.dumps(result, indent=2), file=sys.stderr)
+            return exit_code
+        else:
+            # Print async result
+            print(json.dumps(result, indent=2))
+            return 0
+    
+    elif command == "dashboard":
+        parsed = parser.parse_args(args)
+        
+        artifact_dir = Path(parsed.artifact_dir).resolve()
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        
+        repo_root = Path.cwd()
+        dashboard_file = repo_root / "dashboard" / "index.html"
+        
+        if not dashboard_file.exists():
+            print(f"Dashboard file not found: {dashboard_file}", file=sys.stderr)
+            return 1
+        
+        config = DashboardServerConfig(
+            repo_root=repo_root,
+            artifact_dir=artifact_dir,
+            dashboard_file=dashboard_file,
+            host=parsed.host,
+            port=parsed.port,
+            auth_mode=parsed.auth_mode,
+        )
+        
+        try:
+            serve_dashboard(config)
+            return 0
+        except KeyboardInterrupt:
+            print("\nDashboard server stopped.", file=sys.stderr)
+            return 0
+        except Exception as exc:
+            print(f"Dashboard error: {exc}", file=sys.stderr)
+            return 1
+    
+    elif command == "compare":
+        parser.add_argument("--baseline", required=True, help="Baseline summary.json")
+        parser.add_argument("--current", required=True, help="Current summary.json")
+        parser.add_argument("--output", help="Output comparison JSON")
+        
+        parsed = parser.parse_args(args)
+        
+        baseline_path = Path(parsed.baseline)
+        current_path = Path(parsed.current)
+        
+        if not baseline_path.exists() or not current_path.exists():
+            print("Baseline or current file not found", file=sys.stderr)
+            return 1
+        
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+        current = json.loads(current_path.read_text(encoding="utf-8"))
+        
+        comparison = compare_summaries(baseline, current)
+        
+        if parsed.output:
+            Path(parsed.output).write_text(json.dumps(comparison, indent=2), encoding="utf-8")
+            print(f"Comparison written to {parsed.output}", file=sys.stderr)
+        else:
+            print(json.dumps(comparison, indent=2))
+        
+        return 0
+    
+    elif command == "export":
+        parser.add_argument("--input", required=True, help="Input summary.json")
+        parser.add_argument("--format", choices=["csv", "json"], default="csv", help="Export format")
+        parser.add_argument("--output", required=True, help="Output file")
+        
+        parsed = parser.parse_args(args)
+        
+        input_path = Path(parsed.input)
+        if not input_path.exists():
+            print(f"Input file not found: {input_path}", file=sys.stderr)
+            return 1
+        
+        summary = json.loads(input_path.read_text(encoding="utf-8"))
+        results = summary.get("results") or summary.get("components", {}).get("api", {}).get("results", [])
+        
+        rows = export_rows(results, output_format=parsed.format)
+        output_path = Path(parsed.output)
+        output_path.write_text(rows, encoding="utf-8")
+        print(f"Exported {len(results)} rows to {parsed.output}", file=sys.stderr)
+        
+        return 0
+    
+    elif command == "gate":
+        parser.add_argument("--input", required=True, help="Input summary.json")
+        parser.add_argument("--mode", default="combined", help="Gate evaluation mode")
+        parser.add_argument("--exceptions-file", help="Gate exceptions file")
+        parser.add_argument("--baseline-state-file", help="Baseline state file")
+        parser.add_argument("--output", help="Output gate result JSON")
+        
+        parsed = parser.parse_args(args)
+        
+        input_path = Path(parsed.input)
+        if not input_path.exists():
+            print(f"Input file not found: {input_path}", file=sys.stderr)
+            return 1
+        
+        summary = json.loads(input_path.read_text(encoding="utf-8"))
+        
+        # Apply gate evaluation
+        gate_result = evaluate_gates(
+            summary,
+            mode=parsed.mode,
+            exceptions_file=parsed.exceptions_file,
+            baseline_state_file=parsed.baseline_state_file,
+        )
+        
+        if parsed.output:
+            Path(parsed.output).write_text(json.dumps(gate_result, indent=2), encoding="utf-8")
+            print(f"Gate result written to {parsed.output}", file=sys.stderr)
+        else:
+            print(json.dumps(gate_result, indent=2))
+        
+        gate_pass = gate_result.get("pass", False)
+        return 0 if gate_pass else 1
+    
+    else:
+        print(f"Unknown command: {command}", file=sys.stderr)
+        return 1
 
 
 def cli() -> int:

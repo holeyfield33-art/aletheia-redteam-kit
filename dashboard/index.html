@@ -127,6 +127,54 @@
       background: rgba(255, 255, 255, 0.03);
     }
 
+    .run-item.active {
+      border-color: rgba(239, 68, 68, 0.75);
+      box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35) inset;
+    }
+
+    .launch-row {
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    .launch-topline {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .launch-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .launch-actions button {
+      padding: 0.3rem 0.55rem;
+      font-size: 0.74rem;
+      border-radius: 8px;
+    }
+
+    .launch-actions button[disabled] {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .launch-log {
+      margin-top: 0.6rem;
+      max-height: 210px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #0b0a0e;
+      padding: 0.6rem;
+      font-size: 0.73rem;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     .drop-zone {
       border: 1px dashed rgba(255, 255, 255, 0.18);
       border-radius: 14px;
@@ -481,6 +529,7 @@
 
     #filtersPane,
     #runScopePane,
+    #launchesPane,
     #trendPane {
       grid-column: 1;
     }
@@ -508,6 +557,7 @@
 
       #filtersPane,
       #runScopePane,
+      #launchesPane,
       #trendPane,
       .controls,
       #topMetrics,
@@ -562,6 +612,15 @@
     <div class="bars" id="runScopePane">
       <h2>Recent Runs</h2>
       <div class="run-list" id="runList"></div>
+    </div>
+
+    <div class="bars" id="launchesPane">
+      <h2>Launch Queue</h2>
+      <div class="button-row" style="margin-bottom:0.55rem;">
+        <button id="refreshLaunchesBtn" type="button">Refresh launches</button>
+      </div>
+      <div class="run-list" id="launchesList"></div>
+      <pre class="launch-log" id="launchLogView">No launch selected.</pre>
     </div>
 
     <div class="bars" id="filtersPane">
@@ -698,6 +757,8 @@
     const DEFAULT_WEBSITE_SUMMARY_PATH = "./website_summary.json";
     const RUNS_INDEX_PATH = "./runs/index.json";
     const HOSTED_RUNS_API_PATH = "/api/runs";
+    const HOSTED_LAUNCHES_API_PATH = "/api/launches";
+    const LAUNCH_POLL_INTERVAL_MS = 5000;
     const AUTO_SCAN_CANDIDATES = [
       "./summary.json",
       "./summary_rerun.json",
@@ -727,6 +788,11 @@
       baselineSummary: null,
       verifyStats: { checked: 0, valid: 0 },
       rowVerification: new Map(),
+      launches: [],
+      selectedLaunchId: "",
+      launchesHadRunning: false,
+      launchPollingTimer: null,
+      launchPollInFlight: false,
       filters: {
         component: "auto",
         category: "all",
@@ -775,6 +841,9 @@
     const repoHotBtnEl = document.getElementById("repoHotBtn");
     const exportRepoHotBtnEl = document.getElementById("exportRepoHotBtn");
     const runListEl = document.getElementById("runList");
+    const launchesListEl = document.getElementById("launchesList");
+    const launchLogViewEl = document.getElementById("launchLogView");
+    const refreshLaunchesBtnEl = document.getElementById("refreshLaunchesBtn");
     const detailMetaEl = document.getElementById("detailMeta");
     const baselineRunFilterEl = document.getElementById("baselineRunFilter");
     const useSelectedAsBaselineBtnEl = document.getElementById("useSelectedAsBaselineBtn");
@@ -815,6 +884,173 @@
 
     function setVerifyStatus(message) {
       verifyStatusEl.innerHTML = escapeHtml(message);
+    }
+
+    function setLaunchLog(message) {
+      launchLogViewEl.textContent = String(message || "No launch selected.");
+    }
+
+    function summarizeLaunchState(launch) {
+      if (!launch || typeof launch !== "object") return "UNKNOWN";
+      if (launch.running) return "RUNNING";
+      const status = String(launch.status || "").toLowerCase();
+      if (status === "completed") {
+        const code = Number(launch.exit_code);
+        if (Number.isFinite(code) && code !== 0) {
+          return "FAILED";
+        }
+        return "COMPLETED";
+      }
+      if (status === "terminated") return "TERMINATED";
+      if (status === "failed") return "FAILED";
+      return status ? status.toUpperCase() : "UNKNOWN";
+    }
+
+    function renderLaunches() {
+      const launches = Array.isArray(state.launches) ? state.launches : [];
+      if (!launches.length) {
+        launchesListEl.innerHTML = '<div class="empty-note">No tracked launches yet. Start a repo audit to populate this queue.</div>';
+        if (!state.selectedLaunchId) {
+          setLaunchLog("No launch selected.");
+        }
+        return;
+      }
+
+      launchesListEl.innerHTML = launches
+        .map(function (launch) {
+          const launchId = String(launch.launch_id || "");
+          const mode = String(launch.mode || "repo");
+          const status = summarizeLaunchState(launch);
+          const pid = launch.pid ? String(launch.pid) : "-";
+          const stamp = toIsoOrDash(launch.started_at || launch.registered_at);
+          const activeClass = launchId && launchId === state.selectedLaunchId ? " active" : "";
+          return (
+            '<div class="run-item launch-row' + activeClass + '" data-launch-id="' + escapeHtml(launchId) + '">' +
+              '<div class="launch-topline">' +
+                '<strong>' + escapeHtml(mode.toUpperCase()) + '</strong>' +
+                '<span class="muted">' + escapeHtml(status) + '</span>' +
+              '</div>' +
+              '<div class="muted">Launch ' + escapeHtml(launchId) + '</div>' +
+              '<div class="muted">PID ' + escapeHtml(pid) + ' · ' + escapeHtml(stamp) + '</div>' +
+              '<div class="launch-actions">' +
+                '<button type="button" data-launch-action="status" data-launch-id="' + escapeHtml(launchId) + '">Status</button>' +
+                '<button type="button" data-launch-action="logs" data-launch-id="' + escapeHtml(launchId) + '">Logs</button>' +
+                '<button type="button" data-launch-action="cancel" data-launch-id="' + escapeHtml(launchId) + '"' + (launch.running ? "" : " disabled") + '>Cancel</button>' +
+              '</div>' +
+            '</div>'
+          );
+        })
+        .join("");
+    }
+
+    async function refreshLaunches(options) {
+      const opts = options || {};
+      const silent = Boolean(opts.silent);
+      const fromPoll = Boolean(opts.fromPoll);
+
+      if (state.launchPollInFlight) {
+        return;
+      }
+      state.launchPollInFlight = true;
+      try {
+        const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH);
+        const launches = Array.isArray(payload.launches) ? payload.launches.slice() : [];
+        launches.sort(function (a, b) {
+          const aTs = Date.parse((a && (a.started_at || a.registered_at)) || "") || 0;
+          const bTs = Date.parse((b && (b.started_at || b.registered_at)) || "") || 0;
+          return bTs - aTs;
+        });
+        state.launches = launches;
+
+        if (opts.selectLaunchId) {
+          state.selectedLaunchId = String(opts.selectLaunchId);
+        } else if (!state.selectedLaunchId && launches.length) {
+          state.selectedLaunchId = String((launches[0] && launches[0].launch_id) || "");
+        }
+
+        renderLaunches();
+
+        const runningCount = launches.filter(function (item) { return Boolean(item && item.running); }).length;
+        if (fromPoll && state.launchesHadRunning && runningCount === 0) {
+          try {
+            await autoScanRuns();
+          } catch (_) {
+          }
+        }
+        state.launchesHadRunning = runningCount > 0;
+
+        if (!silent) {
+          setStatus("Launch queue refreshed. " + launches.length + " tracked launch(es), " + runningCount + " running.");
+        }
+      } catch (err) {
+        if (!silent) {
+          setStatus("Launch refresh failed: " + (err && err.message ? err.message : String(err)));
+        }
+      } finally {
+        state.launchPollInFlight = false;
+      }
+    }
+
+    async function fetchLaunchStatus(launchId, options) {
+      const opts = options || {};
+      const id = String(launchId || "").trim();
+      if (!id) {
+        return;
+      }
+      const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id));
+      state.selectedLaunchId = id;
+      const launches = Array.isArray(state.launches) ? state.launches.slice() : [];
+      const idx = launches.findIndex(function (item) {
+        return String((item && item.launch_id) || "") === id;
+      });
+      if (idx >= 0) {
+        launches[idx] = payload;
+      } else {
+        launches.unshift(payload);
+      }
+      state.launches = launches;
+      renderLaunches();
+      if (!opts.silent) {
+        setStatus("Launch " + id + " status: " + summarizeLaunchState(payload) + ".");
+      }
+      return payload;
+    }
+
+    async function fetchLaunchLogs(launchId) {
+      const id = String(launchId || "").trim();
+      if (!id) {
+        return;
+      }
+      const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id) + "/logs");
+      state.selectedLaunchId = id;
+      renderLaunches();
+      setLaunchLog(payload.logs || "No logs available.");
+      setStatus("Loaded logs for launch " + id + ".");
+    }
+
+    async function cancelLaunch(launchId) {
+      const id = String(launchId || "").trim();
+      if (!id) {
+        return;
+      }
+      const resp = await fetch(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id) + "/cancel", {
+        method: "POST",
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error("HTTP " + resp.status + " at cancel endpoint: " + text);
+      }
+      await fetchLaunchStatus(id, { silent: true });
+      setStatus("Launch " + id + " termination requested.");
+    }
+
+    function startLaunchPolling() {
+      if (state.launchPollingTimer) {
+        clearInterval(state.launchPollingTimer);
+      }
+      state.launchPollingTimer = window.setInterval(function () {
+        refreshLaunches({ silent: true, fromPoll: true });
+      }, LAUNCH_POLL_INTERVAL_MS);
     }
 
     function saveFilterState() {
@@ -2367,10 +2603,11 @@
       }
 
       const payload = await resp.json();
+      state.selectedLaunchId = String(payload.launch_id || "");
+      await refreshLaunches({ selectLaunchId: state.selectedLaunchId, silent: true });
       setStatus(
-        "Repo audit queued for " + repoUrl + ". Launch id " + String(payload.launch_id || "unknown") + ". Refresh run catalog after it completes."
+        "Repo audit queued for " + repoUrl + ". Launch id " + String(payload.launch_id || "unknown") + ". Monitor queue below for live status and logs."
       );
-      await autoScanRuns();
     }
 
     async function loadFromText(text, label) {
@@ -2460,6 +2697,45 @@
         await autoScanRuns();
       } catch (err) {
         setStatus("Run catalog refresh failed: " + (err && err.message ? err.message : String(err)));
+      }
+    });
+    refreshLaunchesBtnEl.addEventListener("click", async function () {
+      await refreshLaunches({ silent: false });
+    });
+    launchesListEl.addEventListener("click", async function (event) {
+      const actionButton = event.target.closest("button[data-launch-action]");
+      const row = event.target.closest("[data-launch-id]");
+      const launchId = String((actionButton && actionButton.getAttribute("data-launch-id")) || (row && row.getAttribute("data-launch-id")) || "").trim();
+      if (!launchId) {
+        return;
+      }
+      state.selectedLaunchId = launchId;
+      renderLaunches();
+
+      if (!actionButton) {
+        try {
+          await fetchLaunchStatus(launchId, { silent: true });
+        } catch (_) {
+        }
+        return;
+      }
+
+      const action = String(actionButton.getAttribute("data-launch-action") || "").trim();
+      try {
+        if (action === "status") {
+          await fetchLaunchStatus(launchId, { silent: false });
+          return;
+        }
+        if (action === "logs") {
+          await fetchLaunchLogs(launchId);
+          return;
+        }
+        if (action === "cancel") {
+          await cancelLaunch(launchId);
+          return;
+        }
+      } catch (err) {
+        setStatus("Launch action failed: " + (err && err.message ? err.message : String(err)));
       }
     });
     copyReceiptBtnEl.addEventListener("click", copySelectedReceipt);
@@ -2603,6 +2879,8 @@
     });
 
     (async function bootstrapDashboard() {
+      startLaunchPolling();
+      await refreshLaunches({ silent: true });
       const loaded = await autoScanRuns();
       if (!loaded) {
         await loadDefault();

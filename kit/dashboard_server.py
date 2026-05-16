@@ -4,6 +4,7 @@ import base64
 import json
 import mimetypes
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -21,6 +22,66 @@ from engine.repo_audit.scanner import _normalize_public_github_repo_url
 from kit.auth import DashboardAuthManager, sanitize_next_path
 
 LOGGER = logging.getLogger(__name__)
+LAUNCH_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+class ProcessTracker:
+    """Track subprocess launches and their status."""
+    
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._processes: dict[str, dict] = {}
+    
+    def register(self, launch_id: str, process_meta: dict) -> None:
+        """Register a subprocess launch."""
+        with self._lock:
+            self._processes[launch_id] = {
+                **process_meta,
+                "registered_at": datetime.now(timezone.utc).isoformat(),
+            }
+    
+    def get_status(self, launch_id: str) -> dict | None:
+        """Get status of a launch."""
+        with self._lock:
+            meta = self._processes.get(launch_id)
+            if not meta:
+                return None
+            
+            status = dict(meta)
+            pid = status.get("pid")
+            
+            # Check if process is still running
+            if pid is not None:
+                try:
+                    os.kill(pid, 0)  # Signal 0 = check if process exists
+                    status["running"] = True
+                except (OSError, ProcessLookupError):
+                    status["running"] = False
+            
+            return status
+    
+    def list_launches(self) -> list[dict]:
+        """List all tracked launches."""
+        with self._lock:
+            return list(self._processes.values())
+    
+    def terminate(self, launch_id: str) -> bool:
+        """Terminate a process if still running."""
+        with self._lock:
+            meta = self._processes.get(launch_id)
+            if not meta:
+                return False
+            
+            pid = meta.get("pid")
+            if pid is None:
+                return False
+            
+            try:
+                os.kill(pid, 15)  # SIGTERM
+                meta["terminated_at"] = datetime.now(timezone.utc).isoformat()
+                return True
+            except (OSError, ProcessLookupError):
+                return False
 
 
 def _has_control_chars(value: str) -> bool:
@@ -111,7 +172,7 @@ def _normalize_run_entries(config: DashboardServerConfig) -> list[dict[str, obje
     return normalized
 
 
-def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> dict[str, object]:
+def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str, tracker: ProcessTracker | None = None) -> dict[str, object]:
     normalized_repo_url = _normalize_public_github_repo_url(_sanitize_repo_url_input(repo_url))
     artifact_root = config.artifact_dir.resolve()
     repo_root = config.repo_root.resolve()
@@ -126,7 +187,6 @@ def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> d
         sys.executable,
         "-m",
         "kit.runner",
-        "run",
         "--mode",
         "repo",
         "--repo-url",
@@ -146,7 +206,7 @@ def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> d
             stderr=subprocess.STDOUT,
         )
 
-    return {
+    result = {
         "ok": True,
         "status": "started",
         "launch_id": launch_id,
@@ -157,6 +217,12 @@ def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> d
         "pid": process.pid,
         "dashboard": "/dashboard/",
     }
+    
+    # Register with tracker
+    if tracker:
+        tracker.register(launch_id, result)
+    
+    return result
 
 
 def _parse_basic_auth_header(value: str) -> tuple[str, str] | None:
@@ -185,6 +251,23 @@ def create_dashboard_handler(config: DashboardServerConfig):
     request_rate_limiter = _RequestRateLimiter(
         requests_per_minute=int(os.environ.get("ALETHEIA_DASHBOARD_RATE_LIMIT_PER_MINUTE", "30"))
     )
+    process_tracker = ProcessTracker()
+
+    def _parse_launch_id(path: str, *, suffix: str | None = None) -> str | None:
+        base_prefix = "/api/launches/"
+        if not path.startswith(base_prefix):
+            return None
+        remainder = path[len(base_prefix):]
+        if suffix is not None:
+            if not remainder.endswith(suffix):
+                return None
+            remainder = remainder[: -len(suffix)]
+        launch_id = remainder.rstrip("/")
+        if not launch_id or "/" in launch_id:
+            return None
+        if not LAUNCH_ID_PATTERN.fullmatch(launch_id):
+            return None
+        return launch_id
 
     def _render_login_page(*, next_path: str, error: str | None = None) -> bytes:
         status = f'<p class="status">{error}</p>' if error else ""
@@ -371,6 +454,43 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 self._send_json(entries[-1] if entries else {}, status=HTTPStatus.OK)
                 return
 
+            # Process tracking endpoints
+            if parsed.path == "/api/launches":
+                launches = process_tracker.list_launches()
+                self._send_json({"launches": launches})
+                return
+
+            if parsed.path.startswith("/api/launches/") and parsed.path.endswith("/logs"):
+                launch_id = _parse_launch_id(parsed.path, suffix="/logs")
+                if launch_id is None:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "invalid launch_id")
+                    return
+                log_path = self._resolve_run_path(f".launches/{launch_id}/launch.log")
+                if log_path is None or not log_path.exists():
+                    self.send_error(HTTPStatus.NOT_FOUND, "Log not found")
+                    return
+
+                try:
+                    logs = log_path.read_text(encoding="utf-8", errors="replace")
+                    self._send_json({"launch_id": launch_id, "logs": logs})
+                except IOError as exc:
+                    self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, f"Failed to read logs: {exc}")
+                return
+
+            if parsed.path.startswith("/api/launches/"):
+                launch_id = _parse_launch_id(parsed.path)
+                if launch_id is None:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "invalid launch_id")
+                    return
+
+                status = process_tracker.get_status(launch_id)
+                if status is None:
+                    self.send_error(HTTPStatus.NOT_FOUND, "Launch not found")
+                    return
+
+                self._send_json(status)
+                return
+
             self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
         def do_POST(self) -> None:
@@ -410,6 +530,22 @@ def create_dashboard_handler(config: DashboardServerConfig):
 
             if not self._authorize(path=parsed.path):
                 return
+            
+            # Handle launch cancellation
+            if parsed.path.startswith("/api/launches/") and parsed.path.endswith("/cancel"):
+                launch_id = _parse_launch_id(parsed.path, suffix="/cancel")
+                if launch_id is None:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "invalid launch_id")
+                    return
+                
+                success = process_tracker.terminate(launch_id)
+                if not success:
+                    self.send_error(HTTPStatus.NOT_FOUND, "Launch not found or already completed")
+                    return
+                
+                self._send_json({"ok": True, "launch_id": launch_id, "status": "terminated"})
+                return
+            
             if parsed.path != "/api/repo-audit":
                 self.send_error(HTTPStatus.NOT_FOUND, "Not found")
                 return
@@ -428,7 +564,7 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 return
 
             try:
-                result = _launch_public_repo_audit(config, repo_url)
+                result = _launch_public_repo_audit(config, repo_url, tracker=process_tracker)
             except ValueError as exc:
                 self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
                 return
