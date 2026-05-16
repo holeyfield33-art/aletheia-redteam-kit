@@ -93,6 +93,9 @@ def test_normalize_run_entries_emits_hosted_artifact_urls(tmp_path: Path) -> Non
             "summary": "/runs/run-combined-1/summary.json",
             "command_center": "/runs/run-combined-1/command_center.json",
             "sqlite": "/runs/run-combined-1/command_center.sqlite",
+            "campaign_manifest": None,
+            "learning_snapshot": None,
+            "mutation_effectiveness": None,
         }
     ]
 

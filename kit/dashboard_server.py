@@ -183,6 +183,9 @@ def _normalize_run_entries(config: DashboardServerConfig) -> list[dict[str, obje
         summary_rel = str(item.get("summary") or "").strip()
         command_center_rel = str(item.get("command_center") or "").strip()
         sqlite_rel = str(item.get("sqlite") or "").strip()
+        campaign_manifest_rel = str(item.get("campaign_manifest") or "").strip()
+        learning_snapshot_rel = str(item.get("learning_snapshot") or "").strip()
+        mutation_effectiveness_rel = str(item.get("mutation_effectiveness") or "").strip()
         normalized.append(
             {
                 "generated_at": item.get("generated_at"),
@@ -190,6 +193,9 @@ def _normalize_run_entries(config: DashboardServerConfig) -> list[dict[str, obje
                 "summary": f"/runs/{summary_rel}" if summary_rel else None,
                 "command_center": f"/runs/{command_center_rel}" if command_center_rel else None,
                 "sqlite": f"/runs/{sqlite_rel}" if sqlite_rel else None,
+                "campaign_manifest": f"/runs/{campaign_manifest_rel}" if campaign_manifest_rel else None,
+                "learning_snapshot": f"/runs/{learning_snapshot_rel}" if learning_snapshot_rel else None,
+                "mutation_effectiveness": f"/runs/{mutation_effectiveness_rel}" if mutation_effectiveness_rel else None,
             }
         )
     normalized.sort(key=lambda row: str(row.get("generated_at") or ""))

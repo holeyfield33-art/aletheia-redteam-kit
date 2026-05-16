@@ -50,6 +50,7 @@ from kit.command_center import (
     normalize_summary_to_command_center,
     write_command_center_sqlite,
 )
+from kit.campaign_planner import build_campaign_plan
 from kit.dashboard_server import DashboardServerConfig, serve_dashboard
 from kit.external_corpus import load_external_corpus_attacks
 from kit.api_analysis import build_api_regression_summary, extract_multi_turn_steps
@@ -1237,6 +1238,16 @@ def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[objec
     )
     final_attacks = _limit_attacks(limited, getattr(args, "max_attacks", None))
 
+    campaign_mode = str(getattr(args, "campaign_mode", "none") or "none").strip().lower()
+    category_hints = _parse_category_filters(getattr(args, "categories", None))
+    final_attacks, campaign_manifest = build_campaign_plan(
+        final_attacks,
+        mode=campaign_mode,
+        category_hints=category_hints,
+        max_targets=int(getattr(args, "campaign_max_targets", 0) or 0),
+    )
+    setattr(args, "_campaign_manifest", campaign_manifest)
+
     setattr(
         args,
         "_payload_corpus_diagnostics",
@@ -1259,9 +1270,23 @@ def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[objec
             "source_mix": _count_by_key(final_attacks, "source", "catalog"),
             "category_mix": _count_by_key(final_attacks, "category", "unknown"),
             "adapter_mix": _count_by_key(final_attacks, "source_adapter", "none"),
+            "campaign_enabled": bool(campaign_manifest.get("enabled")),
+            "campaign_mode": campaign_manifest.get("campaign_mode"),
+            "campaign_selected": int(campaign_manifest.get("selected", 0)),
         },
     )
     return final_attacks
+
+
+def _write_campaign_manifest_if_enabled(args: argparse.Namespace, output_path: Path) -> str | None:
+    manifest = getattr(args, "_campaign_manifest", None)
+    if not isinstance(manifest, dict) or not manifest.get("enabled"):
+        return None
+
+    destination = output_path.resolve().parent / "campaign_manifest.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return str(destination)
 
 
 def _build_target_profile_from_args(args: argparse.Namespace) -> TargetProfile:
@@ -1436,12 +1461,29 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-deps-critical", type=int, default=0, help="Fail repo mode if dependency CRITICAL findings exceed this")
     parser.add_argument("--max-deps-high", type=int, default=10, help="Fail repo mode if dependency HIGH findings exceed this")
     parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
+    parser.add_argument(
+        "--campaign-mode",
+        choices=["none", "auto", "focused"],
+        default="none",
+        help="Optional campaign planning mode applied to prepared attack corpus",
+    )
+    parser.add_argument(
+        "--campaign-max-targets",
+        type=int,
+        default=0,
+        help="Optional maximum attacks selected by campaign planner (0 keeps all prepared attacks)",
+    )
     parser.add_argument("--attack-intensity", choices=["light", "medium", "aggressive"], default="medium", help="Payload family expansion intensity for API and agentic attack generation")
     parser.add_argument("--conversation-file", help="JSON file of multi-turn conversation attacks to append to the run")
     parser.add_argument("--agentic-iterations", type=int, default=4, help="Maximum iterations for legacy engine agentic mode")
     parser.add_argument("--max-iterations", type=int, help="Maximum iterations for agentic mode (default: 10)")
     parser.add_argument("--agentic-seed-size", type=int, default=10, help="Number of seed attacks to initialize agentic mode")
     parser.add_argument("--agentic-variants", type=int, default=6, help="Maximum candidates evaluated per agentic iteration")
+    parser.add_argument("--agentic-max-time-sec", type=int, help="Optional maximum wall-clock time budget for agentic mode")
+    parser.add_argument("--agentic-risk-budget", type=float, help="Optional maximum accumulated risk budget for successful bypasses")
+    parser.add_argument("--agentic-success-budget", type=int, help="Optional cap on successful bypass count before stopping")
+    parser.add_argument("--agentic-diminishing-window", type=int, default=3, help="Window size for diminishing-return stop detection")
+    parser.add_argument("--agentic-diminishing-min-delta", type=int, default=1, help="Minimum successes across the diminishing window")
     parser.add_argument(
         "--mutation-strategy",
         action="append",
@@ -1552,6 +1594,12 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
                 "category_gap_report": build_category_gap_report(results),
                 "results": results,
             }
+            campaign_manifest_path = _write_campaign_manifest_if_enabled(args, Path(args.output))
+            if campaign_manifest_path:
+                api_component["campaign"] = {
+                    **(getattr(args, "_campaign_manifest", {}) or {}),
+                    "manifest_path": campaign_manifest_path,
+                }
             api_component = _finalize_summary_with_plugins(api_component, results, args, plugins)
             combined["components"]["api"] = api_component
 
@@ -1742,8 +1790,21 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
                     variants_per_round=args.agentic_variants,
                     mutation_strategies=args.mutation_strategy,
                     output_path=output_path,
+                    max_time_seconds=args.agentic_max_time_sec,
+                    risk_budget=args.agentic_risk_budget,
+                    success_budget=args.agentic_success_budget,
+                    diminishing_window=args.agentic_diminishing_window,
+                    diminishing_min_delta=args.agentic_diminishing_min_delta,
                 ),
             ).run()
+
+        campaign_manifest_path = _write_campaign_manifest_if_enabled(args, output_path)
+        if campaign_manifest_path:
+            agentic["campaign"] = {
+                **(getattr(args, "_campaign_manifest", {}) or {}),
+                "manifest_path": campaign_manifest_path,
+            }
+            output_path.write_text(json.dumps(agentic, indent=2), encoding="utf-8")
 
         best_result = (agentic.get("successful_payloads") or [{}])[0]
         print(
@@ -1837,6 +1898,12 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         "category_gap_report": build_category_gap_report(results),
         "results": results,
     }
+    campaign_manifest_path = _write_campaign_manifest_if_enabled(args, Path(args.output))
+    if campaign_manifest_path:
+        output["campaign"] = {
+            **(getattr(args, "_campaign_manifest", {}) or {}),
+            "manifest_path": campaign_manifest_path,
+        }
     output = _finalize_summary_with_plugins(output, results, args, plugins)
     Path(args.output).write_text(json.dumps(output, indent=2))
     print(
