@@ -793,6 +793,7 @@
       launchesHadRunning: false,
       launchPollingTimer: null,
       launchPollInFlight: false,
+      launchLogInFlight: false,
       filters: {
         component: "auto",
         category: "all",
@@ -890,6 +891,35 @@
       launchLogViewEl.textContent = String(message || "No launch selected.");
     }
 
+    function launchHealthSnapshot() {
+      const launches = Array.isArray(state.launches) ? state.launches : [];
+      const total = launches.length;
+      const running = launches.filter(function (item) { return Boolean(item && item.running); }).length;
+      const completed = launches.filter(function (item) {
+        return !item.running && String(item.status || "").toLowerCase() === "completed" && Number(item.exit_code || 0) === 0;
+      }).length;
+      const failed = launches.filter(function (item) {
+        if (!item || item.running) return false;
+        const status = String(item.status || "").toLowerCase();
+        const code = Number(item.exit_code || 0);
+        return status === "failed" || status === "wait_failed" || status === "terminated" || (status === "completed" && code !== 0);
+      }).length;
+      return { total: total, running: running, completed: completed, failed: failed };
+    }
+
+    function renderLaunchHealthMetaLine() {
+      const health = launchHealthSnapshot();
+      return "<div><b>Launch Queue:</b> total " +
+        escapeHtml(String(health.total)) +
+        " · running " +
+        escapeHtml(String(health.running)) +
+        " · completed " +
+        escapeHtml(String(health.completed)) +
+        " · failed " +
+        escapeHtml(String(health.failed)) +
+        "</div>";
+    }
+
     function summarizeLaunchState(launch) {
       if (!launch || typeof launch !== "object") return "UNKNOWN";
       if (launch.running) return "RUNNING";
@@ -969,6 +999,19 @@
         }
 
         renderLaunches();
+        if (state.summary) {
+          renderMeta(state.summary);
+        }
+
+        const selectedLaunch = launches.find(function (item) {
+          return String((item && item.launch_id) || "") === String(state.selectedLaunchId || "");
+        });
+        if (selectedLaunch && selectedLaunch.running) {
+          try {
+            await fetchLaunchLogs(state.selectedLaunchId, { silent: true });
+          } catch (_) {
+          }
+        }
 
         const runningCount = launches.filter(function (item) { return Boolean(item && item.running); }).length;
         if (fromPoll && state.launchesHadRunning && runningCount === 0) {
@@ -1016,16 +1059,27 @@
       return payload;
     }
 
-    async function fetchLaunchLogs(launchId) {
+    async function fetchLaunchLogs(launchId, options) {
+      const opts = options || {};
       const id = String(launchId || "").trim();
       if (!id) {
         return;
       }
+      if (state.launchLogInFlight) {
+        return;
+      }
+      state.launchLogInFlight = true;
+      try {
       const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id) + "/logs");
       state.selectedLaunchId = id;
       renderLaunches();
       setLaunchLog(payload.logs || "No logs available.");
-      setStatus("Loaded logs for launch " + id + ".");
+      if (!opts.silent) {
+        setStatus("Loaded logs for launch " + id + ".");
+      }
+      } finally {
+        state.launchLogInFlight = false;
+      }
     }
 
     async function cancelLaunch(launchId) {
@@ -1376,6 +1430,7 @@
             lines.push("<div><b>Targets file:</b> " + escapeHtml(String(combined.targets_file)) + "</div>");
           }
         }
+        lines.push(renderLaunchHealthMetaLine());
         metaEl.innerHTML = lines.join("");
         return;
       }
@@ -1398,7 +1453,7 @@
           "<div><b>Top vulnerable package:</b> " + escapeHtml(String(topPackage.name || "unknown")) + " (" + escapeHtml(Number(topPackage.advisory_count || 0)) + ", max severity: " + escapeHtml(String(topPackage.max_severity || "unknown")) + ")</div>"
         ] : []).concat((Number(depSignals.malware_suspect_total || 0) || Number(depSignals.tampering_risk_total || 0)) ? [
           "<div><b>Suspicious dependency signals:</b> malware " + escapeHtml(Number(depSignals.malware_suspect_total || 0)) + ", tampering " + escapeHtml(Number(depSignals.tampering_risk_total || 0)) + "</div>"
-        ] : []).join("");
+        ] : []).concat([renderLaunchHealthMetaLine()]).join("");
         return;
       }
 
@@ -1410,7 +1465,7 @@
           "<div><b>Generated:</b> " + escapeHtml(generatedWebsite) + "</div>",
           "<div><b>Target URL:</b> " + escapeHtml(targetUrl) + "</div>",
           "<div><b>Visited pages:</b> " + escapeHtml(crawl.pages_visited || 0) + "</div>"
-        ].join("");
+        ].concat([renderLaunchHealthMetaLine()]).join("");
         return;
       }
 
@@ -1421,7 +1476,7 @@
         "<div><b>Generated:</b> " + escapeHtml(generated) + "</div>",
         "<div><b>Engine URL:</b> " + escapeHtml(engineUrl) + "</div>",
         "<div><b>Total attacks:</b> " + escapeHtml(attacksTotal) + "</div>"
-      ].join("");
+      ].concat([renderLaunchHealthMetaLine()]).join("");
     }
 
     function renderStats(summary) {
