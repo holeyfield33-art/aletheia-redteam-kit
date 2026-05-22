@@ -27,6 +27,67 @@ function toSeverity(value: string): Severity {
   return "LOW";
 }
 
+function isIgnoredPath(relPath: string): boolean {
+  const normalized = relPath.replace(/\\/g, "/").toLowerCase();
+  return normalized.includes("/node_modules/")
+    || normalized.includes("/.next/")
+    || normalized.includes("/dist/")
+    || normalized.includes("/build/")
+    || normalized.includes("/.git/")
+    || normalized.startsWith("node_modules/")
+    || normalized.startsWith(".next/")
+    || normalized.startsWith("dist/")
+    || normalized.startsWith("build/");
+}
+
+function isLowTrustSecretPath(relPath: string): boolean {
+  const normalized = relPath.replace(/\\/g, "/").toLowerCase();
+  return normalized.endsWith(".md")
+    || normalized.endsWith(".sample")
+    || normalized.endsWith(".example")
+    || normalized.endsWith(".env.example")
+    || normalized.endsWith(".env.sample")
+    || normalized.includes("/docs/")
+    || normalized.includes("/examples/")
+    || normalized.includes("/tests/")
+    || normalized.includes("/test/")
+    || normalized.includes("/fixtures/")
+    || normalized.includes("/fixture/");
+}
+
+function isEnvReferenceLine(line: string): boolean {
+  return /\bprocess\.env\b|\bos\.environ\b|\bos\.getenv\b|\bgetenv\b|\$\{[A-Za-z_][A-Za-z0-9_]*\}/.test(line);
+}
+
+function isPlaceholderSecret(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized.startsWith("<") && normalized.endsWith(">")) return true;
+  return /\byour_[a-z0-9_]*\b|\bchangeme\b|\bplaceholder\b|\bdummy\b|\btest_key\b|\bxxx+\b|\.\.\.|\{\{[^}]+\}\}/i.test(normalized);
+}
+
+function extractSecretCandidate(line: string): string {
+  const stripped = line.split("#", 1)[0].trim();
+  if (!stripped) return "";
+  const value = stripped.includes("=") ? stripped.split("=", 2)[1] : stripped.includes(":") ? stripped.split(":", 2)[1] : stripped;
+  const quoted = value.match(/['\"]([^'\"]{1,256})['\"]/);
+  return (quoted?.[1] || value).trim().replace(/[\s,;]+$/g, "");
+}
+
+function secretSeverity(relPath: string, findingType: string, candidate: string): Severity | null {
+  if (isPlaceholderSecret(candidate) || isEnvReferenceLine(candidate)) return null;
+  if (findingType === "api_key_literal" || findingType === "password_literal") {
+    return isLowTrustSecretPath(relPath) ? "LOW" : "HIGH";
+  }
+  if (findingType === "private_key_block") {
+    return isLowTrustSecretPath(relPath) ? "LOW" : "CRITICAL";
+  }
+  if (isLowTrustSecretPath(relPath)) return "LOW";
+  const mixed = /[A-Za-z]/.test(candidate) && /[0-9]/.test(candidate) && /[_\-+/=]/.test(candidate);
+  const entropy = new Set(candidate).size;
+  return mixed && entropy >= 12 ? "HIGH" : "LOW";
+}
+
 function runSemgrep(projectRoot: string): { status: "available" | "missing" | "error"; findings: SupplyChainFinding[] } {
   const check = spawnSync("semgrep", ["--version"], { encoding: "utf8" });
   if (check.status !== 0) {
@@ -45,7 +106,9 @@ function runSemgrep(projectRoot: string): { status: "available" | "missing" | "e
 
   try {
     const parsed = JSON.parse(command.stdout || "{}") as SemgrepResponse;
-    const results = Array.isArray(parsed.results) ? parsed.results.slice(0, 40) : [];
+    const results = Array.isArray(parsed.results)
+      ? parsed.results.filter((result) => !result.path || !isIgnoredPath(result.path)).slice(0, 40)
+      : [];
     const findings: SupplyChainFinding[] = results.map((result) => ({
       id: `semgrep-${result.check_id}-${result.start?.line ?? 0}`,
       title: result.extra?.message || result.check_id || "Semgrep finding",
@@ -103,7 +166,7 @@ function runTrufflehog(projectRoot: string): { status: "available" | "missing" |
 
 function fallbackEntropyScan(projectRoot: string): SupplyChainFinding[] {
   const files = listFilesRecursive(projectRoot, 1400).filter((item) => {
-    return /\.(ts|tsx|js|jsx|py|json|yml|yaml|md|env|txt)$/i.test(item);
+    return /\.(ts|tsx|js|jsx|py|json|yml|yaml|md|env|txt)$/i.test(item) && !isIgnoredPath(item);
   });
 
   const findings: SupplyChainFinding[] = [];
@@ -124,15 +187,21 @@ function fallbackEntropyScan(projectRoot: string): SupplyChainFinding[] {
       if (line.includes("pragma: allowlist secret") || line.includes("noqa")) {
         continue;
       }
+      if (isEnvReferenceLine(line)) {
+        continue;
+      }
       const matches = line.match(entropyRegex);
       if (!matches) {
         continue;
       }
       for (const match of matches) {
+        if (isPlaceholderSecret(match)) {
+          continue;
+        }
         findings.push({
           id: `entropy-${rel}-${lineIndex + 1}-${match.slice(0, 8)}`,
           title: "Potential hardcoded secret",
-          severity: "HIGH",
+          severity: isLowTrustSecretPath(rel) ? "LOW" : "HIGH",
           file: rel,
           line: lineIndex + 1,
           engine: "fallback-entropy",

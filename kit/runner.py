@@ -26,6 +26,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -50,6 +51,7 @@ from kit.command_center import (
     normalize_summary_to_command_center,
     write_command_center_sqlite,
 )
+from kit.campaign_planner import build_campaign_plan
 from kit.dashboard_server import DashboardServerConfig, serve_dashboard
 from kit.external_corpus import load_external_corpus_attacks
 from kit.api_analysis import build_api_regression_summary, extract_multi_turn_steps
@@ -70,6 +72,60 @@ RECONCILIATION_COVERAGE_THRESHOLD_PCT = 95.0
 TOOL_VERSION = "1.2.0"
 
 
+def _sanitize_user_string(value: str | None, *, field_name: str, max_length: int = 2048) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    if len(normalized) > max_length:
+        raise ValueError(f"{field_name} is too long")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in normalized):
+        raise ValueError(f"{field_name} contains invalid control characters")
+    return normalized
+
+
+def _sanitize_json_path(value: str | None, *, field_name: str) -> str | None:
+    normalized = _sanitize_user_string(value, field_name=field_name, max_length=4096)
+    if not normalized:
+        return None
+    if not normalized.endswith(".json"):
+        raise ValueError(f"{field_name} must point to a .json file")
+    return normalized
+
+
+def _sanitize_repo_url(value: str | None) -> str | None:
+    normalized = _sanitize_user_string(value, field_name="repo_url", max_length=512)
+    if not normalized:
+        return None
+    if normalized.startswith("file://"):
+        raise ValueError("repo_url must be a public GitHub URL or owner/repo shorthand")
+    return normalized
+
+
+def _sanitize_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
+    """Sanitize and normalize legacy CLI arguments for runner compatibility."""
+    if not getattr(args, "repo_token", None):
+        args.repo_token = os.environ.get("ALETHEIA_GITHUB_TOKEN") or None
+
+    for field_name in (
+        "threat_feed_file",
+        "rules_file",
+        "auth_workflow_file",
+        "prompt_tests_file",
+        "conversation_file",
+        "targets_file",
+    ):
+        value = getattr(args, field_name, None)
+        if value:
+            setattr(args, field_name, _sanitize_json_path(value, field_name=field_name))
+
+    if hasattr(args, "repo_url"):
+        args.repo_url = _sanitize_repo_url(getattr(args, "repo_url", None))
+
+    return args
+
+
 def _parse_key_value_csv(raw: str | None) -> dict[str, str]:
     pairs: dict[str, str] = {}
     if not raw:
@@ -85,885 +141,9 @@ def _parse_key_value_csv(raw: str | None) -> dict[str, str]:
     return pairs
 
 
-def _has_control_chars(value: str) -> bool:
-    return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
-
-
-def _sanitize_user_string(value: str | None, *, field_name: str, max_length: int = 2048) -> str | None:
-    if value is None:
-        return None
-    normalized = str(value).strip()
-    if not normalized:
-        return None
-    if len(normalized) > max_length:
-        raise ValueError(f"{field_name} is too long")
-    if _has_control_chars(normalized):
-        raise ValueError(f"{field_name} contains invalid control characters")
-    return normalized
-
-
-def _sanitize_json_path(value: str | None, *, field_name: str) -> str | None:
-    normalized = _sanitize_user_string(value, field_name=field_name, max_length=4096)
-    if not normalized:
-        return None
-    if Path(normalized).suffix.lower() != ".json":
-        raise ValueError(f"{field_name} must point to a .json file")
-    return normalized
-
-
-def _sanitize_repo_url(value: str | None) -> str | None:
-    normalized = _sanitize_user_string(value, field_name="repo_url", max_length=512)
-    if not normalized:
-        return None
-    if normalized.startswith("file://"):
-        raise ValueError("repo_url must be a public GitHub URL or owner/repo shorthand")
-    return normalized
-
-
-def _sanitize_legacy_args(args: argparse.Namespace) -> argparse.Namespace:
-    args.repo_url = _sanitize_repo_url(getattr(args, "repo_url", None))
-    # repo_token is intentionally not logged; read from env if not passed explicitly
-    if not getattr(args, "repo_token", None):
-        args.repo_token = os.environ.get("ALETHEIA_GITHUB_TOKEN") or None
-    args.threat_feed_file = _sanitize_json_path(getattr(args, "threat_feed_file", None), field_name="threat_feed_file")
-    args.rules_file = _sanitize_json_path(getattr(args, "rules_file", None), field_name="rules_file")
-    args.auth_workflow_file = _sanitize_json_path(getattr(args, "auth_workflow_file", None), field_name="auth_workflow_file")
-    args.prompt_tests_file = _sanitize_json_path(getattr(args, "prompt_tests_file", None), field_name="prompt_tests_file")
-    args.conversation_file = _sanitize_json_path(getattr(args, "conversation_file", None), field_name="conversation_file")
-    args.targets_file = _sanitize_json_path(getattr(args, "targets_file", None), field_name="targets_file")
-    return args
-
-
-def _slugify_target_label(value: str | None, fallback: str) -> str:
-    raw = _sanitize_user_string(value, field_name="target_label", max_length=128) or fallback
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", raw).strip("-_.")
-    return slug or fallback
-
-
-def _load_targets_file(path: str | None) -> list[dict[str, object]]:
-    if not path:
-        return []
-
-    raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(raw, list):
-        raise ValueError("targets file must contain a JSON array of target objects")
-
-    targets: list[dict[str, object]] = []
-    for index, item in enumerate(raw, 1):
-        if not isinstance(item, dict):
-            raise ValueError(f"Target #{index} must be a JSON object")
-
-        target_type = str(item.get("type") or "").strip().lower()
-        if target_type not in {"api", "website", "repo"}:
-            raise ValueError(f"Target #{index} must declare type api, website, or repo")
-
-        target = dict(item)
-        target["type"] = target_type
-        target["label"] = _sanitize_user_string(target.get("label") or target.get("name"), field_name="target_label", max_length=128)
-        target["url"] = _sanitize_user_string(target.get("url") or target.get("target_url") or target.get("base_url"), field_name="target_url", max_length=4096)
-        target["path"] = _sanitize_user_string(target.get("path") or target.get("repo_path"), field_name="repo_path", max_length=4096)
-        target["repo_url"] = _sanitize_repo_url(target.get("repo_url") if isinstance(target.get("repo_url"), str) else None)
-        target["targets_file"] = None
-        targets.append(target)
-
-    return targets
-
-
-def _append_optional_arg(legacy_args: list[str], flag: str, value: object | None) -> None:
-    if value is None:
-        return
-    if isinstance(value, bool):
-        if value:
-            legacy_args.append(flag)
-        return
-    if isinstance(value, list):
-        for item in value:
-            if item is not None and str(item).strip():
-                legacy_args.extend([flag, str(item)])
-        return
-    text = str(value).strip()
-    if text:
-        legacy_args.extend([flag, text])
-
-
-def _build_batch_target_legacy_args(args: argparse.Namespace, target: dict[str, object], output_path: Path, artifact_dir: Path) -> list[str]:
-    def arg(name: str, default: object | None = None) -> object | None:
-        return getattr(args, name, default)
-
-    legacy_args: list[str] = ["--mode", str(target["type"]), "--output", str(output_path), "--artifact-dir", str(artifact_dir)]
-
-    if target.get("type") == "api":
-        _append_optional_arg(legacy_args, "--target-url", target.get("url") or target.get("target_url") or target.get("base_url") or arg("target_url") or arg("base_url"))
-        _append_optional_arg(legacy_args, "--base-url", target.get("base_url") or target.get("url") or arg("base_url"))
-        _append_optional_arg(legacy_args, "--target-preset", target.get("target_preset") or arg("target_preset"))
-        _append_optional_arg(legacy_args, "--target-profile-file", target.get("target_profile_file") or arg("target_profile_file"))
-        _append_optional_arg(legacy_args, "--target-model", target.get("target_model") or arg("target_model"))
-        _append_optional_arg(legacy_args, "--auth-header", target.get("auth_header") or arg("auth_header"))
-        _append_optional_arg(legacy_args, "--auth-scheme", target.get("auth_scheme") or arg("auth_scheme"))
-        for header in (target.get("header") or arg("header") or []):
-            _append_optional_arg(legacy_args, "--header", header)
-        _append_optional_arg(legacy_args, "--conversation-file", target.get("conversation_file") or arg("conversation_file"))
-        _append_optional_arg(legacy_args, "--attack-intensity", target.get("attack_intensity") or arg("attack_intensity"))
-        _append_optional_arg(legacy_args, "--category", target.get("category") or arg("category"))
-        _append_optional_arg(legacy_args, "--categories", target.get("categories") or arg("categories"))
-        _append_optional_arg(legacy_args, "--max-attacks", target.get("max_attacks") or arg("max_attacks"))
-        _append_optional_arg(legacy_args, "--dedupe-semantic-threshold", target.get("dedupe_semantic_threshold") or arg("dedupe_semantic_threshold"))
-        _append_optional_arg(legacy_args, "--benign-ratio", target.get("benign_ratio") or arg("benign_ratio"))
-        for plugin in (target.get("plugin") or arg("plugin") or []):
-            _append_optional_arg(legacy_args, "--plugin", plugin)
-        _append_optional_arg(legacy_args, "--payload-mutation-plugin", target.get("payload_mutation_plugin") or arg("payload_mutation_plugin"))
-        _append_optional_arg(legacy_args, "--payload-expand-to", target.get("payload_expand_to") or arg("payload_expand_to"))
-        _append_optional_arg(legacy_args, "--payload-seed-limit", target.get("payload_seed_limit") or arg("payload_seed_limit"))
-        _append_optional_arg(legacy_args, "--payload-family-file", target.get("payload_family_file") or arg("payload_family_file"))
-        for corpus_file in (target.get("external_corpus_file") or arg("external_corpus_file") or []):
-            _append_optional_arg(legacy_args, "--external-corpus-file", corpus_file)
-        _append_optional_arg(legacy_args, "--external-corpus-category", target.get("external_corpus_category") or arg("external_corpus_category"))
-        _append_optional_arg(legacy_args, "--objective", target.get("objective") or arg("objective"))
-        _append_optional_arg(legacy_args, "--agentic-iterations", target.get("agentic_iterations") or arg("agentic_iterations"))
-        _append_optional_arg(legacy_args, "--max-iterations", target.get("max_iterations") or arg("max_iterations"))
-        _append_optional_arg(legacy_args, "--agentic-seed-size", target.get("agentic_seed_size") or arg("agentic_seed_size"))
-        _append_optional_arg(legacy_args, "--agentic-variants", target.get("agentic_variants") or arg("agentic_variants"))
-        for strategy in (target.get("mutation_strategy") or arg("mutation_strategy") or []):
-            _append_optional_arg(legacy_args, "--mutation-strategy", strategy)
-        _append_optional_arg(legacy_args, "--agentic-no-early-stop", target.get("agentic_no_early_stop") or arg("agentic_no_early_stop"))
-    elif target.get("type") == "website":
-        _append_optional_arg(legacy_args, "--target-url", target.get("url") or target.get("target_url") or arg("target_url"))
-        _append_optional_arg(legacy_args, "--max-pages", target.get("max_pages") or arg("max_pages"))
-        _append_optional_arg(legacy_args, "--max-depth", target.get("max_depth") or arg("max_depth"))
-        _append_optional_arg(legacy_args, "--timeout-sec", target.get("timeout_sec") or arg("timeout_sec"))
-        _append_optional_arg(legacy_args, "--headed", target.get("headed") or arg("headed"))
-        for route in (target.get("required_route") or arg("required_route") or []):
-            _append_optional_arg(legacy_args, "--required-route", route)
-        _append_optional_arg(legacy_args, "--max-critical", target.get("max_critical") or arg("max_critical"))
-        _append_optional_arg(legacy_args, "--max-high", target.get("max_high") or arg("max_high"))
-        _append_optional_arg(legacy_args, "--min-pass-rate", target.get("min_pass_rate") or arg("min_pass_rate"))
-        _append_optional_arg(legacy_args, "--no-browser-fallback", target.get("no_browser_fallback") or arg("no_browser_fallback"))
-        _append_optional_arg(legacy_args, "--rules-file", target.get("rules_file") or arg("rules_file"))
-        _append_optional_arg(legacy_args, "--auth-workflow-file", target.get("auth_workflow_file") or arg("auth_workflow_file"))
-        for seed in (target.get("auth_seed_url") or arg("auth_seed_url") or []):
-            _append_optional_arg(legacy_args, "--auth-seed-url", seed)
-        _append_optional_arg(legacy_args, "--prompt-tests-file", target.get("prompt_tests_file") or arg("prompt_tests_file"))
-        for route in (target.get("protected_route") or arg("protected_route") or []):
-            _append_optional_arg(legacy_args, "--protected-route", route)
-        for profile in (target.get("protected_profile") or arg("protected_profile") or []):
-            _append_optional_arg(legacy_args, "--protected-profile", profile)
-        _append_optional_arg(legacy_args, "--baseline-summary", target.get("baseline_summary") or arg("baseline_summary"))
-        _append_optional_arg(legacy_args, "--trust-critical-penalty", target.get("trust_critical_penalty") or arg("trust_critical_penalty"))
-        _append_optional_arg(legacy_args, "--trust-high-penalty", target.get("trust_high_penalty") or arg("trust_high_penalty"))
-        _append_optional_arg(legacy_args, "--exploit-success-weight", target.get("exploit_success_weight") or arg("exploit_success_weight"))
-        _append_optional_arg(legacy_args, "--safe-min-trust", target.get("safe_min_trust") or arg("safe_min_trust"))
-        _append_optional_arg(legacy_args, "--safe-max-exploitability", target.get("safe_max_exploitability") or arg("safe_max_exploitability"))
-        _append_optional_arg(legacy_args, "--warning-min-trust", target.get("warning_min_trust") or arg("warning_min_trust"))
-        _append_optional_arg(legacy_args, "--warning-max-exploitability", target.get("warning_max_exploitability") or arg("warning_max_exploitability"))
-    elif target.get("type") == "repo":
-        _append_optional_arg(legacy_args, "--repo-path", target.get("path") or target.get("repo_path") or arg("repo_path"))
-        _append_optional_arg(legacy_args, "--repo-url", target.get("repo_url") or arg("repo_url"))
-        _append_optional_arg(legacy_args, "--threat-feed-file", target.get("threat_feed_file") or arg("threat_feed_file"))
-        _append_optional_arg(legacy_args, "--deps-scan", target.get("deps_scan") or arg("deps_scan"))
-        _append_optional_arg(legacy_args, "--scan-profile", target.get("scan_profile") or arg("scan_profile"))
-        _append_optional_arg(legacy_args, "--scan-profile-file", target.get("scan_profile_file") or arg("scan_profile_file"))
-        # repo_token is deliberately NOT forwarded through args — use ALETHEIA_GITHUB_TOKEN env var in child runs
-        _append_optional_arg(legacy_args, "--repo-include-test-fixtures", target.get("repo_include_test_fixtures") or arg("repo_include_test_fixtures"))
-        _append_optional_arg(legacy_args, "--gate-exceptions-file", target.get("gate_exceptions_file") or arg("gate_exceptions_file"))
-        _append_optional_arg(legacy_args, "--baseline-state-file", target.get("baseline_state_file") or arg("baseline_state_file"))
-        _append_optional_arg(legacy_args, "--baseline-action", target.get("baseline_action") or arg("baseline_action"))
-        _append_optional_arg(legacy_args, "--baseline-owner", target.get("baseline_owner") or arg("baseline_owner"))
-        _append_optional_arg(legacy_args, "--baseline-reason", target.get("baseline_reason") or arg("baseline_reason"))
-        _append_optional_arg(legacy_args, "--baseline-expires-at", target.get("baseline_expires_at") or arg("baseline_expires_at"))
-        _append_optional_arg(legacy_args, "--max-repo-critical", target.get("max_repo_critical") or arg("max_repo_critical"))
-        _append_optional_arg(legacy_args, "--max-repo-high", target.get("max_repo_high") or arg("max_repo_high"))
-        _append_optional_arg(legacy_args, "--max-deps-critical", target.get("max_deps_critical") or arg("max_deps_critical"))
-        _append_optional_arg(legacy_args, "--max-deps-high", target.get("max_deps_high") or arg("max_deps_high"))
-    else:
-        raise ValueError(f"Unsupported target type: {target.get('type')}")
-
-    return legacy_args
-
-
-def _load_summary_payload(path: Path) -> dict[str, object]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _target_component_key(target: dict[str, object], index: int) -> str:
-    label = target.get("label") or target.get("name") or f"target-{index}"
-    return f"{_slugify_target_label(str(label), f'target-{index}')}-{index:02d}"
-
-
-def _merge_batch_gates(target_summaries: list[dict[str, object]]) -> dict[str, object]:
-    violations: list[str] = []
-    passed = True
-    for item in target_summaries:
-        target_name = str(item.get("component_key") or item.get("id") or "target")
-        return_code = int(item.get("return_code") or 0)
-        if item.get("error"):
-            passed = False
-            violations.append(f"{target_name}:error")
-        if return_code != 0:
-            passed = False
-            violations.append(f"{target_name}:return_code_{return_code}")
-        gates = item.get("gates")
-        if isinstance(gates, dict) and not gates.get("pass", False):
-            passed = False
-            for violation in gates.get("violations") or []:
-                violations.append(f"{target_name}: {violation}")
-    return {"pass": passed, "violations": violations}
-
-
-def _run_targets_batch(args: argparse.Namespace, plugins: list[object] | None = None) -> dict:
-    targets = _load_targets_file(args.targets_file)
-    if not targets:
-        raise ValueError("targets file did not contain any targets")
-
-    artifact_dir = Path(getattr(args, "artifact_dir", "runs"))
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-    batch_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    batch_root = artifact_dir / f"run-batch-{batch_stamp}"
-    batch_root.mkdir(parents=True, exist_ok=True)
-    target_root = batch_root / "targets"
-    target_root.mkdir(parents=True, exist_ok=True)
-
-    max_parallel = max(1, int(getattr(args, "max_parallel_targets", 2) or 2))
-    max_parallel = min(max_parallel, len(targets))
-
-    def _execute_target(index: int, target: dict[str, object]) -> dict[str, object]:
-        component_key = _target_component_key(target, index)
-        target_dir = target_root / component_key
-        target_dir.mkdir(parents=True, exist_ok=True)
-        summary_path = target_dir / "summary.json"
-        child_artifact_dir = target_dir / "artifacts"
-        child_artifact_dir.mkdir(parents=True, exist_ok=True)
-
-        child_argv = _build_batch_target_legacy_args(args, target, summary_path, child_artifact_dir)
-        rc = _legacy_cli(child_argv)
-        if not summary_path.exists():
-            raise RuntimeError(f"Target {component_key} did not produce a summary")
-
-        summary = _load_summary_payload(summary_path)
-        command_center_path = _write_command_center_artifacts(
-            summary_path=summary_path,
-            artifact_dir=child_artifact_dir,
-            dashboard_file=None,
-            baseline_path=getattr(args, "baseline", None),
-        )
-        return {
-            "id": str(target.get("id") or f"target-{index}"),
-            "type": target["type"],
-            "label": target.get("label") or target.get("name") or component_key,
-            "component_key": component_key,
-            "status": "completed" if rc == 0 else "failed",
-            "return_code": rc,
-            "artifact_dir": str(child_artifact_dir),
-            "summary_path": str(summary_path),
-            "command_center_path": str(command_center_path),
-            "gates": summary.get("gates") if isinstance(summary, dict) else None,
-            "summary": summary,
-        }
-
-    target_results: list[dict[str, object]] = []
-    with ThreadPoolExecutor(max_workers=max_parallel) as executor:
-        futures = {
-            executor.submit(_execute_target, index, target): (index, target)
-            for index, target in enumerate(targets, 1)
-        }
-        completed = 0
-        for future in as_completed(futures):
-            index, target = futures[future]
-            component_key = _target_component_key(target, index)
-            try:
-                result = future.result()
-            except Exception as exc:
-                result = {
-                    "id": str(target.get("id") or f"target-{index}"),
-                    "type": target["type"],
-                    "label": target.get("label") or target.get("name") or component_key,
-                    "component_key": component_key,
-                    "status": "failed",
-                    "return_code": 1,
-                    "artifact_dir": str(target_root / component_key / "artifacts"),
-                    "summary_path": str(target_root / component_key / "summary.json"),
-                    "command_center_path": None,
-                    "error": str(exc),
-                }
-            target_results.append(result)
-            completed += 1
-            print(
-                f"[batch {completed}/{len(targets)}] {component_key} {result['status']}",
-                file=sys.stderr,
-            )
-
-    target_results.sort(key=lambda item: str(item.get("component_key") or ""))
-    components = {
-        str(item["component_key"]): item["summary"]
-        for item in target_results
-        if isinstance(item.get("summary"), dict)
-    }
-    overall_gates = _merge_batch_gates(target_results)
-    batch_summary: dict[str, object] = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "combined",
-        "batch_mode": "targets-file",
-        "targets_file": str(args.targets_file),
-        "targets_total": len(targets),
-        "targets_completed": sum(1 for item in target_results if item.get("status") == "completed"),
-        "targets_failed": sum(1 for item in target_results if item.get("status") != "completed"),
-        "targets": [
-            {
-                "id": item.get("id"),
-                "type": item.get("type"),
-                "label": item.get("label"),
-                "component_key": item.get("component_key"),
-                "status": item.get("status"),
-                "return_code": item.get("return_code"),
-                "summary_path": item.get("summary_path"),
-                "command_center_path": item.get("command_center_path"),
-                "artifact_dir": item.get("artifact_dir"),
-                "error": item.get("error"),
-            }
-            for item in target_results
-        ],
-        "target_results": target_results,
-        "components": components,
-        "gates": overall_gates,
-    }
-
-    batch_summary["target_count"] = len(targets)
-    batch_summary["progress"] = {
-        "completed": batch_summary["targets_completed"],
-        "failed": batch_summary["targets_failed"],
-        "total": len(targets),
-    }
-
-    return batch_summary, batch_root
-
-
-def _apply_thresholds_to_legacy_args(legacy_args: list[str], thresholds_raw: str | None) -> None:
-    thresholds = _parse_key_value_csv(thresholds_raw)
-    mapping = {
-        "min_pass_rate": "--min-pass-rate",
-        "max_critical": "--max-critical",
-        "max_high": "--max-high",
-        "min_expectation_match_rate": "--min-expectation-match-rate",
-        "max_repo_critical": "--max-repo-critical",
-        "max_repo_high": "--max-repo-high",
-        "max_deps_critical": "--max-deps-critical",
-        "max_deps_high": "--max-deps-high",
-    }
-    for key, value in thresholds.items():
-        flag = mapping.get(key)
-        if flag:
-            legacy_args.extend([flag, value])
-
-
-def _apply_target_profile_args_to_legacy_args(legacy_args: list[str], args: argparse.Namespace) -> None:
-    mapping = {
-        "target_preset": "--target-preset",
-        "target_profile_file": "--target-profile-file",
-        "target_model": "--target-model",
-        "auth_header": "--auth-header",
-        "auth_scheme": "--auth-scheme",
-        "conversation_file": "--conversation-file",
-        "attack_intensity": "--attack-intensity",
-    }
-    for attr, flag in mapping.items():
-        value = getattr(args, attr, None)
-        if value:
-            legacy_args.extend([flag, str(value)])
-    for header in getattr(args, "header", []) or []:
-        legacy_args.extend(["--header", header])
-    for plugin in getattr(args, "plugin", []) or []:
-        legacy_args.extend(["--plugin", plugin])
-
-
-def _build_target_profile_from_args(args: argparse.Namespace) -> TargetProfile:
-    return load_target_profile(
-        preset=getattr(args, "target_preset", "aletheia") or "aletheia",
-        profile_file=getattr(args, "target_profile_file", None),
-        base_url=getattr(args, "base_url", None),
-        model=getattr(args, "target_model", None),
-        auth_header=getattr(args, "auth_header", None),
-        auth_scheme=getattr(args, "auth_scheme", None),
-        extra_headers=getattr(args, "header", None),
-    )
-
-
-def _create_api_client(args: argparse.Namespace) -> AletheiaClient:
-    target_profile = _build_target_profile_from_args(args)
-    try:
-        return AletheiaClient(base_url=args.base_url, target_profile=target_profile)
-    except TypeError as exc:
-        if "target_profile" not in str(exc):
-            raise
-        return AletheiaClient(base_url=args.base_url)
-
-
-def _write_command_center_artifacts(
-    *,
-    summary_path: Path,
-    artifact_dir: Path,
-    dashboard_file: Path | None,
-    baseline_path: str | None,
-) -> Path:
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    baseline_summary = None
-    if baseline_path:
-        base = Path(baseline_path)
-        if base.exists():
-            try:
-                baseline_summary = json.loads(base.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                baseline_summary = None
-
-    artifact_dir.mkdir(parents=True, exist_ok=True)
-
-    command_center = normalize_summary_to_command_center(
-        summary,
-        source_path=str(summary_path),
-        baseline_summary=baseline_summary,
-        tool_version=TOOL_VERSION,
-        git_commit=os.environ.get("GIT_COMMIT"),
-    )
-
-    mode = str(summary.get("mode") or "api")
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = artifact_dir / f"run-{mode}-{stamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-    summary_copy = run_dir / "summary.json"
-    summary_copy.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-
-    sqlite_path = run_dir / "command_center.sqlite"
-    command_center["artifacts"].append(
-        {
-            "id": str(uuid4()),
-            "run_id": command_center["runs"][0]["id"],
-            "artifact_type": "sqlite",
-            "path": str(sqlite_path.relative_to(artifact_dir)),
-            "mime_type": "application/vnd.sqlite3",
-            "sha256": None,
-            "created_at": command_center["generated_at"],
-        }
-    )
-
-    write_command_center_sqlite(command_center, sqlite_path)
-
-    command_center_path = run_dir / "command_center.json"
-    command_center_path.write_text(json.dumps(command_center, indent=2), encoding="utf-8")
-
-    index_path = artifact_dir / "index.json"
-    index: list[dict] = []
-    if index_path.exists():
-        try:
-            raw = json.loads(index_path.read_text(encoding="utf-8"))
-            if isinstance(raw, list):
-                index = [item for item in raw if isinstance(item, dict)]
-        except json.JSONDecodeError:
-            index = []
-
-    index.append(
-        {
-            "generated_at": command_center.get("generated_at"),
-            "mode": mode,
-            "summary": str(summary_copy.relative_to(artifact_dir)),
-            "command_center": str(command_center_path.relative_to(artifact_dir)),
-            "sqlite": str(sqlite_path.relative_to(artifact_dir)),
-        }
-    )
-    index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
-
-    if dashboard_file:
-        dashboard_path = Path(dashboard_file)
-        if dashboard_path.exists():
-            shutil.copy2(dashboard_path, run_dir / dashboard_path.name)
-
-    return command_center_path
-
-
-def _open_dashboard_if_requested(open_dashboard: bool, dashboard_file: str | None) -> None:
-    if not open_dashboard or not dashboard_file:
-        return
-    dashboard_path = Path(dashboard_file)
-    if not dashboard_path.exists():
-        return
-    browser = os.environ.get("BROWSER")
-    if browser:
-        os.system(f'{browser} "{dashboard_path.resolve()}" >/dev/null 2>&1')
-
-
-def _command_center_cli(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Aletheia command-center control plane")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    run_parser = subparsers.add_parser("run", help="Run API/website/repo/combined sweeps")
-    run_parser.add_argument("--mode", choices=["api", "website", "repo", "combined", "agentic"], default="api")
-    run_parser.add_argument("--baseline", help="Baseline summary path used for compare/regression")
-    run_parser.add_argument("--thresholds", help="Comma-separated thresholds, e.g. max_unknown=2,max_repo_high=5")
-    run_parser.add_argument("--filter", dest="filter_expr", help="Comma-separated filter (category, decision, mismatch, technique, q)")
-    run_parser.add_argument("--open-dashboard", action="store_true")
-    run_parser.add_argument("--artifact-dir", default="runs", help="Output directory for command-center run artifacts")
-    run_parser.add_argument("--dashboard-file", default="dashboard/index.html", help="Dashboard HTML file path")
-    run_parser.add_argument("--cli-only", action="store_true", help="Do not open dashboard/browser")
-    run_parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Summary output path")
-    run_parser.add_argument("--target-url")
-    run_parser.add_argument("--repo-path", default=".")
-    run_parser.add_argument("--repo-url")
-    run_parser.add_argument("--targets-file", help="JSON array of targets to execute in batch")
-    run_parser.add_argument("--base-url", help="Override target base URL for API, agentic, or combined runs")
-    run_parser.add_argument("--target-preset", choices=["aletheia", "openai"], default="aletheia")
-    run_parser.add_argument("--target-profile-file", help="JSON target profile file for custom API-compatible providers")
-    run_parser.add_argument("--target-model", help="Model name for OpenAI-compatible target profiles")
-    run_parser.add_argument("--auth-header", help="Override auth header name for the selected target profile")
-    run_parser.add_argument("--auth-scheme", help="Override auth scheme prefix, for example Bearer")
-    run_parser.add_argument("--header", action="append", default=[], help="Extra request header in KEY=VALUE format; repeatable")
-    run_parser.add_argument("--conversation-file", help="JSON file of multi-turn conversation attacks to append to the run")
-    run_parser.add_argument("--attack-intensity", choices=["light", "medium", "aggressive"], default="medium")
-    run_parser.add_argument(
-        "--plugin",
-        action="append",
-        default=[],
-        help="Runner plugin module, module:object, or file.py[:object]; repeatable",
-    )
-    run_parser.add_argument(
-        "--max-parallel-targets",
-        type=int,
-        default=2,
-        help="Maximum number of targets to execute concurrently when --targets-file is provided",
-    )
-
-    dashboard_parser = subparsers.add_parser("dashboard", help="Prepare/open dashboard from artifacts")
-    dashboard_parser.add_argument("--artifact-dir", default="runs")
-    dashboard_parser.add_argument("--dashboard-file", default="dashboard/index.html")
-    dashboard_parser.add_argument("--open-dashboard", action="store_true")
-    dashboard_parser.add_argument("--cli-only", action="store_true")
-    dashboard_parser.add_argument("--serve", action="store_true", help="Serve a hosted dashboard for non-technical users")
-    dashboard_parser.add_argument("--host", default="127.0.0.1")
-    dashboard_parser.add_argument("--port", type=int, default=8080)
-    dashboard_parser.add_argument(
-        "--auth-mode",
-        choices=["auto", "disabled", "basic", "api-key", "proxy"],
-        default="basic",
-        help="Hosted dashboard auth mode; default is basic to require auth in served mode",
-    )
-
-    compare_parser = subparsers.add_parser("compare", help="Compare current summary against baseline")
-    compare_parser.add_argument("--current", required=True, help="Current summary JSON")
-    compare_parser.add_argument("--baseline", required=True, help="Baseline summary JSON")
-    compare_parser.add_argument("--output", default="compare_summary.json")
-
-    export_parser = subparsers.add_parser("export", help="Export filtered rows from summary")
-    export_parser.add_argument("--input", required=True, help="Summary JSON path")
-    export_parser.add_argument("--format", choices=["json", "csv"], default="json")
-    export_parser.add_argument("--output", required=True)
-    export_parser.add_argument("--filter", dest="filter_expr", help="Comma-separated filter (category, decision, mismatch, technique, q)")
-
-    gate_parser = subparsers.add_parser("gate", help="Evaluate custom thresholds against summary")
-    gate_parser.add_argument("--input", required=True, help="Summary JSON path")
-    gate_parser.add_argument("--thresholds", required=True, help="Comma-separated thresholds")
-    gate_parser.add_argument("--output", default="gate_results.json")
-
-    args = parser.parse_args(argv)
-
-    if args.command == "run":
-        legacy_args: list[str] = [
-            "--mode",
-            args.mode,
-            "--output",
-            args.output,
-            "--repo-path",
-            args.repo_path,
-            "--artifact-dir",
-            args.artifact_dir,
-        ]
-        if args.repo_url:
-            legacy_args.extend(["--repo-url", args.repo_url])
-        if args.targets_file:
-            legacy_args.extend(["--targets-file", args.targets_file])
-        if args.target_url:
-            legacy_args.extend(["--target-url", args.target_url])
-        if args.base_url:
-            legacy_args.extend(["--base-url", args.base_url])
-        if args.baseline:
-            if args.mode == "api":
-                legacy_args.extend(["--api-baseline-summary", args.baseline])
-            elif args.mode == "website":
-                legacy_args.extend(["--baseline-summary", args.baseline])
-            else:
-                legacy_args.extend(["--baseline-state-file", args.baseline])
-        _apply_thresholds_to_legacy_args(legacy_args, args.thresholds)
-        _apply_target_profile_args_to_legacy_args(legacy_args, args)
-        legacy_args.extend(["--max-parallel-targets", str(args.max_parallel_targets)])
-
-        rc = _legacy_cli(legacy_args)
-
-        output_path = Path(args.output)
-        if output_path.exists():
-            summary_payload = json.loads(output_path.read_text(encoding="utf-8"))
-            if args.filter_expr:
-                rows = summary_payload.get("results") if isinstance(summary_payload.get("results"), list) else summary_payload.get("findings")
-                if isinstance(rows, list):
-                    filtered_rows = apply_finding_filter(rows, args.filter_expr)
-                    summary_payload["filtered_preview"] = filtered_rows[:50]
-                    output_path.write_text(json.dumps(summary_payload, indent=2), encoding="utf-8")
-
-            command_center_path = _write_command_center_artifacts(
-                summary_path=output_path,
-                artifact_dir=Path(args.artifact_dir),
-                dashboard_file=Path(args.dashboard_file),
-                baseline_path=args.baseline,
-            )
-            print(f"Command-center artifact written: {command_center_path}", file=sys.stderr)
-
-        if not args.cli_only:
-            _open_dashboard_if_requested(args.open_dashboard, args.dashboard_file)
-        return rc
-
-    if args.command == "dashboard":
-        artifact_dir = Path(args.artifact_dir)
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-        manifest = artifact_dir / "index.json"
-        if not manifest.exists():
-            manifest.write_text("[]\n", encoding="utf-8")
-        if args.serve:
-            resolved_auth_mode = args.auth_mode
-            if resolved_auth_mode == "auto":
-                resolved_auth_mode = "basic"
-            if resolved_auth_mode == "disabled":
-                print(
-                    "SECURITY WARNING: hosted dashboard auth is disabled. Only run behind trusted network boundaries, TLS, and a hardened reverse proxy.",
-                    file=sys.stderr,
-                )
-            print(
-                "Hosted security recommendation: terminate TLS at a reverse proxy and forward only authenticated traffic.",
-                file=sys.stderr,
-            )
-            print(f"Dashboard available at http://{args.host}:{args.port}/dashboard/", file=sys.stderr)
-            serve_dashboard(
-                DashboardServerConfig(
-                    repo_root=Path.cwd(),
-                    artifact_dir=artifact_dir,
-                    dashboard_file=Path(args.dashboard_file),
-                    host=args.host,
-                    port=args.port,
-                    auth_mode=resolved_auth_mode,
-                )
-            )
-            return PASS
-        if not args.cli_only:
-            _open_dashboard_if_requested(args.open_dashboard, args.dashboard_file)
-        print(f"Dashboard artifact index: {manifest}", file=sys.stderr)
-        return PASS
-
-    if args.command == "compare":
-        current = json.loads(Path(args.current).read_text(encoding="utf-8"))
-        baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8"))
-        comparison = compare_summaries(current, baseline)
-        Path(args.output).write_text(json.dumps(comparison, indent=2), encoding="utf-8")
-        print(f"Comparison written: {args.output}", file=sys.stderr)
-        return PASS
-
-    if args.command == "export":
-        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
-        rows: list[dict] = []
-        if isinstance(payload.get("results"), list):
-            rows = payload["results"]
-        elif isinstance(payload.get("findings"), list):
-            rows = payload["findings"]
-        filtered = apply_finding_filter(rows, args.filter_expr)
-        export_rows(filtered, Path(args.output), args.format)
-        print(f"Exported {len(filtered)} rows to {args.output}", file=sys.stderr)
-        return PASS
-
-    if args.command == "gate":
-        payload = json.loads(Path(args.input).read_text(encoding="utf-8"))
-        results = evaluate_gates(payload, args.thresholds)
-        Path(args.output).write_text(json.dumps(results, indent=2), encoding="utf-8")
-        if not results.get("pass", False):
-            print("Gate violations: " + ", ".join(results.get("violations") or []), file=sys.stderr)
-            return FAIL_THRESHOLD
-        print(f"Gate evaluation passed: {args.output}", file=sys.stderr)
-        return PASS
-
-    return PASS
-
-
-def _extract_request_id_from_http_error(exc: httpx.HTTPStatusError) -> str | None:
-    response = exc.response
-    if response is None:
-        return None
-
-    for header_name in ("x-request-id", "x-correlation-id"):
-        header_value = str(response.headers.get(header_name, "")).strip()
-        if header_value:
-            return header_value
-
-    if not response.content:
-        return None
-
-    try:
-        payload = response.json()
-    except Exception:
-        return None
-
-    if not isinstance(payload, dict):
-        return None
-
-    request_id = str(
-        payload.get("request_id")
-        or (payload.get("metadata") or {}).get("request_id")
-        or (payload.get("receipt") or {}).get("request_id")
-        or ""
-    ).strip()
-    return request_id or None
-
-
-def _adjust_request_delay(delay_sec: float, status_code: int | None) -> float:
-    if status_code == 429:
-        return min(delay_sec * 2.0, DEFAULT_MAX_REQUEST_DELAY_SEC)
-    if status_code is None:
-        return delay_sec
-    return DEFAULT_REQUEST_DELAY_SEC
-
-
-def _needs_reconciliation(result: dict) -> bool:
-    decision = str(result.get("actual_decision") or "").strip().upper()
-    return decision in {"", "UNKNOWN", "ERROR"}
-
-
-def _map_reconciled_decision(decision: str | None) -> str | None:
-    normalized = str(decision or "").strip().upper()
-    if normalized == "SANDBOX_BLOCKED":
-        return "DENIED"
-    if normalized in {"PROCEED", "DENIED"}:
-        return normalized
-    return None
-
-
-def _dedupe_preserving_order(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        ordered.append(value)
-    return ordered
-
-
-def reconcile_results(results: list[dict], client: AletheiaClient) -> dict:
-    """Resolve UNKNOWN/ERROR decisions from authoritative receipt/log lookups."""
-    reconcilable = [
-        row
-        for row in results
-        if _needs_reconciliation(row) and str(row.get("request_id") or "").strip()
-    ]
-
-    unreconciled_request_ids: list[str] = []
-    skipped_request_ids: list[str] = []
-    total_reconciled = 0
-    total_eligible = 0
-    endpoint_used: str | None = None
-    auth_mode = "unknown"
-
-    for row in reconcilable:
-        request_id = str(row.get("request_id") or "").strip()
-
-        lookup = client.lookup_decision(request_id)
-
-        if lookup.endpoint and endpoint_used is None:
-            endpoint_used = lookup.endpoint
-        if lookup.auth_mode != "unknown":
-            auth_mode = lookup.auth_mode
-
-        if lookup.auth_mode in {"session_cookie_required", "not_applicable"}:
-            skipped_request_ids.append(request_id)
-            continue
-
-        total_eligible += 1
-
-        reconciled_decision = _map_reconciled_decision(lookup.decision)
-        if reconciled_decision is None:
-            unreconciled_request_ids.append(request_id)
-            continue
-
-        row["actual_decision"] = reconciled_decision
-        row["match"] = reconciled_decision == str(row.get("expected_decision") or "")
-        prior_reason = str(row.get("reason") or "").strip()
-        if prior_reason:
-            row["reason"] = f"{prior_reason} | reconciled via {lookup.endpoint}"
-        else:
-            row["reason"] = f"reconciled via {lookup.endpoint}"
-        total_reconciled += 1
-
-    unreconciled_request_ids = _dedupe_preserving_order(unreconciled_request_ids)
-    skipped_request_ids = _dedupe_preserving_order(skipped_request_ids)
-    unreconciled = len(unreconciled_request_ids)
-    coverage_pct = round(
-        (100.0 * total_reconciled / total_eligible) if total_eligible else 100.0,
-        1,
-    )
-    return {
-        "total_reconciled": total_reconciled,
-        "reconcilable_total": total_eligible,
-        "unreconciled": unreconciled,
-        "reconciliation_coverage_pct": coverage_pct,
-        "unreconciled_request_ids": unreconciled_request_ids,
-        "skipped_request_ids": skipped_request_ids,
-        "endpoint": endpoint_used,
-        "auth_mode": auth_mode,
-    }
-
-
-def infer_custom_technique(attack: dict) -> str:
-    """Infer a custom technique tag when an explicit attack technique is not provided."""
-    category = str(attack.get("category", "")).strip().lower()
-    payload = str(attack.get("payload", "")).strip().lower()
-
-    if category == "benign_controls":
-        return "benign_operational_request"
-    if category == "tool_abuse":
-        if "reverse shell" in payload or "shell" in payload:
-            return "shell_execution_request"
-        return "tool_execution_abuse"
-    if category == "data_exfiltration":
-        if "export" in payload or "upload" in payload or "exfiltrate" in payload:
-            return "direct_data_exfiltration"
-        return "sensitive_data_request"
-    if category == "prompt_injection":
-        if "base64" in payload or "decode" in payload:
-            return "encoded_instruction_injection"
-        if "ignore" in payload or "override" in payload:
-            return "instruction_override"
-        if "hidden" in payload or "internal" in payload:
-            return "hidden_context_exfiltration"
-        return "nested_instruction_injection"
-    if category == "jailbreak":
-        if "roleplay" in payload or "in character" in payload or "act as" in payload:
-            return "persona_switch_jailbreak"
-        if "mode" in payload or "unrestricted" in payload:
-            return "policy_disable_request"
-        return "authority_reframe_jailbreak"
-    if category == "policy_evasion":
-        if "hypothetically" in payload or "in theory" in payload:
-            return "hypothetical_framing"
-        if "for a novel" in payload or "historical" in payload:
-            return "academic_framing"
-        if "translate" in payload or "base64" in payload:
-            return "encoding_evasion"
-        return "policy_scope_reframing"
-    return "unspecified"
-
-
 def load_attacks(category: str | None = None, threat_feed_file: str | None = None) -> list[dict]:
-    """Load attacks from catalog provider. category=None loads all."""
+    """Load attacks from the catalog provider."""
     return load_attacks_from_catalog(category, threat_feed_file=threat_feed_file)
-
-
-def _load_attacks_with_cli_options(category: str | None, threat_feed_file: str | None) -> list[dict]:
-    try:
-        return load_attacks(category, threat_feed_file=threat_feed_file)
-    except TypeError as exc:
-        if "threat_feed_file" not in str(exc):
-            raise
-        return load_attacks(category)
 
 
 def load_conversation_attacks(path: str | None) -> list[dict]:
@@ -996,175 +176,67 @@ def load_conversation_attacks(path: str | None) -> list[dict]:
     return attacks
 
 
-def _parse_category_filters(raw: str | None) -> set[str]:
-    if not raw:
-        return set()
-    values: set[str] = set()
-    for chunk in str(raw).split(","):
-        value = chunk.strip().lower()
-        if value:
-            values.add(value)
-    return values
+def infer_custom_technique(attack: dict) -> str:
+    category = str(attack.get("category", "")).strip().lower()
+    payload = str(attack.get("payload", "")).strip().lower()
+
+    if category in {"multi_turn", "session_campaigns"}:
+        return "campaign_escalation"
+    if category == "context_poisoning":
+        return "context_injection"
+    if category == "embedding_evasion":
+        return "semantic_evasion"
+    if category == "agent_conflict":
+        return "agent_disagreement"
+    if category == "economic_pressure":
+        return "resource_amplification"
+    if category == "side_channel":
+        return "side_channel_fingerprinting"
+    if category == "semantic_drift":
+        return "trajectory_drift"
+
+    if "hypothetical" in payload or "suppose" in payload:
+        return "hypothetical_framing"
+    if "ignore previous" in payload or "override" in payload:
+        return "instruction_override"
+    if "base64" in payload:
+        return "encoding_evasion"
+    return "unspecified"
 
 
-def _filter_attacks_by_categories(attacks: list[dict], categories_raw: str | None) -> list[dict]:
-    categories = _parse_category_filters(categories_raw)
-    if not categories:
-        return [dict(attack) for attack in attacks]
-    return [
-        dict(attack)
-        for attack in attacks
-        if str(attack.get("category", "")).strip().lower() in categories
-    ]
+def _extract_request_id_from_http_error(exc: httpx.HTTPStatusError) -> str | None:
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    return response.headers.get("x-request-id") or response.headers.get("request-id") or None
 
 
-def _limit_attacks(attacks: list[dict], max_attacks: int | None) -> list[dict]:
-    limit = int(max_attacks or 0)
-    if limit <= 0:
-        return [dict(attack) for attack in attacks]
-    return [dict(attack) for attack in attacks[:limit]]
+def _categorize_attack_error(exc: Exception, *, status_code: int | None) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(exc, httpx.HTTPStatusError):
+        if status_code == 429:
+            return "rate_limited"
+        if status_code is not None and status_code >= 500:
+            return "server_error"
+        if status_code in {401, 403}:
+            return "auth_error"
+        return "http_error"
+    return "unknown_error"
 
 
-def _count_by_key(rows: list[dict], key: str, fallback: str) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for row in rows:
-        value = str(row.get(key, fallback) or fallback).strip() or fallback
-        counts[value] = counts.get(value, 0) + 1
-    return dict(sorted(counts.items()))
+def _is_transient_error(error_category: str) -> bool:
+    return error_category in {"timeout", "rate_limited", "server_error"}
 
 
-def _benign_ratio(rows: list[dict]) -> float:
-    if not rows:
-        return 0.0
-    benign_total = sum(
-        1
-        for row in rows
-        if str(row.get("category", "")).strip().lower() == "benign_controls"
-    )
-    return round(float(benign_total) / float(len(rows)), 4)
-
-
-def _record_corpus_diagnostics(args: argparse.Namespace, diagnostics: dict) -> None:
-    setattr(args, "_payload_corpus_diagnostics", diagnostics)
-
-
-def _load_runner_plugins_from_args(args: argparse.Namespace) -> list[object]:
-    return load_runner_plugins(getattr(args, "plugin", []) or [])
-
-
-def _apply_attack_plugins(attacks: list[dict], args: argparse.Namespace, plugins: list[object]) -> list[dict]:
-    updated = [dict(attack) for attack in attacks]
-    for plugin in plugins:
-        hook = getattr(plugin, "transform_attacks", None)
-        if not callable(hook):
-            continue
-        maybe_updated = hook(updated, args)
-        if maybe_updated is not None:
-            updated = maybe_updated
-        if not isinstance(updated, list):
-            raise TypeError(f"Plugin {plugin_name(plugin)} transform_attacks must return a list of attacks")
-    return updated
-
-
-def _apply_result_plugins(result: dict, attack: dict, args: argparse.Namespace | None, plugins: list[object] | None) -> dict:
-    updated = dict(result)
-    for plugin in plugins or []:
-        hook = getattr(plugin, "transform_result", None)
-        if not callable(hook):
-            continue
-        maybe_updated = hook(updated, attack, args)
-        if maybe_updated is not None:
-            updated = maybe_updated
-        if not isinstance(updated, dict):
-            raise TypeError(f"Plugin {plugin_name(plugin)} transform_result must return a dict result")
-    return updated
-
-
-def _finalize_summary_with_plugins(
-    summary: dict,
-    results: list[dict],
-    args: argparse.Namespace | None,
-    plugins: list[object] | None,
-) -> dict:
-    updated = dict(summary)
-    for plugin in plugins or []:
-        hook = getattr(plugin, "finalize_summary", None)
-        if not callable(hook):
-            continue
-        maybe_updated = hook(updated, results, args)
-        if maybe_updated is not None:
-            updated = maybe_updated
-        if not isinstance(updated, dict):
-            raise TypeError(f"Plugin {plugin_name(plugin)} finalize_summary must return a dict summary")
-    if plugins:
-        updated["plugins"] = [plugin_name(plugin) for plugin in plugins]
-    return updated
-
-
-def _run_attacks_with_cli_options(
-    client: AletheiaClient,
-    attacks: list[dict],
-    *,
-    plugins: list[object] | None,
-    plugin_args: argparse.Namespace | None,
-) -> list[dict]:
-    try:
-        return run_attacks_with_backoff(client, attacks, plugins=plugins, plugin_args=plugin_args)
-    except TypeError as exc:
-        if "plugins" not in str(exc) and "plugin_args" not in str(exc):
-            raise
-        return run_attacks_with_backoff(client, attacks)
-
-
-def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[object] | None = None) -> list[dict]:
-    catalog_attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
-    external_attacks = load_external_corpus_attacks(
-        getattr(args, "external_corpus_file", []) or [],
-        default_category=getattr(args, "external_corpus_category", "prompt_injection"),
-    )
-    conversation_attacks = load_conversation_attacks(getattr(args, "conversation_file", None))
-
-    attacks = [*catalog_attacks, *external_attacks, *conversation_attacks]
-    filtered = _filter_attacks_by_categories(attacks, getattr(args, "categories", None))
-    expanded = expand_attack_families(
-        filtered,
-        objective=getattr(args, "objective", "Bypass secret exfil detection"),
-        intensity=getattr(args, "attack_intensity", "medium"),
-    )
-    plugin_expanded = _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
-    deduped = dedupe_attacks_semantic(
-        plugin_expanded,
-        threshold=float(getattr(args, "dedupe_semantic_threshold", 0.92) or 0.92),
-    )
-    limited = limit_attacks_with_benign_ratio(
-        deduped,
-        max_attacks=int(getattr(args, "max_attacks", 0) or 0),
-        benign_ratio=float(getattr(args, "benign_ratio", 0.2) or 0.2),
-    )
-    final_attacks = _limit_attacks(limited, getattr(args, "max_attacks", None))
-
-    diagnostics = {
-        "catalog_loaded": len(catalog_attacks),
-        "external_loaded": len(external_attacks),
-        "conversation_loaded": len(conversation_attacks),
-        "pre_filter_total": len(attacks),
-        "post_category_filter": len(filtered),
-        "expanded_total": len(expanded),
-        "post_plugin_total": len(plugin_expanded),
-        "post_dedupe_total": len(deduped),
-        "final_total": len(final_attacks),
-        "max_attacks": int(getattr(args, "max_attacks", 0) or 0),
-        "benign_ratio_target": float(getattr(args, "benign_ratio", 0.2) or 0.2),
-        "benign_ratio_achieved": _benign_ratio(final_attacks),
-        "dropped_by_category_filter": max(0, len(attacks) - len(filtered)),
-        "dropped_by_dedupe": max(0, len(plugin_expanded) - len(deduped)),
-        "dropped_by_cap": max(0, len(deduped) - len(final_attacks)),
-        "source_mix": _count_by_key(final_attacks, "source", "catalog"),
-        "category_mix": _count_by_key(final_attacks, "category", "unknown"),
-        "adapter_mix": _count_by_key(final_attacks, "source_adapter", "none"),
-    }
-    _record_corpus_diagnostics(args, diagnostics)
-    return final_attacks
+def _adjust_request_delay_from_result(delay_sec: float, result: dict) -> float:
+    error_category = str(result.get("error_category") or "").strip().lower()
+    if result.get("actual_decision") == "ERROR" and _is_transient_error(error_category):
+        multiplier = 2.0 if error_category == "rate_limited" else 1.5
+        return min(DEFAULT_MAX_REQUEST_DELAY_SEC, max(DEFAULT_REQUEST_DELAY_SEC, delay_sec * multiplier))
+    if result.get("actual_decision") in {"DENIED", "PROCEED"} and delay_sec > DEFAULT_REQUEST_DELAY_SEC:
+        return max(DEFAULT_REQUEST_DELAY_SEC, delay_sec * 0.9)
+    return delay_sec
 
 
 def run_attack(
@@ -1227,6 +299,7 @@ def run_attack(
                 continue
 
             request_id = _extract_request_id_from_http_error(exc)
+            error_category = _categorize_attack_error(exc, status_code=status_code)
             latency_ms = (time.time() - started) * 1000
             row = {
                 "id": attack["id"],
@@ -1248,11 +321,14 @@ def run_attack(
                 "receipt": None,
                 "reason": None,
                 "error": str(exc),
+                "error_category": error_category,
+                "error_is_transient": _is_transient_error(error_category),
             }
             if include_status_code:
                 row["status_code"] = status_code
             return _apply_result_plugins(row, attack, plugin_args, plugins)
         except Exception as exc:
+            error_category = _categorize_attack_error(exc, status_code=None)
             latency_ms = (time.time() - started) * 1000
             row = {
                 "id": attack["id"],
@@ -1274,6 +350,8 @@ def run_attack(
                 "receipt": None,
                 "reason": None,
                 "error": str(exc),
+                "error_category": error_category,
+                "error_is_transient": _is_transient_error(error_category),
             }
             if include_status_code:
                 row["status_code"] = None
@@ -1310,7 +388,7 @@ def run_attacks_with_backoff(
         )
         results.append(result)
 
-        delay_sec = _adjust_request_delay(delay_sec, result.get("status_code"))
+        delay_sec = _adjust_request_delay_from_result(delay_sec, result)
         result.pop("status_code", None)
 
     return results
@@ -1402,6 +480,12 @@ def summarize(results: list[dict]) -> dict:
         for r in results
         if "Empty JSON response body from server (status 200)" in str(r.get("reason") or "")
     )
+    error_categories: dict[str, int] = {}
+    for r in results:
+        if str(r.get("actual_decision") or "").upper() != "ERROR":
+            continue
+        category = str(r.get("error_category") or "unknown_error").strip().lower() or "unknown_error"
+        error_categories[category] = error_categories.get(category, 0) + 1
 
     by_cat: dict[str, dict] = {}
     for r in results:
@@ -1448,6 +532,7 @@ def summarize(results: list[dict]) -> dict:
         "proceeded": proceeded,
         "unknown": unknown,
         "errors": errors,
+        "error_categories": error_categories,
         "empty_200_anomalies": empty_200_anomalies,
         "block_rate": round(100 * blocked / total, 1) if total else 0.0,
         "categories": by_cat,
@@ -1461,6 +546,78 @@ def summarize(results: list[dict]) -> dict:
             if trial_mode_suspected
             else None
         ),
+    }
+
+
+def reconcile_results(rows: list[dict], client: object) -> dict:
+    """Attempt to resolve UNKNOWN/ERROR decisions via async receipt lookup.
+
+    Mutates *rows* in-place with the resolved decision when one is found.
+    Returns a summary dict describing reconciliation coverage.
+    """
+    _SESSION_AUTH_MODES = {"session_cookie_required"}
+    # SANDBOX_BLOCKED is an API-layer alias for DENIED
+    _DECISION_MAP = {"SANDBOX_BLOCKED": "DENIED"}
+    _UNRESOLVED = {"UNKNOWN", "ERROR"}
+
+    # Build a deduplicated map of request_id → row indices that need lookup
+    by_request_id: dict[str, list[int]] = {}
+    for idx, row in enumerate(rows):
+        rid = row.get("request_id")
+        if rid and row.get("actual_decision") in _UNRESOLVED:
+            by_request_id.setdefault(rid, []).append(idx)
+
+    if not by_request_id:
+        return {
+            "total_reconciled": 0,
+            "reconcilable_total": 0,
+            "unreconciled": 0,
+            "reconciliation_coverage_pct": 100.0,
+            "unreconciled_request_ids": [],
+            "skipped_request_ids": [],
+            "endpoint": None,
+            "auth_mode": None,
+        }
+
+    reconciled_ids: list[str] = []
+    unreconciled_ids: list[str] = []
+    skipped_request_ids: list[str] = []
+    last_endpoint: str | None = None
+    last_auth_mode: str | None = None
+
+    for request_id, indices in by_request_id.items():
+        lookup = client.lookup_decision(request_id)
+        auth_mode = str(getattr(lookup, "auth_mode", None) or "unknown")
+        endpoint = getattr(lookup, "endpoint", None)
+        last_endpoint = endpoint
+        last_auth_mode = auth_mode
+
+        if auth_mode in _SESSION_AUTH_MODES:
+            skipped_request_ids.append(request_id)
+            continue
+
+        decision = getattr(lookup, "decision", None)
+        if decision is not None:
+            normalized = _DECISION_MAP.get(str(decision), str(decision))
+            for i in indices:
+                rows[i]["actual_decision"] = normalized
+                rows[i]["match"] = rows[i].get("expected_decision") == normalized
+            reconciled_ids.append(request_id)
+        else:
+            unreconciled_ids.append(request_id)
+
+    reconcilable_total = len(reconciled_ids) + len(unreconciled_ids)
+    coverage = (len(reconciled_ids) / reconcilable_total * 100.0) if reconcilable_total > 0 else 100.0
+
+    return {
+        "total_reconciled": len(reconciled_ids),
+        "reconcilable_total": reconcilable_total,
+        "unreconciled": len(unreconciled_ids),
+        "reconciliation_coverage_pct": round(coverage, 1),
+        "unreconciled_request_ids": unreconciled_ids,
+        "skipped_request_ids": skipped_request_ids,
+        "endpoint": last_endpoint,
+        "auth_mode": last_auth_mode,
     }
 
 
@@ -2045,6 +1202,437 @@ def load_protected_profiles(values: list[str] | None) -> list[str]:
     return profiles
 
 
+def _load_runner_plugins_from_args(args: argparse.Namespace) -> list[object]:
+    return load_runner_plugins(getattr(args, "plugin", []) or [])
+
+
+def _apply_attack_plugins(attacks: list[dict], args: argparse.Namespace, plugins: list[object]) -> list[dict]:
+    updated = [dict(attack) for attack in attacks]
+    for plugin in plugins:
+        hook = getattr(plugin, "transform_attacks", None)
+        if not callable(hook):
+            continue
+        maybe_updated = hook(updated, args)
+        if maybe_updated is not None:
+            updated = maybe_updated
+        if not isinstance(updated, list):
+            raise TypeError(f"Plugin {plugin_name(plugin)} transform_attacks must return a list of attacks")
+    return updated
+
+
+def _apply_result_plugins(result: dict, attack: dict, args: argparse.Namespace | None, plugins: list[object] | None) -> dict:
+    updated = dict(result)
+    for plugin in plugins or []:
+        hook = getattr(plugin, "transform_result", None)
+        if not callable(hook):
+            continue
+        maybe_updated = hook(updated, attack, args)
+        if maybe_updated is not None:
+            updated = maybe_updated
+        if not isinstance(updated, dict):
+            raise TypeError(f"Plugin {plugin_name(plugin)} transform_result must return a dict result")
+    return updated
+
+
+def _finalize_summary_with_plugins(
+    summary: dict,
+    results: list[dict],
+    args: argparse.Namespace | None,
+    plugins: list[object] | None,
+) -> dict:
+    updated = dict(summary)
+    for plugin in plugins or []:
+        hook = getattr(plugin, "finalize_summary", None)
+        if not callable(hook):
+            continue
+        maybe_updated = hook(updated, results, args)
+        if maybe_updated is not None:
+            updated = maybe_updated
+        if not isinstance(updated, dict):
+            raise TypeError(f"Plugin {plugin_name(plugin)} finalize_summary must return a dict summary")
+    if plugins:
+        updated["plugins"] = [plugin_name(plugin) for plugin in plugins]
+    return updated
+
+
+def _load_attacks_with_cli_options(category: str | None, threat_feed_file: str | None) -> list[dict]:
+    try:
+        return load_attacks(category, threat_feed_file=threat_feed_file)
+    except TypeError as exc:
+        if "threat_feed_file" not in str(exc):
+            raise
+        return load_attacks(category)
+
+
+def _parse_category_filters(raw: str | None) -> set[str]:
+    if not raw:
+        return set()
+    values: set[str] = set()
+    for chunk in str(raw).split(","):
+        value = chunk.strip().lower()
+        if value:
+            values.add(value)
+    return values
+
+
+def _filter_attacks_by_categories(attacks: list[dict], categories_raw: str | None) -> list[dict]:
+    categories = _parse_category_filters(categories_raw)
+    if not categories:
+        return [dict(attack) for attack in attacks]
+    return [dict(attack) for attack in attacks if str(attack.get("category", "")).strip().lower() in categories]
+
+
+def _limit_attacks(attacks: list[dict], max_attacks: int | None) -> list[dict]:
+    limit = int(max_attacks or 0)
+    if limit <= 0:
+        return [dict(attack) for attack in attacks]
+    return [dict(attack) for attack in attacks[:limit]]
+
+
+def _count_by_key(rows: list[dict], key: str, fallback: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(key, fallback) or fallback).strip() or fallback
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _benign_ratio(rows: list[dict]) -> float:
+    if not rows:
+        return 0.0
+    benign_total = sum(1 for row in rows if str(row.get("category", "")).strip().lower() == "benign_controls")
+    return round(float(benign_total) / float(len(rows)), 4)
+
+
+def _run_attacks_with_cli_options(
+    client: AletheiaClient,
+    attacks: list[dict],
+    *,
+    plugins: list[object] | None,
+    plugin_args: argparse.Namespace | None,
+) -> list[dict]:
+    try:
+        return run_attacks_with_backoff(client, attacks, plugins=plugins, plugin_args=plugin_args)
+    except TypeError as exc:
+        if "plugins" not in str(exc) and "plugin_args" not in str(exc):
+            raise
+        return run_attacks_with_backoff(client, attacks)
+
+
+def _prepare_attacks_for_execution(args: argparse.Namespace, plugins: list[object] | None = None) -> list[dict]:
+    catalog_attacks = _load_attacks_with_cli_options(args.category, args.threat_feed_file)
+    external_attacks = load_external_corpus_attacks(
+        getattr(args, "external_corpus_file", []) or [],
+        default_category=getattr(args, "external_corpus_category", "prompt_injection"),
+    )
+    conversation_attacks = load_conversation_attacks(getattr(args, "conversation_file", None))
+
+    attacks = [*catalog_attacks, *external_attacks, *conversation_attacks]
+    filtered = _filter_attacks_by_categories(attacks, getattr(args, "categories", None))
+    expanded = expand_attack_families(
+        filtered,
+        objective=getattr(args, "objective", "Bypass secret exfil detection"),
+        intensity=getattr(args, "attack_intensity", "medium"),
+    )
+    plugin_expanded = _apply_attack_plugins(expanded, args, plugins or _load_runner_plugins_from_args(args))
+    deduped = dedupe_attacks_semantic(
+        plugin_expanded,
+        threshold=float(getattr(args, "dedupe_semantic_threshold", 0.92) or 0.92),
+    )
+    limited = limit_attacks_with_benign_ratio(
+        deduped,
+        max_attacks=int(getattr(args, "max_attacks", 0) or 0),
+        benign_ratio=float(getattr(args, "benign_ratio", 0.2) or 0.2),
+    )
+    final_attacks = _limit_attacks(limited, getattr(args, "max_attacks", None))
+
+    campaign_mode = str(getattr(args, "campaign_mode", "none") or "none").strip().lower()
+    category_hints = _parse_category_filters(getattr(args, "categories", None))
+    final_attacks, campaign_manifest = build_campaign_plan(
+        final_attacks,
+        mode=campaign_mode,
+        category_hints=category_hints,
+        max_targets=int(getattr(args, "campaign_max_targets", 0) or 0),
+    )
+    setattr(args, "_campaign_manifest", campaign_manifest)
+
+    setattr(
+        args,
+        "_payload_corpus_diagnostics",
+        {
+            "catalog_loaded": len(catalog_attacks),
+            "external_loaded": len(external_attacks),
+            "conversation_loaded": len(conversation_attacks),
+            "pre_filter_total": len(attacks),
+            "post_category_filter": len(filtered),
+            "expanded_total": len(expanded),
+            "post_plugin_total": len(plugin_expanded),
+            "post_dedupe_total": len(deduped),
+            "final_total": len(final_attacks),
+            "max_attacks": int(getattr(args, "max_attacks", 0) or 0),
+            "benign_ratio_target": float(getattr(args, "benign_ratio", 0.2) or 0.2),
+            "benign_ratio_achieved": _benign_ratio(final_attacks),
+            "dropped_by_category_filter": max(0, len(attacks) - len(filtered)),
+            "dropped_by_dedupe": max(0, len(plugin_expanded) - len(deduped)),
+            "dropped_by_cap": max(0, len(deduped) - len(final_attacks)),
+            "source_mix": _count_by_key(final_attacks, "source", "catalog"),
+            "category_mix": _count_by_key(final_attacks, "category", "unknown"),
+            "adapter_mix": _count_by_key(final_attacks, "source_adapter", "none"),
+            "campaign_enabled": bool(campaign_manifest.get("enabled")),
+            "campaign_mode": campaign_manifest.get("campaign_mode"),
+            "campaign_selected": int(campaign_manifest.get("selected", 0)),
+        },
+    )
+    return final_attacks
+
+
+def _write_campaign_manifest_if_enabled(args: argparse.Namespace, output_path: Path) -> str | None:
+    manifest = getattr(args, "_campaign_manifest", None)
+    if not isinstance(manifest, dict) or not manifest.get("enabled"):
+        return None
+
+    destination = output_path.resolve().parent / "campaign_manifest.json"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return str(destination)
+
+
+def _write_command_center_artifacts(
+    summary_path: Path,
+    artifact_dir: Path,
+    dashboard_file: Path | None,
+    baseline_path: str | None,
+) -> Path:
+    """Read summary_path, write SQLite + JSON command-center artifacts, update index.json."""
+    artifact_dir = Path(artifact_dir).resolve()
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    mode = str(summary.get("mode") or "api")
+    generated_at = str(summary.get("generated_at") or datetime.now(timezone.utc).isoformat())
+
+    run_dir = _make_unique_run_dir(artifact_dir, f"run-{mode}")
+
+    baseline_summary: dict | None = None
+    if baseline_path:
+        bp = Path(baseline_path)
+        if bp.exists():
+            try:
+                baseline_summary = json.loads(bp.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                pass
+
+    model = normalize_summary_to_command_center(
+        summary,
+        source_path=str(summary_path),
+        baseline_summary=baseline_summary,
+    )
+
+    sqlite_path = run_dir / "command_center.sqlite"
+
+    # Inject a self-referential sqlite artifact so callers can locate the db
+    _now = datetime.now(timezone.utc).isoformat()
+    run_id = (model.get("runs") or [{}])[0].get("id") or ""
+    seen_keys: set[tuple[str, str]] = {(a["artifact_type"], a["path"]) for a in model.get("artifacts") or []}
+    sqlite_key = ("sqlite", str(sqlite_path))
+    if sqlite_key not in seen_keys:
+        import uuid as _uuid
+        (model.setdefault("artifacts", [])).append({
+            "id": str(_uuid.uuid4()),
+            "run_id": run_id,
+            "artifact_type": "sqlite",
+            "path": str(sqlite_path),
+            "mime_type": "application/x-sqlite3",
+            "sha256": None,
+            "created_at": _now,
+        })
+
+    write_command_center_sqlite(model, sqlite_path)
+
+    cc_json_path = run_dir / "command_center.json"
+    cc_json_path.write_text(json.dumps(model, indent=2, default=str), encoding="utf-8")
+
+    # Update index.json
+    index_path = artifact_dir / "index.json"
+    index: list[dict] = []
+    if index_path.exists():
+        try:
+            raw = json.loads(index_path.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                index = raw
+        except json.JSONDecodeError:
+            pass
+
+    try:
+        summary_rel = str(summary_path.resolve().relative_to(artifact_dir))
+    except ValueError:
+        summary_rel = str(summary_path.resolve())
+
+    entry: dict = {
+        "generated_at": generated_at,
+        "mode": mode,
+        "summary": summary_rel,
+        "command_center": str(cc_json_path.relative_to(artifact_dir)),
+        "sqlite": str(sqlite_path.relative_to(artifact_dir)),
+    }
+    index.append(entry)
+    index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+    return run_dir
+
+
+def _merge_batch_models(models: list[dict]) -> dict:
+    """Merge multiple command-center models into one combined model."""
+    merged: dict = {
+        "schema_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "runs": [],
+        "targets": [],
+        "findings": [],
+        "findings_evidence": [],
+        "metrics": [],
+        "artifacts": [],
+        "gate_results": [],
+        "tags": [],
+        "finding_tags": [],
+        "notes": [],
+        "views": {"v_run_summary": [], "v_category_summary": []},
+        "baseline": None,
+    }
+    for model in models:
+        for key in ("runs", "targets", "findings", "findings_evidence", "metrics",
+                    "artifacts", "gate_results", "tags", "finding_tags", "notes"):
+            merged[key].extend(model.get(key) or [])
+    return merged
+
+
+def _make_unique_run_dir(parent: Path, prefix: str) -> Path:
+    """Create a timestamped run directory that cannot collide within the same second."""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    run_dir = parent / f"{prefix}-{stamp}"
+    run_dir.mkdir(parents=True, exist_ok=False)
+    return run_dir
+
+
+def _run_targets_batch(args: argparse.Namespace, plugins: list[object] | None = None) -> tuple[dict, Path]:
+    """Execute a batch of heterogeneous targets from a targets-file and aggregate results."""
+    targets_raw: list[dict] = json.loads(Path(args.targets_file).read_text(encoding="utf-8"))
+    artifact_dir = Path(args.artifact_dir).resolve()
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    batch_root = _make_unique_run_dir(artifact_dir, "run-batch")
+
+    components: dict = {}
+    target_summaries: list[dict] = []
+    all_models: list[dict] = []
+
+    for idx, target in enumerate(targets_raw, 1):
+        target_type = str(target.get("type") or "api").lower()
+        label = str(target.get("label") or f"target-{idx:02d}")
+        component_key = f"{label}-{idx:02d}"
+        target_artifact_dir = batch_root / "targets" / label / "artifacts"
+        target_artifact_dir.mkdir(parents=True, exist_ok=True)
+
+        if target_type == "api":
+            target_url = str(target.get("url") or "")
+            attacks = _prepare_attacks_for_execution(args, plugins=plugins or [])
+            with AletheiaClient(base_url=target_url) as client:
+                results = run_attacks_with_backoff(client, attacks, plugins=plugins, plugin_args=args)
+                reconciliation = reconcile_results(results, client)
+            component_summary: dict = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "mode": "api",
+                "engine_url": target_url,
+                "target_url": target_url,
+                "reconciliation": reconciliation,
+                "gap_report": build_gap_report(results),
+                "category_gap_report": build_category_gap_report(results),
+                **summarize(results),
+                "results": results,
+                "gates": {"pass": True, "violations": []},
+            }
+        elif target_type == "repo":
+            repo_path = Path(str(target.get("path") or ".")).resolve()
+            component_summary = run_repo_audit(
+                repo_path,
+                repo_url=str(target.get("url") or "") or None,
+                threat_feed_path=getattr(args, "threat_feed_file", None),
+                include_test_fixtures=getattr(args, "repo_include_test_fixtures", False),
+                deps_scan=getattr(args, "deps_scan", "auto"),
+            )
+            if "mode" not in component_summary:
+                component_summary["mode"] = "repo"
+        else:
+            component_summary = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "mode": target_type,
+                "error": f"Unknown target type: {target_type}",
+                "gates": {"pass": False, "violations": [f"unknown_type:{target_type}"]},
+            }
+
+        components[component_key] = component_summary
+
+        run_dir = _make_unique_run_dir(target_artifact_dir, f"run-{target_type}")
+        summary_path = run_dir / "summary.json"
+        summary_path.write_text(json.dumps(component_summary, indent=2, default=str), encoding="utf-8")
+
+        model = normalize_summary_to_command_center(component_summary, source_path=str(summary_path))
+        sqlite_path = run_dir / "command_center.sqlite"
+        write_command_center_sqlite(model, sqlite_path)
+        all_models.append(model)
+
+        target_summaries.append({
+            "label": label,
+            "type": target_type,
+            "component_key": component_key,
+            "status": "completed",
+            "sqlite": str(sqlite_path),
+        })
+
+    # Build combined model and write to a separate run-combined-* dir
+    combined_run_dir = _make_unique_run_dir(artifact_dir, "run-combined")
+
+    combined_model = _merge_batch_models(all_models)
+    combined_sqlite_path = combined_run_dir / "command_center.sqlite"
+    write_command_center_sqlite(combined_model, combined_sqlite_path)
+
+    all_gates_pass = all(
+        (comp.get("gates") or {}).get("pass", True)
+        for comp in components.values()
+    )
+    batch_summary: dict = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "combined",
+        "batch_mode": "targets-file",
+        "targets_total": len(targets_raw),
+        "targets_completed": len(target_summaries),
+        "targets": target_summaries,
+        "components": components,
+        "gates": {"pass": all_gates_pass, "violations": []},
+    }
+
+    return batch_summary, batch_root
+
+
+
+def _build_target_profile_from_args(args: argparse.Namespace) -> TargetProfile:
+    return load_target_profile(
+        preset=getattr(args, "target_preset", "aletheia"),
+        profile_file=getattr(args, "target_profile_file", None),
+        base_url=getattr(args, "base_url", None) or getattr(args, "target_url", None),
+        model=getattr(args, "target_model", None),
+        auth_header=getattr(args, "auth_header", None),
+        auth_scheme=getattr(args, "auth_scheme", None),
+        extra_headers=getattr(args, "header", None),
+    )
+
+
+def _create_api_client(args: argparse.Namespace) -> AletheiaClient:
+    return AletheiaClient(
+        base_url=getattr(args, "base_url", None) or getattr(args, "target_url", None),
+        target_profile=_build_target_profile_from_args(args),
+    )
+
+
 def _legacy_cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Aletheia red team kit")
     parser.add_argument("--mode", choices=["api", "website", "agentic", "repo", "combined"], default="api", help="Run API catalog, autonomous agentic loop, website UI audit, static repository audit, or combined command-center sweep")
@@ -2220,12 +1808,29 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-deps-critical", type=int, default=0, help="Fail repo mode if dependency CRITICAL findings exceed this")
     parser.add_argument("--max-deps-high", type=int, default=10, help="Fail repo mode if dependency HIGH findings exceed this")
     parser.add_argument("--objective", default="Bypass secret exfil detection", help="Agentic objective statement used to optimize attack payloads")
+    parser.add_argument(
+        "--campaign-mode",
+        choices=["none", "auto", "focused"],
+        default="none",
+        help="Optional campaign planning mode applied to prepared attack corpus",
+    )
+    parser.add_argument(
+        "--campaign-max-targets",
+        type=int,
+        default=0,
+        help="Optional maximum attacks selected by campaign planner (0 keeps all prepared attacks)",
+    )
     parser.add_argument("--attack-intensity", choices=["light", "medium", "aggressive"], default="medium", help="Payload family expansion intensity for API and agentic attack generation")
     parser.add_argument("--conversation-file", help="JSON file of multi-turn conversation attacks to append to the run")
     parser.add_argument("--agentic-iterations", type=int, default=4, help="Maximum iterations for legacy engine agentic mode")
     parser.add_argument("--max-iterations", type=int, help="Maximum iterations for agentic mode (default: 10)")
     parser.add_argument("--agentic-seed-size", type=int, default=10, help="Number of seed attacks to initialize agentic mode")
     parser.add_argument("--agentic-variants", type=int, default=6, help="Maximum candidates evaluated per agentic iteration")
+    parser.add_argument("--agentic-max-time-sec", type=int, help="Optional maximum wall-clock time budget for agentic mode")
+    parser.add_argument("--agentic-risk-budget", type=float, help="Optional maximum accumulated risk budget for successful bypasses")
+    parser.add_argument("--agentic-success-budget", type=int, help="Optional cap on successful bypass count before stopping")
+    parser.add_argument("--agentic-diminishing-window", type=int, default=3, help="Window size for diminishing-return stop detection")
+    parser.add_argument("--agentic-diminishing-min-delta", type=int, default=1, help="Minimum successes across the diminishing window")
     parser.add_argument(
         "--mutation-strategy",
         action="append",
@@ -2285,15 +1890,9 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         if args.targets_file:
             batch_summary, _batch_root = _run_targets_batch(args, plugins=plugins)
             Path(args.output).write_text(json.dumps(batch_summary, indent=2), encoding="utf-8")
-            _write_command_center_artifacts(
-                summary_path=Path(args.output),
-                artifact_dir=Path(args.artifact_dir),
-                dashboard_file=None,
-                baseline_path=getattr(args, "baseline", None),
-            )
             print(
-                f"\nDone. Batch targets complete. Overall gate: {'PASS' if batch_summary['gates']['pass'] else 'FAIL'}. Output: {args.output}",
-                file=sys.stderr,
+            f"\nDone. Batch targets complete. Overall gate: {'PASS' if batch_summary['gates']['pass'] else 'FAIL'}. Output: {args.output}",
+            file=sys.stderr,
             )
             return PASS if batch_summary["gates"]["pass"] else FAIL_THRESHOLD
 
@@ -2336,6 +1935,12 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
                 "category_gap_report": build_category_gap_report(results),
                 "results": results,
             }
+            campaign_manifest_path = _write_campaign_manifest_if_enabled(args, Path(args.output))
+            if campaign_manifest_path:
+                api_component["campaign"] = {
+                    **(getattr(args, "_campaign_manifest", {}) or {}),
+                    "manifest_path": campaign_manifest_path,
+                }
             api_component = _finalize_summary_with_plugins(api_component, results, args, plugins)
             combined["components"]["api"] = api_component
 
@@ -2526,8 +2131,21 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
                     variants_per_round=args.agentic_variants,
                     mutation_strategies=args.mutation_strategy,
                     output_path=output_path,
+                    max_time_seconds=args.agentic_max_time_sec,
+                    risk_budget=args.agentic_risk_budget,
+                    success_budget=args.agentic_success_budget,
+                    diminishing_window=args.agentic_diminishing_window,
+                    diminishing_min_delta=args.agentic_diminishing_min_delta,
                 ),
             ).run()
+
+        campaign_manifest_path = _write_campaign_manifest_if_enabled(args, output_path)
+        if campaign_manifest_path:
+            agentic["campaign"] = {
+                **(getattr(args, "_campaign_manifest", {}) or {}),
+                "manifest_path": campaign_manifest_path,
+            }
+            output_path.write_text(json.dumps(agentic, indent=2), encoding="utf-8")
 
         best_result = (agentic.get("successful_payloads") or [{}])[0]
         print(
@@ -2628,6 +2246,12 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         "category_gap_report": build_category_gap_report(results),
         "results": results,
     }
+    campaign_manifest_path = _write_campaign_manifest_if_enabled(args, Path(args.output))
+    if campaign_manifest_path:
+        output["campaign"] = {
+            **(getattr(args, "_campaign_manifest", {}) or {}),
+            "manifest_path": campaign_manifest_path,
+        }
     output = _finalize_summary_with_plugins(output, results, args, plugins)
     Path(args.output).write_text(json.dumps(output, indent=2))
     print(
@@ -2666,6 +2290,310 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
             )
             return FAIL_THRESHOLD
     return PASS
+
+
+def _launch_runner_subprocess(mode: str, parsed_args: dict) -> tuple[int, dict]:
+    """Launch a runner subprocess and return exit code and result metadata."""
+    artifact_root = Path(parsed_args.get("artifact_dir") or "runs").resolve()
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    launch_id = f"{mode}-{stamp}-{uuid4().hex[:8]}"
+    launch_root = artifact_root / ".launches" / launch_id
+    launch_root.mkdir(parents=True, exist_ok=True)
+    
+    output_path = launch_root / "summary.json"
+    log_path = launch_root / "launch.log"
+    
+    # Launch legacy CLI args directly to avoid recursively invoking the `run` wrapper.
+    command = [
+        sys.executable,
+        "-m",
+        "kit.runner",
+        "--mode",
+        mode,
+    ]
+    
+    # Map common arguments to --mode args
+    if mode in {"api", "agentic"}:
+        if parsed_args.get("base_url"):
+            command.extend(["--base-url", parsed_args["base_url"]])
+        if parsed_args.get("max_attacks"):
+            command.extend(["--max-attacks", str(parsed_args["max_attacks"])])
+        if parsed_args.get("category"):
+            command.extend(["--category", parsed_args["category"]])
+    
+    if mode in {"website", "combined"}:
+        if parsed_args.get("target_url"):
+            command.extend(["--target-url", parsed_args["target_url"]])
+        if parsed_args.get("max_pages"):
+            command.extend(["--max-pages", str(parsed_args["max_pages"])])
+        if parsed_args.get("max_depth"):
+            command.extend(["--max-depth", str(parsed_args["max_depth"])])
+    
+    if mode in {"repo", "combined"}:
+        if parsed_args.get("repo_url"):
+            command.extend(["--repo-url", parsed_args["repo_url"]])
+        elif parsed_args.get("repo_path"):
+            command.extend(["--repo-path", parsed_args["repo_path"]])
+    
+    command.extend([
+        "--artifact-dir",
+        str(artifact_root),
+        "--output",
+        str(output_path),
+        "--cli-only",
+    ])
+    
+    # Capture environment for subprocess
+    env = os.environ.copy()
+    
+    result_meta = {
+        "ok": True,
+        "status": "started",
+        "launch_id": launch_id,
+        "mode": mode,
+        "output_path": str(output_path.relative_to(artifact_root)),
+        "log_path": str(log_path.relative_to(artifact_root)),
+        "dashboard": "/dashboard/",
+    }
+    
+    try:
+        with open(log_path, "ab") as log_file:
+            process = subprocess.Popen(
+                command,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                env=env,
+            )
+        result_meta["pid"] = process.pid
+        result_meta["started_at"] = datetime.now(timezone.utc).isoformat()
+    except Exception as exc:
+        result_meta["ok"] = False
+        result_meta["error"] = str(exc)
+        result_meta["status"] = "failed"
+        return 1, result_meta
+    
+    # If --cli-only is set in the parsed args, wait for subprocess
+    if parsed_args.get("cli_only"):
+        try:
+            exit_code = process.wait(timeout=None)
+            result_meta["exit_code"] = exit_code
+            result_meta["status"] = "completed"
+            
+            # Load output if available
+            if output_path.exists():
+                try:
+                    result_meta["output"] = json.loads(output_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, IOError):
+                    pass
+            
+            return exit_code, result_meta
+        except Exception as exc:
+            result_meta["error"] = str(exc)
+            result_meta["status"] = "wait_failed"
+            return 1, result_meta
+    else:
+        # For async dashboard submission, return immediately
+        return 0, result_meta
+
+
+def _command_center_cli(argv: list[str]) -> int:
+    """Handle new command-center CLI commands: run, dashboard, compare, export, gate."""
+    if not argv:
+        print("Usage: python -m kit.runner {run,dashboard,compare,export,gate} ...", file=sys.stderr)
+        return 1
+    
+    command = argv[0]
+    args = argv[1:]
+    
+    # Parse common arguments for all commands
+    parser = argparse.ArgumentParser(description=f"Aletheia {command} command")
+    parser.add_argument("--artifact-dir", default="runs", help="Directory for artifacts and runs")
+    parser.add_argument("--host", default="127.0.0.1", help="Server host for dashboard")
+    parser.add_argument("--port", type=int, default=8080, help="Server port for dashboard")
+    parser.add_argument("--serve", action="store_true", help="Serve dashboard via HTTP")
+    parser.add_argument("--auth-mode", default="auto", help="Dashboard auth mode: auto, disabled, basic, api-key, proxy")
+    parser.add_argument("--cli-only", action="store_true", help="Block until subprocess completes (for CI)")
+    
+    if command == "run":
+        # Subparser for run modes
+        parser.add_argument("--mode", choices=["api", "website", "agentic", "repo", "combined"], default="api")
+        parser.add_argument("--targets-file", default=None, help="JSON file listing multiple targets to batch")
+
+        # Mode-specific arguments
+        parser.add_argument("--base-url", help="API base URL for api/agentic modes")
+        parser.add_argument("--target-url", help="Website URL for website/combined modes")
+        parser.add_argument("--repo-url", help="GitHub repo URL for repo/combined modes")
+        parser.add_argument("--repo-path", default=".", help="Local repo path for repo mode")
+        parser.add_argument("--category", help="Attack category filter")
+        parser.add_argument("--max-attacks", type=int, help="Maximum attacks to run")
+        parser.add_argument("--max-pages", type=int, help="Max pages for website audit")
+        parser.add_argument("--max-depth", type=int, help="Max depth for website audit")
+        parser.add_argument("--output", default="summary.json", help="Output file path")
+        parser.add_argument("--baseline", default=None, help="Baseline summary.json for regression comparison")
+
+        parsed = parser.parse_args(args)
+        mode = parsed.mode
+
+        if parsed.cli_only:
+            # Run in-process via _legacy_cli then write command-center artifacts
+            legacy_argv: list[str] = ["--mode", mode, "--output", parsed.output]
+            if getattr(parsed, "base_url", None):
+                legacy_argv += ["--base-url", parsed.base_url]
+            if getattr(parsed, "target_url", None):
+                legacy_argv += ["--target-url", parsed.target_url]
+            if getattr(parsed, "repo_url", None):
+                legacy_argv += ["--repo-url", parsed.repo_url]
+            if getattr(parsed, "repo_path", None) and parsed.repo_path != ".":
+                legacy_argv += ["--repo-path", parsed.repo_path]
+            if getattr(parsed, "category", None):
+                legacy_argv += ["--category", parsed.category]
+            if getattr(parsed, "max_attacks", None):
+                legacy_argv += ["--max-attacks", str(parsed.max_attacks)]
+            rc = _legacy_cli(legacy_argv)
+            if rc == 0:
+                summary_path = Path(parsed.output)
+                if summary_path.exists():
+                    artifact_dir = Path(parsed.artifact_dir).resolve()
+                    _write_command_center_artifacts(
+                        summary_path,
+                        artifact_dir,
+                        dashboard_file=None,
+                        baseline_path=getattr(parsed, "baseline", None),
+                    )
+            return rc
+        elif getattr(parsed, "targets_file", None):
+            batch_summary, batch_root = _run_targets_batch(parsed)
+            output_path = Path(parsed.output)
+            output_path.write_text(json.dumps(batch_summary, indent=2, default=str), encoding="utf-8")
+            print(json.dumps({"status": "batch_complete", "batch_root": str(batch_root)}, indent=2))
+            return 0
+        else:
+            # Async subprocess launch
+            parsed_dict = vars(parsed)
+            exit_code, result = _launch_runner_subprocess(mode, parsed_dict)
+            print(json.dumps(result, indent=2))
+            return exit_code
+    
+    elif command == "dashboard":
+        parser.add_argument("--dashboard-file", default=None, help="Path to dashboard index.html")
+        parser.set_defaults(auth_mode="basic")
+
+        parsed = parser.parse_args(args)
+
+        artifact_dir = Path(parsed.artifact_dir).resolve()
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+
+        repo_root = Path.cwd()
+        if parsed.dashboard_file:
+            dashboard_file = Path(parsed.dashboard_file)
+        else:
+            dashboard_file = repo_root / "dashboard" / "index.html"
+
+        if not dashboard_file.exists():
+            print(f"Dashboard file not found: {dashboard_file}", file=sys.stderr)
+            return 1
+
+        config = DashboardServerConfig(
+            repo_root=repo_root,
+            artifact_dir=artifact_dir,
+            dashboard_file=dashboard_file,
+            host=parsed.host,
+            port=parsed.port,
+            auth_mode=parsed.auth_mode,
+        )
+        
+        try:
+            serve_dashboard(config)
+            return 0
+        except KeyboardInterrupt:
+            print("\nDashboard server stopped.", file=sys.stderr)
+            return 0
+        except Exception as exc:
+            print(f"Dashboard error: {exc}", file=sys.stderr)
+            return 1
+    
+    elif command == "compare":
+        parser.add_argument("--baseline", required=True, help="Baseline summary.json")
+        parser.add_argument("--current", required=True, help="Current summary.json")
+        parser.add_argument("--output", help="Output comparison JSON")
+        
+        parsed = parser.parse_args(args)
+        
+        baseline_path = Path(parsed.baseline)
+        current_path = Path(parsed.current)
+        
+        if not baseline_path.exists() or not current_path.exists():
+            print("Baseline or current file not found", file=sys.stderr)
+            return 1
+        
+        baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
+        current = json.loads(current_path.read_text(encoding="utf-8"))
+        
+        comparison = compare_summaries(current, baseline)
+        
+        if parsed.output:
+            Path(parsed.output).write_text(json.dumps(comparison, indent=2), encoding="utf-8")
+            print(f"Comparison written to {parsed.output}", file=sys.stderr)
+        else:
+            print(json.dumps(comparison, indent=2))
+        
+        return 0
+    
+    elif command == "export":
+        parser.add_argument("--input", required=True, help="Input summary.json")
+        parser.add_argument("--format", choices=["csv", "json"], default="csv", help="Export format")
+        parser.add_argument("--output", required=True, help="Output file")
+        parser.add_argument("--filter", dest="filter_expr", default=None, help="Filter expression e.g. category=prompt_injection")
+
+        parsed = parser.parse_args(args)
+
+        input_path = Path(parsed.input)
+        if not input_path.exists():
+            print(f"Input file not found: {input_path}", file=sys.stderr)
+            return 1
+
+        summary = json.loads(input_path.read_text(encoding="utf-8"))
+        results = summary.get("results") or summary.get("components", {}).get("api", {}).get("results", [])
+
+        if parsed.filter_expr:
+            results = apply_finding_filter(results, parsed.filter_expr)
+
+        output_path = Path(parsed.output)
+        export_rows(results, output_path, parsed.format)
+        print(f"Exported {len(results)} rows to {parsed.output}", file=sys.stderr)
+
+        return 0
+    
+    elif command == "gate":
+        parser.add_argument("--input", required=True, help="Input summary.json")
+        parser.add_argument("--thresholds", default=None, help="Threshold expression e.g. max_unknown=5,min_pass_rate=80")
+        parser.add_argument("--output", help="Output gate result JSON")
+
+        parsed = parser.parse_args(args)
+
+        input_path = Path(parsed.input)
+        if not input_path.exists():
+            print(f"Input file not found: {input_path}", file=sys.stderr)
+            return 1
+
+        summary = json.loads(input_path.read_text(encoding="utf-8"))
+
+        gate_result = evaluate_gates(summary, parsed.thresholds)
+
+        if parsed.output:
+            Path(parsed.output).write_text(json.dumps(gate_result, indent=2), encoding="utf-8")
+            print(f"Gate result written to {parsed.output}", file=sys.stderr)
+        else:
+            print(json.dumps(gate_result, indent=2))
+
+        gate_pass = gate_result.get("pass", False)
+        return 0 if gate_pass else 1
+    
+    else:
+        print(f"Unknown command: {command}", file=sys.stderr)
+        return 1
 
 
 def cli() -> int:

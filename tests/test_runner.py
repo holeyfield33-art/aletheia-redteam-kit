@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 import sqlite3
 
+import httpx
 import pytest
 
 from kit import runner
@@ -76,6 +78,86 @@ def test_run_attack_returns_error_record_without_crashing() -> None:
     assert result["actual_decision"] == "ERROR"
     assert result["match"] is False
     assert "rate limited" in result["error"]
+    assert result["error_category"] == "unknown_error"
+    assert result["error_is_transient"] is False
+
+
+def test_run_attack_categorizes_timeout_as_transient_error() -> None:
+    class FakeClient:
+        def audit(self, payload: str, action: str, origin: str):
+            raise httpx.TimeoutException("timed out")
+
+    attack = {
+        "id": "TA_TIMEOUT",
+        "name": "timeout test",
+        "category": "tool_abuse",
+        "expected_decision": "DENIED",
+        "payload": "run shell",
+    }
+
+    result = run_attack(FakeClient(), attack, include_status_code=True)
+    assert result["actual_decision"] == "ERROR"
+    assert result["error_category"] == "timeout"
+    assert result["error_is_transient"] is True
+    assert result["status_code"] is None
+
+
+def test_run_attack_categorizes_429_as_rate_limited(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeClient:
+        def audit(self, payload: str, action: str, origin: str):
+            request = httpx.Request("POST", "https://example.test/api/v1/audit")
+            response = httpx.Response(429, request=request)
+            raise httpx.HTTPStatusError("429 Too Many Requests", request=request, response=response)
+
+    attack = {
+        "id": "TA_429",
+        "name": "rate limit test",
+        "category": "tool_abuse",
+        "expected_decision": "DENIED",
+        "payload": "run shell",
+    }
+
+    # Avoid waiting on 5xx retry paths in case the implementation changes.
+    monkeypatch.setattr(runner.time, "sleep", lambda _sec: None)
+    result = run_attack(FakeClient(), attack, include_status_code=True)
+    assert result["actual_decision"] == "ERROR"
+    assert result["error_category"] == "rate_limited"
+    assert result["error_is_transient"] is True
+    assert result["status_code"] == 429
+
+
+def test_adjust_request_delay_from_result_handles_transient_and_recovery() -> None:
+    delay = 1.0
+    delay = runner._adjust_request_delay_from_result(
+        delay,
+        {"actual_decision": "ERROR", "error_category": "timeout", "status_code": None},
+    )
+    assert delay == pytest.approx(1.5)
+
+    delay = runner._adjust_request_delay_from_result(
+        delay,
+        {"actual_decision": "ERROR", "error_category": "rate_limited", "status_code": 429},
+    )
+    assert delay == pytest.approx(3.0)
+
+    delay = runner._adjust_request_delay_from_result(
+        delay,
+        {"actual_decision": "DENIED", "status_code": 200},
+    )
+    assert delay < 3.0
+
+
+def test_summarize_includes_error_category_counts() -> None:
+    summary = summarize(
+        [
+            {"category": "x", "actual_decision": "ERROR", "match": False, "error_category": "timeout"},
+            {"category": "x", "actual_decision": "ERROR", "match": False, "error_category": "timeout"},
+            {"category": "x", "actual_decision": "ERROR", "match": False, "error_category": "auth_error"},
+            {"category": "x", "actual_decision": "DENIED", "match": True},
+        ]
+    )
+    assert summary["error_categories"]["timeout"] == 2
+    assert summary["error_categories"]["auth_error"] == 1
 
 
 def test_run_attack_preserves_custom_technique() -> None:
@@ -183,7 +265,7 @@ def test_cli_api_mode_forwards_threat_feed_file(monkeypatch: pytest.MonkeyPatch,
             return False
 
     monkeypatch.setattr(runner, "load_attacks", _fake_load_attacks)
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(runner, "run_attacks_with_backoff", lambda client, attacks: [{
         "id": "BC_001",
         "name": "Benign",
@@ -239,7 +321,7 @@ def test_cli_agentic_mode_uses_default_output_path(monkeypatch: pytest.MonkeyPat
             }
 
     class FakeClient:
-        def __init__(self, base_url=None):
+        def __init__(self, base_url=None, target_profile=None, **_kw):
             self.base_url = base_url or "https://example.com"
 
         def __enter__(self):
@@ -752,7 +834,7 @@ def test_cli_combined_mode_writes_merged_summary(monkeypatch: pytest.MonkeyPatch
     output = tmp_path / "combined_summary.json"
 
     class FakeClient:
-        def __init__(self, base_url: str | None = None):
+        def __init__(self, base_url: str | None = None, target_profile=None, **_kw):
             self.base_url = base_url or "https://api.example.com"
 
         def __enter__(self):
@@ -864,7 +946,7 @@ def test_cli_api_mode_threshold_failure(monkeypatch: pytest.MonkeyPatch, tmp_pat
             }
         ],
     )
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -908,7 +990,7 @@ def test_cli_api_mode_threshold_pass(monkeypatch: pytest.MonkeyPatch, tmp_path) 
             }
         ],
     )
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -1021,6 +1103,59 @@ def test_reconcile_results_skips_auth_required_lookups_from_coverage() -> None:
     assert reconciliation["skipped_request_ids"] == ["req-1"]
 
 
+def test_reconcile_results_dedupes_duplicate_request_ids() -> None:
+    class FakeClient:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def lookup_decision(self, request_id: str):
+            self.calls.append(request_id)
+            return type(
+                "Lookup",
+                (),
+                {
+                    "request_id": request_id,
+                    "decision": "SANDBOX_BLOCKED",
+                    "endpoint": "https://api.example.com/api/v1/receipt/req-1",
+                    "auth_mode": "api_key",
+                },
+            )()
+
+    client = FakeClient()
+    rows = [
+        {
+            "id": "A1",
+            "name": "a",
+            "category": "prompt_injection",
+            "expected_decision": "DENIED",
+            "actual_decision": "UNKNOWN",
+            "match": False,
+            "request_id": "req-1",
+            "reason": "empty",
+        },
+        {
+            "id": "A2",
+            "name": "b",
+            "category": "prompt_injection",
+            "expected_decision": "DENIED",
+            "actual_decision": "ERROR",
+            "match": False,
+            "request_id": "req-1",
+            "reason": "timeout",
+        },
+    ]
+
+    reconciliation = reconcile_results(rows, client)
+
+    assert client.calls == ["req-1"]
+    assert reconciliation["total_reconciled"] == 1
+    assert reconciliation["reconcilable_total"] == 1
+    assert reconciliation["unreconciled"] == 0
+    assert reconciliation["reconciliation_coverage_pct"] == 100.0
+    assert all(row["actual_decision"] == "DENIED" for row in rows)
+    assert all(row["match"] is True for row in rows)
+
+
 def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     output = tmp_path / "summary.json"
 
@@ -1061,7 +1196,7 @@ def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeyp
             }
         ],
     )
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -1074,7 +1209,8 @@ def test_cli_api_mode_fails_when_reconciliation_coverage_below_threshold(monkeyp
     rc = runner.cli()
     data = json.loads(output.read_text())
     assert rc == 2
-    assert data["reconciliation"]["reconcilable_total"] == data["attacks_total"]
+    assert data["attacks_total"] == 6
+    assert data["reconciliation"]["reconcilable_total"] == 1
     assert data["reconciliation"]["reconciliation_coverage_pct"] == 0.0
 
 
@@ -1118,7 +1254,7 @@ def test_cli_api_mode_skips_auth_required_reconciliation_gap(monkeypatch: pytest
             }
         ],
     )
-    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None: FakeClient())
+    monkeypatch.setattr(runner, "AletheiaClient", lambda base_url=None, **_kw: FakeClient())
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -1158,7 +1294,7 @@ def test_cli_combined_mode_applies_gate_exception(monkeypatch: pytest.MonkeyPatc
     )
 
     class FakeClient:
-        def __init__(self, base_url: str | None = None):
+        def __init__(self, base_url: str | None = None, target_profile=None, **_kw):
             self.base_url = base_url or "https://api.example.com"
 
         def __enter__(self):
@@ -1974,3 +2110,161 @@ def test_cli_combined_targets_file_batches_and_aggregates(monkeypatch: pytest.Mo
     with sqlite3.connect(combined_sqlite) as conn:
         target_count = conn.execute("SELECT COUNT(*) FROM targets").fetchone()[0]
         assert target_count == 2
+
+
+def test_cli_combined_targets_file_writes_distinct_combined_artifacts_within_same_second(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    targets_file = tmp_path / "targets.json"
+    targets_file.write_text(
+        json.dumps(
+            [
+                {"type": "api", "url": "https://api.example.com", "label": "api-one"},
+                {"type": "repo", "path": str(tmp_path / "repo-one"), "label": "repo-one"},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    artifact_dir = tmp_path / "artifacts"
+    output = tmp_path / "batch_summary.json"
+    repo_dir = tmp_path / "repo-one"
+    repo_dir.mkdir()
+
+    class SameSecondDateTime:
+        _tick = 0
+
+        @classmethod
+        def now(cls, tz=None):
+            value = datetime(2026, 5, 5, 0, 0, 0, cls._tick, tzinfo=timezone.utc)
+            cls._tick += 1
+            if tz is None:
+                return value.replace(tzinfo=None)
+            return value.astimezone(tz)
+
+    class FakeClient:
+        base_url = "https://api.example.com"
+
+        def __init__(self, base_url=None, target_profile=None):
+            self.base_url = base_url or self.base_url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(runner, "datetime", SameSecondDateTime)
+    monkeypatch.setattr(runner, "AletheiaClient", FakeClient)
+    monkeypatch.setattr(
+        runner,
+        "load_attacks",
+        lambda category=None, threat_feed_file=None: [
+            {
+                "id": "BC_001",
+                "name": "Batch benign",
+                "category": "benign_controls",
+                "payload": "show uptime",
+                "expected_decision": "PROCEED",
+                "severity": "LOW",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        runner,
+        "run_attacks_with_backoff",
+        lambda client, attacks, plugins=None, plugin_args=None: [
+            {
+                "id": "BC_001",
+                "name": "Batch benign",
+                "category": "benign_controls",
+                "technique": "benign_operational_request",
+                "severity": "LOW",
+                "variant_kind": "seed",
+                "effectiveness_tier": "baseline",
+                "target_surface": "prompt_interface",
+                "mutation_strategy": None,
+                "family_id": None,
+                "source": None,
+                "expected_decision": "PROCEED",
+                "actual_decision": "PROCEED",
+                "match": True,
+                "request_id": "req-1",
+                "latency_ms": 1.0,
+                "receipt": {"sig": "x"},
+                "reason": None,
+                "error": None,
+                "status_code": 200,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        runner,
+        "reconcile_results",
+        lambda results, client: {
+            "total_reconciled": 0,
+            "unreconciled": 0,
+            "reconciliation_coverage_pct": 100.0,
+            "unreconciled_request_ids": [],
+            "endpoint": None,
+            "auth_mode": "unknown",
+        },
+    )
+    monkeypatch.setattr(runner, "build_gap_report", lambda results: {})
+    monkeypatch.setattr(runner, "build_category_gap_report", lambda results: {})
+    monkeypatch.setattr(
+        runner,
+        "run_repo_audit",
+        lambda repo_path, repo_url=None, threat_feed_path=None, include_test_fixtures=False, deps_scan="auto", **_kwargs: {
+            "generated_at": "2026-05-05T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": str(repo_path),
+            "files_scanned": 1,
+            "findings_total": 1,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 0, "LOW": 0},
+            "findings_by_type": {"dummy": 1},
+            "risk_score": 90,
+            "gates": {"pass": True, "violations": []},
+            "findings": [
+                {
+                    "severity": "HIGH",
+                    "type": "dummy",
+                    "title": "Repo finding",
+                    "file": "repo.py",
+                    "line": 1,
+                    "evidence": "x",
+                    "recommendation": "y",
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "combined",
+            "--targets-file",
+            str(targets_file),
+            "--artifact-dir",
+            str(artifact_dir),
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+
+    assert rc == 0
+    runner._write_command_center_artifacts(
+        output,
+        artifact_dir,
+        dashboard_file=None,
+        baseline_path=None,
+    )
+    combined_runs = sorted(artifact_dir.glob("run-combined-*"))
+    assert len(combined_runs) == 2
+    for combined_run in combined_runs:
+        with sqlite3.connect(combined_run / "command_center.sqlite") as conn:
+            target_count = conn.execute("SELECT COUNT(*) FROM targets").fetchone()[0]
+            assert target_count == 2

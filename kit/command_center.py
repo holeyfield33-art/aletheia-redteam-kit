@@ -38,6 +38,35 @@ def _decision_label(raw: str | None) -> str:
     return "unknown"
 
 
+def _append_artifact(
+    artifacts: list[dict[str, Any]],
+    *,
+    run_id: str,
+    artifact_type: str,
+    path: str | None,
+    created_at: str,
+    seen: set[tuple[str, str]],
+) -> None:
+    normalized_path = str(path or "").strip()
+    if not normalized_path:
+        return
+    dedupe_key = (artifact_type, normalized_path)
+    if dedupe_key in seen:
+        return
+    seen.add(dedupe_key)
+    artifacts.append(
+        {
+            "id": str(uuid.uuid4()),
+            "run_id": run_id,
+            "artifact_type": artifact_type,
+            "path": normalized_path,
+            "mime_type": "application/json",
+            "sha256": None,
+            "created_at": created_at,
+        }
+    )
+
+
 def normalize_summary_to_command_center(
     summary: dict[str, Any],
     *,
@@ -281,6 +310,43 @@ def normalize_summary_to_command_center(
             ]
         )
 
+        if mode == "repo":
+            dep_signals = ((summary.get("dependencies") or {}).get("signals") or {})
+            metrics.extend(
+                [
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "scope_type": "run",
+                        "scope_key": None,
+                        "metric_name": "dependency_malware_suspect_total",
+                        "metric_value": _safe_float(dep_signals.get("malware_suspect_total")),
+                        "metric_unit": "count",
+                        "created_at": started_at,
+                    },
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "scope_type": "run",
+                        "scope_key": None,
+                        "metric_name": "dependency_tampering_risk_total",
+                        "metric_value": _safe_float(dep_signals.get("tampering_risk_total")),
+                        "metric_unit": "count",
+                        "created_at": started_at,
+                    },
+                    {
+                        "id": str(uuid.uuid4()),
+                        "run_id": run_id,
+                        "scope_type": "run",
+                        "scope_key": None,
+                        "metric_name": "suspicious_dependency_package_total",
+                        "metric_value": _safe_float(dep_signals.get("suspicious_package_total")),
+                        "metric_unit": "count",
+                        "created_at": started_at,
+                    },
+                ]
+            )
+
     elif mode == "combined":
         component_lookup = dict(summary.get("components") or {})
         target_rows = list(summary.get("targets") or [])
@@ -423,18 +489,48 @@ def normalize_summary_to_command_center(
         }
     )
 
-    if source_path:
-        artifacts.append(
-            {
-                "id": str(uuid.uuid4()),
-                "run_id": run_id,
-                "artifact_type": "summary_json",
-                "path": source_path,
-                "mime_type": "application/json",
-                "sha256": None,
-                "created_at": started_at,
-            }
+    artifact_seen: set[tuple[str, str]] = set()
+    _append_artifact(
+        artifacts,
+        run_id=run_id,
+        artifact_type="summary_json",
+        path=source_path,
+        created_at=started_at,
+        seen=artifact_seen,
+    )
+
+    campaign_manifest_path = ((summary.get("campaign") or {}).get("manifest_path") if isinstance(summary.get("campaign"), dict) else None)
+    if not campaign_manifest_path and mode == "combined":
+        campaign_manifest_path = (
+            ((summary.get("components") or {}).get("api") or {}).get("campaign", {}).get("manifest_path")
+            if isinstance(((summary.get("components") or {}).get("api") or {}), dict)
+            else None
         )
+
+    _append_artifact(
+        artifacts,
+        run_id=run_id,
+        artifact_type="campaign_manifest_json",
+        path=campaign_manifest_path,
+        created_at=started_at,
+        seen=artifact_seen,
+    )
+    _append_artifact(
+        artifacts,
+        run_id=run_id,
+        artifact_type="learning_snapshot_json",
+        path=summary.get("learning_snapshot_path"),
+        created_at=started_at,
+        seen=artifact_seen,
+    )
+    _append_artifact(
+        artifacts,
+        run_id=run_id,
+        artifact_type="mutation_effectiveness_json",
+        path=summary.get("mutation_effectiveness_path"),
+        created_at=started_at,
+        seen=artifact_seen,
+    )
 
     run_summary_view = {
         "run_id": run_id,

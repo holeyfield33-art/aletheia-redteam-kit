@@ -1,0 +1,70 @@
+rules:
+  - id: javascript-eval
+    message: JavaScript eval usage
+    severity: ERROR
+    languages: [javascript, typescript]
+    patterns:
+      - pattern-regex: "\\beval\\s*\\("
+    paths:
+      exclude:
+        - node_modules/**
+        - .next/**
+        - dist/**
+        - build/**
+        - .venv/**
+
+  - id: javascript-function-constructor
+    message: JavaScript Function constructor usage
+    severity: ERROR
+    languages: [javascript, typescript]
+    patterns:
+      - pattern-regex: "\\bnew\\s+Function\\s*\\("
+    paths:
+      exclude:
+        - node_modules/**
+        - .next/**
+        - dist/**
+        - build/**
+        - .venv/**
+
+  - id: javascript-child-process-exec-untrusted
+    message: Command execution using request-controlled data
+    severity: ERROR
+    languages: [javascript, typescript]
+    patterns:
+      - pattern-regex: "\\bexec\\s*\\([^\\n]*(req\\.|request\\.)"
+    paths:
+      exclude:
+        - node_modules/**
+        - .next/**
+        - dist/**
+        - build/**
+        - .venv/**
+
+  - id: python-dynamic-exec-untrusted
+    message: Python eval/exec used with input-controlled data
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern-regex: "\\b(eval|exec)\\s*\\(\\s*(input\\(|request\\.)"
+    paths:
+      exclude:
+        - node_modules/**
+        - .next/**
+        - dist/**
+        - build/**
+        - .venv/**
+
+  - id: python-subprocess-shell-true
+    message: subprocess shell=True usage
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern-regex: "subprocess\\.(run|Popen|call|check_output)\\([^\\n]*shell\\s*=\\s*True"
+    paths:
+      exclude:
+        - node_modules/**
+        - .next/**
+        - dist/**
+        - build/**
+        - .venv/**

@@ -1,0 +1,5 @@
+# Format:
+# scanner|file_glob|finding_type|evidence_regex # owner: <owner> # reason: <reason>
+#
+# Keep this file empty unless a finding is intentionally accepted for a known corpus/fixture path.
+# Every ignore must include both owner and reason.

@@ -6,6 +6,8 @@ import {
   ApiTestResult,
   AuditModeSelection,
   AuditLog,
+  LaunchAuditRecord,
+  LaunchAuditRequest,
   ProjectId,
   RuntimeMode,
   SidebarView,
@@ -14,14 +16,20 @@ import {
 } from "@/lib/types";
 
 const SIDEBAR_ITEMS: Array<{ key: SidebarView; label: string; icon: string }> = [
-  { key: "Command", label: "Overview", icon: "OVR" },
-  { key: "Inspector", label: "Runs", icon: "RUN" },
-  { key: "Adversary", label: "Launch", icon: "ACT" },
-  { key: "ApiTesting", label: "Attack Lab", icon: "LAB" },
-  { key: "Mneme", label: "Settings", icon: "SYS" },
+  { key: "Home", label: "Home", icon: "HME" },
+  { key: "RunAudit", label: "Run Audit", icon: "RUN" },
+  { key: "Results", label: "Results", icon: "RSL" },
+  { key: "History", label: "History", icon: "HIS" },
+  { key: "Settings", label: "Settings", icon: "SYS" },
 ];
 
 const WORKSPACE_TABS: WorkspaceTab[] = ["Integrity", "Supply Chain", "Narrative", "Adversarial"];
+const WORKSPACE_TAB_LABELS: Record<WorkspaceTab, string> = {
+  Integrity: "Integrity checks",
+  "Supply Chain": "Code risks",
+  Narrative: "Workflow drift",
+  Adversarial: "Attack outcomes",
+};
 const API_PROFILE_STORAGE_KEY = "aletheia.apiTestProfiles.v1";
 
 type AuditLaunchMode = "combined" | "api" | "website" | "repo" | "url";
@@ -33,6 +41,34 @@ const AUDIT_LAUNCH_MODES: Array<{ key: AuditLaunchMode; label: string; descripti
   { key: "repo", label: "Repository only", description: "Combined report focused on repo" },
   { key: "url", label: "Specific URL", description: "Endpoint-level attack sweep" },
 ];
+
+const AUDIT_TEMPLATE_COPY: Record<AuditLaunchMode, { title: string; summary: string; cta: string }> = {
+  combined: {
+    title: "Full combined audit",
+    summary: "Run the broadest audit across API, website, and repository surfaces with safe defaults.",
+    cta: "Start combined audit",
+  },
+  api: {
+    title: "API check",
+    summary: "Focus on API behavior and policy decisions without running website or repository analysis.",
+    cta: "Start API audit",
+  },
+  website: {
+    title: "Website scan",
+    summary: "Review a target URL for website-level findings and control-surface weaknesses.",
+    cta: "Start website audit",
+  },
+  repo: {
+    title: "Repository scan",
+    summary: "Inspect repository hygiene, secrets exposure, and code-risk indicators.",
+    cta: "Start repository audit",
+  },
+  url: {
+    title: "Specific endpoint test",
+    summary: "Run targeted URL and endpoint checks with optional method fuzzing and parameter injection.",
+    cta: "Start endpoint test",
+  },
+};
 
 interface ApiTestProfile {
   id: string;
@@ -46,6 +82,8 @@ interface ApiTestProfile {
   selectedPayloadCategories: string[];
   updatedAt: string;
 }
+
+const TERMINAL_LAUNCH_STATES = new Set(["completed", "failed"] as const);
 
 function severityClass(severity: string): string {
   switch (severity.toUpperCase()) {
@@ -169,7 +207,7 @@ function RemediationCards({
 export default function Home() {
   const [projectId, setProjectId] = useState<ProjectId>("aletheia-core");
   const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>("OFFLINE");
-  const [activeView, setActiveView] = useState<SidebarView>("Command");
+  const [activeView, setActiveView] = useState<SidebarView>("Home");
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("Integrity");
   const [report, setReport] = useState<SovereignAuditReport | null>(null);
   const [payloads, setPayloads] = useState<Array<{ id: string; name: string; category: string; severity: string }>>([]);
@@ -189,6 +227,7 @@ export default function Home() {
   const [selectedPayloadCategories, setSelectedPayloadCategories] = useState<string[]>([]);
   const [apiProfileName, setApiProfileName] = useState("");
   const [auditLaunchMode, setAuditLaunchMode] = useState<AuditLaunchMode>("combined");
+  const [activeLaunchRunId, setActiveLaunchRunId] = useState<string | null>(null);
   const [apiProfiles, setApiProfiles] = useState<ApiTestProfile[]>(() => {
     if (typeof window === "undefined") {
       return [];
@@ -243,6 +282,20 @@ export default function Home() {
     const categories = Array.from(new Set(payloads.map((payload) => payload.category))).sort();
     return categories;
   }, [payloads]);
+
+  const latestFindingsSummary = useMemo(() => {
+    if (!report) {
+      return [] as Array<{ label: string; value: string }>;
+    }
+    return [
+      { label: "Confidence", value: `${report.confidenceScore}` },
+      { label: "Code findings", value: `${report.supplyChain.findings.length}` },
+      { label: "Narrative findings", value: `${report.narrative.findings.length}` },
+      { label: "Bypasses", value: `${report.adversarial.baselineVulnerabilities.length}` },
+    ];
+  }, [report]);
+
+  const latestActivity = useMemo(() => mnemeLogs.slice(0, 12), [mnemeLogs]);
 
   function persistApiProfiles(nextProfiles: ApiTestProfile[]): void {
     setApiProfiles(nextProfiles);
@@ -323,29 +376,33 @@ export default function Home() {
 
     if (nextMode === "combined") {
       setModeSelection({ api: true, website: true, repo: true });
+      setActiveView("RunAudit");
       setStatus("Prepared combined audit preset.");
       return;
     }
 
     if (nextMode === "api") {
       setModeSelection({ api: true, website: false, repo: false });
+      setActiveView("RunAudit");
       setStatus("Prepared API-only audit preset.");
       return;
     }
 
     if (nextMode === "website") {
       setModeSelection({ api: false, website: true, repo: false });
+      setActiveView("RunAudit");
       setStatus(`Prepared URL / website audit preset for ${selectedProject.runtimeEndpoint}.`);
       return;
     }
 
     if (nextMode === "repo") {
       setModeSelection({ api: false, website: false, repo: true });
+      setActiveView("RunAudit");
       setStatus("Prepared repository-only audit preset.");
       return;
     }
 
-    setActiveView("ApiTesting");
+    setActiveView("RunAudit");
     if (!apiSingleUrl.trim()) {
       setApiSingleUrl(selectedProject.runtimeEndpoint);
     }
@@ -355,12 +412,83 @@ export default function Home() {
     setStatus(`Prepared specific URL audit for ${selectedProject.runtimeEndpoint}.`);
   }
 
+  async function sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  async function pollLaunch(runId: string): Promise<LaunchAuditRecord> {
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      const response = await fetch(`/api/launch/${runId}`);
+      if (!response.ok) {
+        throw new Error(`Launch status request failed with HTTP ${response.status}`);
+      }
+
+      const record = (await response.json()) as LaunchAuditRecord;
+      setStatus(`Run ${runId.slice(0, 8)} status: ${record.status}`);
+
+      if (record.status === "completed" || record.status === "failed") {
+        return record;
+      }
+
+      await sleep(1000);
+    }
+
+    throw new Error("Launch timed out while waiting for completion.");
+  }
+
+  function buildLaunchRequest(mode: AuditLaunchMode, runMode: RuntimeMode): LaunchAuditRequest {
+    const single = apiSingleUrl.trim();
+    const batchTargets = apiBatchText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((url) => ({ url, method: apiMethod }));
+
+    return {
+      mode,
+      projectId,
+      runtimeMode: runMode,
+      modeSelection,
+      apiTestRequest:
+        mode === "url"
+          ? {
+              singleTarget: single ? { url: single, method: apiMethod } : undefined,
+              batchTargets,
+              jsonTargets: apiJsonTargets,
+              enableMethodFuzzing: apiMethodFuzzing,
+              enableParameterInjection: apiParameterInjection,
+              payloadCategoryFilter: selectedPayloadCategories.length ? selectedPayloadCategories : undefined,
+            }
+          : undefined,
+    };
+  }
+
+  async function executeLaunch(mode: AuditLaunchMode, runMode: RuntimeMode): Promise<LaunchAuditRecord> {
+    const requestBody = buildLaunchRequest(mode, runMode);
+
+    const launchResponse = await fetch("/api/launch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(requestBody),
+    });
+    if (!launchResponse.ok) {
+      throw new Error(`Launch start failed with HTTP ${launchResponse.status}`);
+    }
+
+    const launchSummary = (await launchResponse.json()) as { runId: string };
+    setActiveLaunchRunId(launchSummary.runId);
+    setStatus(`Launch queued: ${launchSummary.runId.slice(0, 8)}`);
+    return pollLaunch(launchSummary.runId);
+  }
+
   async function runSelectedAudit(): Promise<void> {
     if (auditLaunchMode === "url") {
       if (!apiSingleUrl.trim()) {
         setApiSingleUrl(selectedProject.runtimeEndpoint);
       }
-      setActiveView("ApiTesting");
+      setActiveView("RunAudit");
       await runApiEndpointTests();
       return;
     }
@@ -378,16 +506,21 @@ export default function Home() {
     setStatus(`Running ${reason} audit for ${projectId} in ${runMode} mode...`);
 
     try {
-      const response = await fetch("/api/engine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, runtimeMode: runMode, modeSelection }),
-      });
-      if (!response.ok) {
-        throw new Error(`Engine request failed with HTTP ${response.status}`);
+      const mode: AuditLaunchMode =
+        reason === "combined" || reason === "api" || reason === "website" || reason === "repo"
+          ? reason
+          : auditLaunchMode;
+      const launchRecord = await executeLaunch(mode, runMode);
+
+      if (launchRecord.status === "failed") {
+        throw new Error(launchRecord.error ?? "Audit launch failed.");
       }
 
-      const data = (await response.json()) as SovereignAuditReport;
+      if (!launchRecord.report) {
+        throw new Error("Launch completed but no report payload was returned.");
+      }
+
+      const data = launchRecord.report as SovereignAuditReport;
       setReport(data);
       setMnemeLogs((prev) => [
         ...data.logs,
@@ -398,6 +531,7 @@ export default function Home() {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
+      setActiveLaunchRunId(null);
       setLoading(false);
     }
   }
@@ -449,27 +583,18 @@ export default function Home() {
     setStatus("Running adversarial API endpoint tests...");
 
     try {
-      const response = await fetch("/api/test-endpoint", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          singleTarget: single ? { url: single, method: apiMethod } : undefined,
-          batchTargets,
-          jsonTargets: apiJsonTargets,
-          enableMethodFuzzing: apiMethodFuzzing,
-          enableParameterInjection: apiParameterInjection,
-          payloadCategoryFilter: selectedPayloadCategories.length ? selectedPayloadCategories : undefined,
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(`API test failed with HTTP ${response.status}`);
+      const launchRecord = await executeLaunch("url", runtimeMode);
+      if (launchRecord.status === "failed") {
+        throw new Error(launchRecord.error ?? "Endpoint launch failed.");
       }
-      const data = await response.json();
-      setApiResults((data.results ?? []) as ApiTestResult[]);
-      setStatus(`API endpoint testing completed: ${(data.results ?? []).length} test results.`);
+
+      const results = (launchRecord.apiResults ?? []) as ApiTestResult[];
+      setApiResults(results);
+      setStatus(`API endpoint testing completed: ${results.length} test results.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
+      setActiveLaunchRunId(null);
       setApiLoading(false);
     }
   }
@@ -526,8 +651,8 @@ export default function Home() {
     <div className="flex min-h-screen bg-background text-foreground">
       <aside className="w-64 border-r border-zinc-900 bg-black/50 p-4">
         <div className="mb-6">
-          <h1 className="text-lg font-semibold tracking-tight">Sovereign Command Center</h1>
-          <p className="mt-1 text-xs text-zinc-500">Operator overview for runs, findings, and launch controls</p>
+          <h1 className="text-lg font-semibold tracking-tight">Aletheia Workspace</h1>
+          <p className="mt-1 text-xs text-zinc-500">Guided audit launch, recent findings, and account controls</p>
         </div>
 
         <nav className="space-y-2">
@@ -583,100 +708,55 @@ export default function Home() {
               </select>
             </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                const next = runtimeMode === "CONNECTED" ? "OFFLINE" : "CONNECTED";
-                setRuntimeMode(next);
-                setMnemeLogs((prev) => [
-                  makeClientActionLog(projectId, next, "ui.runtime.toggle", { previous: runtimeMode, next }),
-                  ...prev,
-                ].slice(0, 400));
-              }}
-              className={`rounded-md border px-4 py-2 text-sm font-semibold ${
-                runtimeMode === "CONNECTED"
-                  ? "border-emerald-700 bg-emerald-950/40 text-emerald-300"
-                  : "border-red-700 bg-red-950/40 text-red-300"
-              }`}
-            >
-              Runtime Status: {runtimeMode}
-            </button>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => void runAudit(runtimeMode, "regular")}
-              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm hover:border-zinc-500 disabled:opacity-50"
-            >
-              Launch New Run
-            </button>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={() => void runAudit("OFFLINE", "pre-connection")}
-              className="rounded-md border border-red-700 bg-red-950/30 px-3 py-2 text-sm text-red-200 hover:bg-red-950/50 disabled:opacity-50"
-            >
-              Launch Pre-Connection Run
-            </button>
-            <span className="self-center text-xs text-zinc-500">{status}</span>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-4">
-            <span className="text-xs uppercase tracking-wide text-zinc-500">Run scope</span>
-            {([
-              ["api", "API"],
-              ["website", "Website"],
-              ["repo", "Repo"],
-            ] as const).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 text-xs text-zinc-300">
-                <input
-                  type="checkbox"
-                  checked={modeSelection[key]}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setModeSelection((prev) => ({ ...prev, [key]: checked }));
-                  }}
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-
-          <div className="mt-4 rounded-md border border-zinc-800 bg-black/30 p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs uppercase tracking-wide text-zinc-500">Audit preset</span>
-              {AUDIT_LAUNCH_MODES.map((mode) => {
-                const active = mode.key === auditLaunchMode;
-                return (
-                  <button
-                    key={mode.key}
-                    type="button"
-                    onClick={() => applyAuditLaunchMode(mode.key)}
-                    className={`rounded-md border px-3 py-2 text-xs transition ${
-                      active
-                        ? "border-red-700 bg-red-950/40 text-red-200"
-                        : "border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-zinc-600"
-                    }`}
-                    title={mode.description}
-                  >
-                    {mode.label}
-                  </button>
-                );
-              })}
               <button
                 type="button"
-                disabled={loading || apiLoading}
-                onClick={() => void runSelectedAudit()}
-                className="ml-auto rounded-md border border-red-700 bg-red-950/40 px-4 py-2 text-xs font-semibold text-red-200 hover:bg-red-950/60 disabled:opacity-50"
+                onClick={() => {
+                  const next = runtimeMode === "CONNECTED" ? "OFFLINE" : "CONNECTED";
+                  setRuntimeMode(next);
+                  setMnemeLogs((prev) => [
+                    makeClientActionLog(projectId, next, "ui.runtime.toggle", { previous: runtimeMode, next }),
+                    ...prev,
+                  ].slice(0, 400));
+                }}
+                className={`rounded-md border px-4 py-2 text-sm font-semibold ${
+                  runtimeMode === "CONNECTED"
+                    ? "border-emerald-700 bg-emerald-950/40 text-emerald-300"
+                    : "border-red-700 bg-red-950/40 text-red-300"
+                }`}
               >
-                Run selected audit
+                Runtime: {runtimeMode}
               </button>
+              <form action="/api/auth/logout" method="post">
+                <button
+                  type="submit"
+                  className="rounded-md border border-zinc-700 bg-zinc-950/50 px-4 py-2 text-sm text-zinc-200 hover:border-zinc-500"
+                >
+                  Sign out
+                </button>
+              </form>
             </div>
-            <p className="mt-2 text-[11px] text-zinc-500">
-              Output structure stays aligned to the chosen preset: combined reports for overview runs, or API result tables for URL-level checks.
-            </p>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveView("RunAudit")}
+              className="rounded-md border border-red-700 bg-red-950/40 px-3 py-2 text-sm text-red-100 hover:bg-red-950/60"
+            >
+              Run a new audit
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveView("Results")}
+              className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm hover:border-zinc-500"
+            >
+              Review latest results
+            </button>
+            <span className="self-center text-xs text-zinc-500">{status}</span>
+            {activeLaunchRunId ? (
+              <span className="self-center text-xs text-emerald-300">Active run: {activeLaunchRunId.slice(0, 8)}</span>
+            ) : null}
           </div>
         </header>
 
@@ -697,13 +777,13 @@ export default function Home() {
           </section>
         )}
 
-        {activeView === "Command" && (
+        {activeView === "Home" && (
           <section className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
             <div className="lg:col-span-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {[
-                { label: "Overall risk score", value: commandKpis.overallRiskScore, tone: "text-red-300" },
+                { label: "Overall risk", value: commandKpis.overallRiskScore, tone: "text-red-300" },
                 { label: "Block rate", value: `${commandKpis.blockRate}%`, tone: "text-emerald-300" },
-                { label: "Attack visibility", value: `${commandKpis.attackVisibility}%`, tone: "text-zinc-100" },
+                { label: "Coverage", value: `${commandKpis.attackVisibility}%`, tone: "text-zinc-100" },
                 { label: "Critical bypasses", value: commandKpis.criticalBypasses, tone: "text-orange-300" },
                 { label: "Last run", value: commandKpis.lastRun, tone: "text-zinc-300" },
               ].map((kpi) => (
@@ -715,9 +795,9 @@ export default function Home() {
             </div>
 
             <div className="panel p-4">
-              <h2 className="text-sm font-semibold tracking-wide text-zinc-200">Command Overview</h2>
+              <h2 className="text-sm font-semibold tracking-wide text-zinc-200">Latest run snapshot</h2>
               <p className="mb-3 text-xs text-zinc-500">
-                Streaming only when runtime is CONNECTED. Current endpoint: {selectedProject.runtimeEndpoint}
+                Current target endpoint: {selectedProject.runtimeEndpoint}
               </p>
               <LineGraph values={report?.gueK1Series ?? []} />
             </div>
@@ -725,39 +805,70 @@ export default function Home() {
             <div className="space-y-4">
               <ConfidenceGauge score={commandStats.confidence} />
               <div className="panel p-4 text-sm">
-                <h3 className="font-semibold text-zinc-100">Overview metrics</h3>
+                <h3 className="font-semibold text-zinc-100">What needs attention</h3>
                 <ul className="mt-2 space-y-1 text-zinc-300">
                   <li>Total findings: {commandStats.totalFindings}</li>
                   <li className="accent-crimson">Critical bypasses: {commandStats.baselineVulns}</li>
-                  <li className="accent-emerald">Signed-ready events: {mnemeLogs.length}</li>
+                  <li className="accent-emerald">Recorded activities: {mnemeLogs.length}</li>
                 </ul>
               </div>
               <div className="panel p-4 text-sm">
-                <h3 className="font-semibold text-zinc-100">Quick actions</h3>
+                <h3 className="font-semibold text-zinc-100">Start here</h3>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    disabled={loading}
-                    onClick={() => void runAudit(runtimeMode, "regular")}
+                    onClick={() => setActiveView("RunAudit")}
                     className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs hover:border-zinc-500 disabled:opacity-50"
                   >
-                    Launch new run
+                    Run a new audit
                   </button>
                   <button
                     type="button"
-                    disabled={loading}
-                    onClick={() => void runAudit("OFFLINE", "pre-connection")}
-                    className="rounded-md border border-red-700 bg-red-950/30 px-3 py-2 text-xs text-red-200 hover:bg-red-950/50 disabled:opacity-50"
+                    onClick={() => setActiveView("History")}
+                    className="rounded-md border border-red-700 bg-red-950/30 px-3 py-2 text-xs text-red-200 hover:bg-red-950/50"
                   >
-                    Launch pre-connection run
+                    Review recent activity
                   </button>
                 </div>
+              </div>
+            </div>
+
+            <div className="panel p-4">
+              <h2 className="text-sm font-semibold text-zinc-100">Recommended audit templates</h2>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {AUDIT_LAUNCH_MODES.map((mode) => (
+                  <button
+                    key={mode.key}
+                    type="button"
+                    onClick={() => applyAuditLaunchMode(mode.key)}
+                    className="rounded-xl border border-zinc-800 bg-black/30 p-4 text-left transition hover:border-zinc-600"
+                  >
+                    <p className="text-sm font-semibold text-zinc-100">{AUDIT_TEMPLATE_COPY[mode.key].title}</p>
+                    <p className="mt-2 text-sm text-zinc-400">{AUDIT_TEMPLATE_COPY[mode.key].summary}</p>
+                    <p className="mt-3 text-xs uppercase tracking-wide text-emerald-300">{AUDIT_TEMPLATE_COPY[mode.key].cta}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="panel p-4">
+              <h2 className="text-sm font-semibold text-zinc-100">Latest findings</h2>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {latestFindingsSummary.map((item) => (
+                  <div key={item.label} className="rounded-lg border border-zinc-800 bg-black/30 p-3">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">{item.label}</p>
+                    <p className="mt-2 text-xl font-semibold text-zinc-100">{item.value}</p>
+                  </div>
+                ))}
+                {!latestFindingsSummary.length && (
+                  <p className="text-sm text-zinc-500">Run your first audit to populate this summary.</p>
+                )}
               </div>
             </div>
           </section>
         )}
 
-        {activeView === "Inspector" && (
+        {activeView === "Results" && (
           <section>
             <div className="mb-4 flex flex-wrap gap-2">
               {WORKSPACE_TABS.map((tab) => (
@@ -771,7 +882,7 @@ export default function Home() {
                       : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-600"
                   }`}
                 >
-                  [{tab}]
+                  {WORKSPACE_TAB_LABELS[tab]}
                 </button>
               ))}
             </div>
@@ -847,13 +958,80 @@ export default function Home() {
           </section>
         )}
 
-        {activeView === "Adversary" && report && (
+        {activeView === "RunAudit" && (
           <section className="space-y-4">
             <div className="panel p-4">
-              <h2 className="text-sm font-semibold">Attack launcher</h2>
+              <h2 className="text-sm font-semibold">Run Audit</h2>
               <p className="mt-1 text-xs text-zinc-500">
-                Source: aletheia-redteam-kit attack corpus. Pre-connection mode captures baseline bypasses.
+                Choose a guided template, confirm the scope, and launch with one primary action.
               </p>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {AUDIT_LAUNCH_MODES.map((mode) => {
+                  const active = auditLaunchMode === mode.key;
+                  return (
+                    <button
+                      key={mode.key}
+                      type="button"
+                      onClick={() => applyAuditLaunchMode(mode.key)}
+                      className={`rounded-xl border p-4 text-left transition ${
+                        active
+                          ? "border-red-700 bg-red-950/30"
+                          : "border-zinc-800 bg-black/30 hover:border-zinc-600"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-zinc-100">{AUDIT_TEMPLATE_COPY[mode.key].title}</p>
+                      <p className="mt-2 text-sm text-zinc-400">{AUDIT_TEMPLATE_COPY[mode.key].summary}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="panel rounded-md border border-zinc-800 bg-black/30 p-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="text-xs uppercase tracking-wide text-zinc-500">Audit scope</span>
+                {([
+                  ["api", "API"],
+                  ["website", "Website"],
+                  ["repo", "Repository"],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 text-xs text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={modeSelection[key]}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setModeSelection((prev) => ({ ...prev, [key]: checked }));
+                      }}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={loading || apiLoading}
+                  onClick={() => void runSelectedAudit()}
+                  className="rounded-md border border-red-700 bg-red-950/40 px-4 py-2 text-sm font-semibold text-red-100 hover:bg-red-950/60 disabled:opacity-50"
+                >
+                  {loading || apiLoading ? "Starting..." : AUDIT_TEMPLATE_COPY[auditLaunchMode].cta}
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void runAudit("OFFLINE", "pre-connection")}
+                  className="rounded-md border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
+                >
+                  Run offline baseline
+                </button>
+              </div>
+            </div>
+
+            <div className="panel p-4">
+              <h3 className="text-sm font-semibold">Included payload families</h3>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {payloads.slice(0, 18).map((payload) => (
                   <div key={payload.id} className="rounded border border-zinc-800 bg-black/30 p-2 text-xs">
@@ -862,40 +1040,20 @@ export default function Home() {
                     <p className={severityClass(payload.severity)}>{payload.severity}</p>
                   </div>
                 ))}
-              </div>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="panel p-4">
-                <h3 className="text-sm font-semibold text-red-200">Unprotected Results</h3>
-                <ul className="mt-2 space-y-1 text-xs text-zinc-300">
-                  {report.adversarial.outcomes.slice(0, 20).map((outcome) => (
-                    <li key={`${outcome.payloadId}-raw`}>
-                      {outcome.payloadId}: {outcome.unprotectedDecision}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="panel p-4">
-                <h3 className="text-sm font-semibold text-emerald-200">Aletheia-Protected Results</h3>
-                <ul className="mt-2 space-y-1 text-xs text-zinc-300">
-                  {report.adversarial.outcomes.slice(0, 20).map((outcome) => (
-                    <li key={`${outcome.payloadId}-protected`}>
-                      {outcome.payloadId}: {outcome.protectedDecision}
-                    </li>
-                  ))}
-                </ul>
+                {!payloads.length && <p className="text-sm text-zinc-500">Initialize the workspace to load payload families.</p>}
               </div>
             </div>
           </section>
         )}
 
-        {activeView === "ApiTesting" && (
+        {activeView === "RunAudit" && (
           <section className="space-y-4">
-            <div className="panel p-4">
-              <h2 className="text-sm font-semibold">URL / API Audits</h2>
+            <details className="panel p-4">
+              <summary className="cursor-pointer list-none text-sm font-semibold text-zinc-100">
+                Advanced endpoint testing
+              </summary>
               <p className="mt-1 text-xs text-zinc-500">
-                Run endpoint attacks with method fuzzing and parameter injection using payload corpus from attacks/*.json.
+                Use this only when you need to target specific URLs or run endpoint-level adversarial checks.
               </p>
 
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -1107,7 +1265,7 @@ export default function Home() {
                   Export API Test Results
                 </button>
               </div>
-            </div>
+            </details>
 
             <div className="panel overflow-x-auto p-4">
               <h3 className="mb-3 text-sm font-semibold">API Test Results</h3>
@@ -1141,11 +1299,11 @@ export default function Home() {
           </section>
         )}
 
-        {activeView === "Mneme" && (
+        {activeView === "History" && (
           <section className="space-y-4">
             <div className="panel p-4">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold">Mneme Vault Queue</h2>
+                <h2 className="text-sm font-semibold">Recent activity</h2>
                 <button
                   type="button"
                   onClick={downloadMnemeBundle}
@@ -1155,9 +1313,33 @@ export default function Home() {
                 </button>
               </div>
               <p className="mt-2 text-xs text-zinc-500">
-                Every event is emitted as a signing-ready JSON object for cryptographic sealing.
+                This view shows the latest tracked actions for the current session and lets you export the activity bundle.
               </p>
             </div>
+
+            {report && (
+              <div className="panel p-4 text-sm text-zinc-300">
+                <h3 className="font-semibold text-zinc-100">Latest completed run</h3>
+                <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded border border-zinc-800 bg-black/30 p-3">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Generated</p>
+                    <p className="mt-2">{new Date(report.generatedAt).toLocaleString()}</p>
+                  </div>
+                  <div className="rounded border border-zinc-800 bg-black/30 p-3">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Project</p>
+                    <p className="mt-2">{report.projectId}</p>
+                  </div>
+                  <div className="rounded border border-zinc-800 bg-black/30 p-3">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Runtime</p>
+                    <p className="mt-2">{report.runtimeMode}</p>
+                  </div>
+                  <div className="rounded border border-zinc-800 bg-black/30 p-3">
+                    <p className="text-xs uppercase tracking-wide text-zinc-500">Confidence</p>
+                    <p className="mt-2">{report.confidenceScore}</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="panel overflow-x-auto p-4">
               <table className="min-w-full text-left text-xs">
@@ -1170,7 +1352,7 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mnemeLogs.map((log) => (
+                  {latestActivity.map((log) => (
                     <tr key={log.id} className="border-b border-zinc-900 text-zinc-300">
                       <td className="px-2 py-2">{new Date(log.generatedAt).toLocaleString()}</td>
                       <td className="px-2 py-2">{log.event}</td>
@@ -1180,6 +1362,56 @@ export default function Home() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </section>
+        )}
+
+        {activeView === "Settings" && (
+          <section className="space-y-4">
+            <div className="panel p-4">
+              <h2 className="text-sm font-semibold">Workspace settings</h2>
+              <p className="mt-2 text-sm text-zinc-400">
+                Manage session controls, default launch behavior, and exported activity artifacts.
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="panel p-4 text-sm text-zinc-300">
+                <h3 className="font-semibold text-zinc-100">Session</h3>
+                <p className="mt-2">Current runtime mode: {runtimeMode}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = runtimeMode === "CONNECTED" ? "OFFLINE" : "CONNECTED";
+                      setRuntimeMode(next);
+                    }}
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs hover:border-zinc-500"
+                  >
+                    Toggle runtime
+                  </button>
+                  <form action="/api/auth/logout" method="post">
+                    <button
+                      type="submit"
+                      className="rounded-md border border-red-700 bg-red-950/30 px-3 py-2 text-xs text-red-100 hover:bg-red-950/50"
+                    >
+                      Sign out
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              <div className="panel p-4 text-sm text-zinc-300">
+                <h3 className="font-semibold text-zinc-100">Exports</h3>
+                <p className="mt-2">Download the current activity bundle for audit traceability.</p>
+                <button
+                  type="button"
+                  onClick={downloadMnemeBundle}
+                  className="mt-3 rounded-md border border-emerald-700 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-200"
+                >
+                  Export activity bundle
+                </button>
+              </div>
             </div>
           </section>
         )}

@@ -117,9 +117,13 @@ class FileSystemCatalogProvider(CatalogProvider):
         attacks: list[AttackSpec] = []
 
         for path in files:
+            if path.stem.startswith("example_"):
+                continue
             category_name = path.stem
             raw = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(raw, list):
+                if path.stem.startswith("example_"):
+                    continue
                 raise ValueError(f"Attack catalog must contain a JSON array: {path}")
 
             for idx, item in enumerate(raw, 1):

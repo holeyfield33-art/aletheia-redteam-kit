@@ -27,9 +27,9 @@ function LoginForm() {
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(34,197,94,0.16),_transparent_38%),linear-gradient(180deg,#09090b_0%,#111113_100%)] px-6 py-24 text-zinc-100">
       <div className="mx-auto max-w-md rounded-[28px] border border-zinc-800 bg-black/55 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur">
         <p className="text-xs uppercase tracking-[0.32em] text-emerald-400">Aletheia</p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Operator Login</h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Sign in</h1>
         <p className="mt-3 text-sm leading-6 text-zinc-400">
-          Authenticate to access hosted run artifacts, launch repo scans, and use the sovereign command center.
+          Access your audit workspace, launch guided security checks, and review recent findings.
         </p>
         {errorMessage ? (
           <div className="mt-5 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">

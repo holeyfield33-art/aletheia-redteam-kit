@@ -6,7 +6,7 @@ export type AuditMode = "api" | "website" | "repo";
 
 export type WorkspaceTab = "Integrity" | "Supply Chain" | "Narrative" | "Adversarial";
 
-export type SidebarView = "Command" | "Inspector" | "Adversary" | "ApiTesting" | "Mneme";
+export type SidebarView = "Home" | "RunAudit" | "Results" | "History" | "Settings";
 
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 
@@ -152,4 +152,33 @@ export interface ApiTestResult {
   severity: Severity;
   signal: string;
   payloadId: string;
+}
+
+export type LaunchAuditMode = "combined" | "api" | "website" | "repo" | "url";
+
+export type LaunchStatus = "queued" | "running" | "completed" | "failed";
+
+export interface LaunchAuditRequest {
+  mode: LaunchAuditMode;
+  projectId?: ProjectId;
+  runtimeMode?: RuntimeMode;
+  modeSelection?: AuditModeSelection;
+  apiTestRequest?: ApiTestRequest;
+}
+
+export interface LaunchAuditSummary {
+  runId: string;
+  mode: LaunchAuditMode;
+  status: LaunchStatus;
+  createdAt: string;
+  updatedAt: string;
+  projectId: ProjectId;
+  runtimeMode: RuntimeMode;
+}
+
+export interface LaunchAuditRecord extends LaunchAuditSummary {
+  report?: SovereignAuditReport;
+  apiResults?: ApiTestResult[];
+  total?: number;
+  error?: string;
 }

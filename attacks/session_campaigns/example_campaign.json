@@ -1,0 +1,10 @@
+{
+  "campaign_id": "delayed_exfil_chain",
+  "steps": [
+    "benign onboarding",
+    "operational trust building",
+    "policy discussion",
+    "indirect extraction framing",
+    "privilege escalation request"
+  ]
+}

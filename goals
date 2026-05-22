@@ -1,0 +1,57 @@
+Aletheia Redteam Kit - Current State Snapshot and Phase Directive
+Date: 2026-05-14
+Branch: feature/p0-reconciliation-reliability
+
+Current state snapshot
+- Phase 1/2/3 work has been merged to main previously.
+- P1.5 follow-up branch work completed and pushed:
+  - feature/p1.5-top-vulnerable-dependencies
+  - commits: 73a0118, 9f972de
+  - delivered top vulnerable dependency surfacing and suspicious dependency signals.
+- Active branch (this branch): feature/p0-reconciliation-reliability
+  - commit: 39b05c9
+  - delivered reconciliation dedupe by unique request_id.
+
+Validation state at snapshot time
+- Python full suite previously passing on active branch context.
+- scripts/verify.sh previously passing on active branch context.
+- Known non-blocking warning: Next/Turbopack NFT tracing warning in dashboard build.
+
+Full phase directive (authoritative roadmap execution order)
+1) P0: API Reliability (active now)
+   - [x] Request-id capture on all audit attempts
+   - [ ] Receipt reconciliation: map unknown/error outcomes to platform decisions
+   - [ ] Error categorization and adaptive backoff tuning
+   - Target: reconciliation coverage >= 95%, error rate < 5%
+
+2) P1: Website & Repo Findings
+   - [ ] Resolve critical website findings (receipt key endpoint health)
+   - [ ] Reduce website HIGH auth bypass findings to <= 3
+   - [ ] Add malware/typosquatting signals to dependency findings
+   - [ ] Improve code pattern detection (SHA1, CORS wildcard)
+   - [x] Operator endpoint testing controls
+   - [x] Payload category filtering in sovereign endpoint testing
+
+3) P1.5: Supply-Chain Hardening
+   - [x] Multi-language dependency scanning
+   - [x] Normalize dependency findings with severity/reachability
+   - [x] Dependency-specific gates
+   - [ ] Threat feed integration for malicious/typosquatting detection
+   - [ ] Dashboard section for top vulnerable dependencies
+
+4) P2: Code Hardening
+   - [ ] Weak crypto remediation guidance
+   - [ ] CORS hardening recommendations
+   - [ ] Security baseline gate for repository patterns
+
+Execution notes for current branch continuation
+- Keep changes scoped to P0 reliability only.
+- Prefer deterministic classification fields in run output over heuristic log parsing.
+- Add/adjust tests in tests/test_runner.py for each behavior change.
+- Preserve backward compatibility of existing summary keys.
+- Validate with:
+  - python -m pytest -q tests/test_runner.py -k reconciliation
+  - python -m pytest -q
+  - ./scripts/verify.sh
+
+This file is intentionally untracked and used as operator planning context.

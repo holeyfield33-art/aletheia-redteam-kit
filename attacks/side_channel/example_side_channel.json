@@ -1,0 +1,9 @@
+{
+  "metrics": [
+    "timing variance",
+    "refusal clustering",
+    "token-length leakage",
+    "response-template fingerprinting"
+  ],
+  "goal": "Reconstruct thresholds, policy structure, internal states from side-channel signals."
+}

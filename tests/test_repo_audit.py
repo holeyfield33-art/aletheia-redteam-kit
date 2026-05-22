@@ -8,6 +8,7 @@ import pytest
 
 from engine.repo_audit import run_repo_audit
 from engine.repo_audit import scanner
+from kit.command_center import normalize_summary_to_command_center
 from kit import runner
 
 
@@ -28,6 +29,40 @@ dependencies = ["httpx>=0.27"]
     assert summary["findings_total"] >= 1
     assert summary["findings_by_severity"]["HIGH"] >= 1
     assert any(f["type"] == "api_key_literal" for f in summary["findings"])
+
+
+def test_repo_audit_downgrades_env_example_placeholders(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / ".env.example").write_text("API_KEY=your_key_here\n")
+
+    summary = run_repo_audit(tmp_path)
+
+    assert summary["findings_by_severity"]["HIGH"] == 0
+    assert summary["findings_by_type"].get("api_key_literal", 0) == 0
+
+
+def test_repo_audit_flags_high_entropy_production_secret(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "settings.py").write_text('SESSION_TOKEN = "a9Xk_12LmN-45pqR+stuVw8Y=zzA9Xk_12LmN-45"\n')
+
+    summary = run_repo_audit(tmp_path)
+
+    assert summary["findings_by_type"]["high_entropy_secret_literal"] >= 1
+    assert summary["findings_by_severity"]["HIGH"] >= 1
 
 
 def test_repo_audit_gate_fails_on_critical_private_key(tmp_path) -> None:
@@ -226,6 +261,150 @@ dependencies = ["httpx>=0.27"]
 
     assert "dependency_vulnerability" in finding_types
     assert any("PYSEC-TEST-1" in (f.get("title") or "") for f in summary["findings"])
+
+
+def test_repo_audit_summarizes_top_vulnerable_dependencies(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "pip-audit-report.json").write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "name": "urllib3",
+                        "version": "1.26.4",
+                        "vulns": [
+                            {
+                                "id": "PYSEC-TEST-1",
+                                "description": "High severity issue",
+                                "severity": "HIGH",
+                                "fix_versions": ["1.26.5"],
+                            },
+                            {
+                                "id": "PYSEC-TEST-2",
+                                "description": "Moderate follow-up issue",
+                                "severity": "MODERATE",
+                                "fix_versions": ["1.26.6"],
+                            },
+                        ],
+                    },
+                    {
+                        "name": "requests-typos",
+                        "version": "0.1.0",
+                        "vulns": [
+                            {
+                                "id": "OSV-TYPOSQUAT-1",
+                                "description": "Potential typosquatting package substitution",
+                                "severity": "HIGH",
+                                "fix_versions": ["remove-package"],
+                            }
+                        ],
+                    },
+                ]
+            }
+        )
+    )
+
+    summary = run_repo_audit(tmp_path)
+    top_packages = summary["dependencies"]["top_packages"]
+
+    assert top_packages[0]["name"] == "urllib3"
+    assert top_packages[0]["advisory_count"] == 2
+    assert top_packages[0]["max_severity"] == "HIGH"
+    assert "PYSEC-TEST-1" in top_packages[0]["advisory_ids"]
+    assert top_packages[1]["name"] == "requests-typos"
+    assert top_packages[1]["finding_types"]["dependency_tampering_risk"] == 1
+
+
+def test_repo_audit_summarizes_suspicious_dependency_signals(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "pip-audit-report.json").write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "name": "badpkg",
+                        "version": "1.0.0",
+                        "vulns": [
+                            {
+                                "id": "MAL-001",
+                                "description": "Package may contain malware backdoor behavior",
+                                "severity": "HIGH",
+                                "fix_versions": ["remove-package"],
+                            }
+                        ],
+                    },
+                    {
+                        "name": "reqeusts",
+                        "version": "0.1.0",
+                        "vulns": [
+                            {
+                                "id": "TYPO-001",
+                                "description": "Potential typosquatting dependency substitution",
+                                "severity": "HIGH",
+                                "fix_versions": ["remove-package"],
+                            }
+                        ],
+                    },
+                ]
+            }
+        )
+    )
+
+    summary = run_repo_audit(tmp_path)
+    signals = summary["dependencies"]["signals"]
+
+    assert signals["malware_suspect_total"] == 1
+    assert signals["tampering_risk_total"] == 1
+    assert signals["suspicious_package_total"] == 2
+    assert signals["top_suspicious_packages"][0]["name"] == "badpkg"
+
+
+def test_command_center_normalizes_dependency_suspicious_signal_metrics() -> None:
+    payload = normalize_summary_to_command_center(
+        {
+            "generated_at": "2026-05-14T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": "/tmp/repo",
+            "findings_total": 2,
+            "risk_score": 70,
+            "gates": {"pass": False, "violations": ["deps_high_over_limit"]},
+            "findings": [
+                {
+                    "severity": "HIGH",
+                    "type": "dependency_malware_suspect",
+                    "title": "Dependency advisory: MAL-001",
+                    "file": "pip-audit:runtime",
+                    "evidence": "badpkg malware",
+                }
+            ],
+            "dependencies": {
+                "signals": {
+                    "malware_suspect_total": 1,
+                    "tampering_risk_total": 2,
+                    "suspicious_package_total": 2,
+                }
+            },
+        }
+    )
+    metrics = {item["metric_name"]: item["metric_value"] for item in payload["metrics"]}
+
+    assert metrics["dependency_malware_suspect_total"] == 1.0
+    assert metrics["dependency_tampering_risk_total"] == 2.0
+    assert metrics["suspicious_dependency_package_total"] == 2.0
 
 
 def test_repo_audit_auto_runs_pip_audit_when_python_manifest_present(monkeypatch, tmp_path) -> None:

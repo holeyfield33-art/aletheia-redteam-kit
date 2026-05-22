@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import base64
+from collections import deque
 import json
 import mimetypes
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -21,6 +23,121 @@ from engine.repo_audit.scanner import _normalize_public_github_repo_url
 from kit.auth import DashboardAuthManager, sanitize_next_path
 
 LOGGER = logging.getLogger(__name__)
+LAUNCH_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+DEFAULT_LAUNCH_LOG_TAIL_LINES = 400
+MAX_LAUNCH_LOG_TAIL_LINES = 5000
+
+
+class ProcessTracker:
+    """Track subprocess launches and their status."""
+    
+    def __init__(self, artifact_root: Path) -> None:
+        self._lock = threading.Lock()
+        self._artifact_root = artifact_root
+        self._processes: dict[str, dict] = {}
+
+    def _is_pid_running(self, pid: int | None) -> bool:
+        if pid is None:
+            return False
+        try:
+            os.kill(int(pid), 0)
+            return True
+        except (OSError, ProcessLookupError, ValueError, TypeError):
+            return False
+
+    def _hydrate_launch_from_disk(self, launch_id: str) -> dict | None:
+        if not LAUNCH_ID_PATTERN.fullmatch(str(launch_id or "")):
+            return None
+
+        launch_dir = (self._artifact_root / ".launches" / launch_id).resolve()
+        artifact_root = self._artifact_root.resolve()
+        if os.path.commonpath([str(launch_dir), str(artifact_root)]) != str(artifact_root):
+            return None
+        if not launch_dir.exists() or not launch_dir.is_dir():
+            return None
+
+        output_rel = f".launches/{launch_id}/summary.json"
+        log_rel = f".launches/{launch_id}/launch.log"
+        launch_log_path = launch_dir / "launch.log"
+        launch_summary_path = launch_dir / "summary.json"
+
+        mode = str(launch_id).split("-", 1)[0] if "-" in str(launch_id) else "repo"
+        started_at = datetime.fromtimestamp(launch_dir.stat().st_mtime, tz=timezone.utc).isoformat()
+        status = "completed" if launch_summary_path.exists() else "started"
+
+        return {
+            "ok": True,
+            "launch_id": launch_id,
+            "mode": mode,
+            "status": status,
+            "output_path": output_rel,
+            "log_path": log_rel if launch_log_path.exists() else None,
+            "dashboard": "/dashboard/",
+            "registered_at": started_at,
+        }
+
+    def _build_status(self, meta: dict) -> dict:
+        status = dict(meta)
+        running = self._is_pid_running(status.get("pid"))
+        status["running"] = running
+        if not running and str(status.get("status") or "").lower() == "started":
+            if status.get("pid") is not None:
+                status["status"] = "completed"
+        return status
+    
+    def register(self, launch_id: str, process_meta: dict) -> None:
+        """Register a subprocess launch."""
+        with self._lock:
+            self._processes[launch_id] = {
+                **process_meta,
+                "registered_at": datetime.now(timezone.utc).isoformat(),
+            }
+    
+    def get_status(self, launch_id: str) -> dict | None:
+        """Get status of a launch."""
+        with self._lock:
+            meta = self._processes.get(launch_id)
+            if meta is None:
+                hydrated = self._hydrate_launch_from_disk(launch_id)
+                if hydrated is None:
+                    return None
+                self._processes[launch_id] = hydrated
+                meta = hydrated
+            return self._build_status(meta)
+    
+    def list_launches(self) -> list[dict]:
+        """List all tracked launches."""
+        with self._lock:
+            launch_root = self._artifact_root / ".launches"
+            if launch_root.exists() and launch_root.is_dir():
+                for child in launch_root.iterdir():
+                    if not child.is_dir():
+                        continue
+                    launch_id = child.name
+                    if launch_id in self._processes:
+                        continue
+                    hydrated = self._hydrate_launch_from_disk(launch_id)
+                    if hydrated is not None:
+                        self._processes[launch_id] = hydrated
+            return [self._build_status(meta) for meta in self._processes.values()]
+    
+    def terminate(self, launch_id: str) -> bool:
+        """Terminate a process if still running."""
+        with self._lock:
+            meta = self._processes.get(launch_id)
+            if not meta:
+                return False
+            
+            pid = meta.get("pid")
+            if pid is None:
+                return False
+            
+            try:
+                os.kill(pid, 15)  # SIGTERM
+                meta["terminated_at"] = datetime.now(timezone.utc).isoformat()
+                return True
+            except (OSError, ProcessLookupError):
+                return False
 
 
 def _has_control_chars(value: str) -> bool:
@@ -36,6 +153,27 @@ def _sanitize_repo_url_input(value: str) -> str:
     if _has_control_chars(candidate):
         raise ValueError("repo_url contains invalid characters")
     return candidate
+
+
+def _parse_tail_lines(query: str) -> int:
+    raw = parse_qs(query).get("tail_lines", [str(DEFAULT_LAUNCH_LOG_TAIL_LINES)])[0]
+    try:
+        value = int(str(raw).strip())
+    except ValueError as exc:
+        raise ValueError("tail_lines must be an integer") from exc
+    if value <= 0:
+        raise ValueError("tail_lines must be greater than zero")
+    return min(value, MAX_LAUNCH_LOG_TAIL_LINES)
+
+
+def _read_log_tail(log_path: Path, *, tail_lines: int) -> tuple[str, int]:
+    buffer: deque[str] = deque(maxlen=max(1, int(tail_lines)))
+    total_lines = 0
+    with log_path.open("r", encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            buffer.append(line)
+            total_lines += 1
+    return "".join(buffer), total_lines
 
 
 class _RequestRateLimiter:
@@ -98,6 +236,9 @@ def _normalize_run_entries(config: DashboardServerConfig) -> list[dict[str, obje
         summary_rel = str(item.get("summary") or "").strip()
         command_center_rel = str(item.get("command_center") or "").strip()
         sqlite_rel = str(item.get("sqlite") or "").strip()
+        campaign_manifest_rel = str(item.get("campaign_manifest") or "").strip()
+        learning_snapshot_rel = str(item.get("learning_snapshot") or "").strip()
+        mutation_effectiveness_rel = str(item.get("mutation_effectiveness") or "").strip()
         normalized.append(
             {
                 "generated_at": item.get("generated_at"),
@@ -105,13 +246,16 @@ def _normalize_run_entries(config: DashboardServerConfig) -> list[dict[str, obje
                 "summary": f"/runs/{summary_rel}" if summary_rel else None,
                 "command_center": f"/runs/{command_center_rel}" if command_center_rel else None,
                 "sqlite": f"/runs/{sqlite_rel}" if sqlite_rel else None,
+                "campaign_manifest": f"/runs/{campaign_manifest_rel}" if campaign_manifest_rel else None,
+                "learning_snapshot": f"/runs/{learning_snapshot_rel}" if learning_snapshot_rel else None,
+                "mutation_effectiveness": f"/runs/{mutation_effectiveness_rel}" if mutation_effectiveness_rel else None,
             }
         )
     normalized.sort(key=lambda row: str(row.get("generated_at") or ""))
     return normalized
 
 
-def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> dict[str, object]:
+def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str, tracker: ProcessTracker | None = None) -> dict[str, object]:
     normalized_repo_url = _normalize_public_github_repo_url(_sanitize_repo_url_input(repo_url))
     artifact_root = config.artifact_dir.resolve()
     repo_root = config.repo_root.resolve()
@@ -126,7 +270,6 @@ def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> d
         sys.executable,
         "-m",
         "kit.runner",
-        "run",
         "--mode",
         "repo",
         "--repo-url",
@@ -146,7 +289,7 @@ def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> d
             stderr=subprocess.STDOUT,
         )
 
-    return {
+    result = {
         "ok": True,
         "status": "started",
         "launch_id": launch_id,
@@ -157,6 +300,12 @@ def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str) -> d
         "pid": process.pid,
         "dashboard": "/dashboard/",
     }
+    
+    # Register with tracker
+    if tracker:
+        tracker.register(launch_id, result)
+    
+    return result
 
 
 def _parse_basic_auth_header(value: str) -> tuple[str, str] | None:
@@ -185,6 +334,23 @@ def create_dashboard_handler(config: DashboardServerConfig):
     request_rate_limiter = _RequestRateLimiter(
         requests_per_minute=int(os.environ.get("ALETHEIA_DASHBOARD_RATE_LIMIT_PER_MINUTE", "30"))
     )
+    process_tracker = ProcessTracker(artifact_root)
+
+    def _parse_launch_id(path: str, *, suffix: str | None = None) -> str | None:
+        base_prefix = "/api/launches/"
+        if not path.startswith(base_prefix):
+            return None
+        remainder = path[len(base_prefix):]
+        if suffix is not None:
+            if not remainder.endswith(suffix):
+                return None
+            remainder = remainder[: -len(suffix)]
+        launch_id = remainder.rstrip("/")
+        if not launch_id or "/" in launch_id:
+            return None
+        if not LAUNCH_ID_PATTERN.fullmatch(launch_id):
+            return None
+        return launch_id
 
     def _render_login_page(*, next_path: str, error: str | None = None) -> bytes:
         status = f'<p class="status">{error}</p>' if error else ""
@@ -371,6 +537,56 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 self._send_json(entries[-1] if entries else {}, status=HTTPStatus.OK)
                 return
 
+            # Process tracking endpoints
+            if parsed.path == "/api/launches":
+                launches = process_tracker.list_launches()
+                self._send_json({"launches": launches})
+                return
+
+            if parsed.path.startswith("/api/launches/") and parsed.path.endswith("/logs"):
+                launch_id = _parse_launch_id(parsed.path, suffix="/logs")
+                if launch_id is None:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "invalid launch_id")
+                    return
+                try:
+                    tail_lines = _parse_tail_lines(parsed.query)
+                except ValueError as exc:
+                    self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                log_path = self._resolve_run_path(f".launches/{launch_id}/launch.log")
+                if log_path is None or not log_path.exists():
+                    self.send_error(HTTPStatus.NOT_FOUND, "Log not found")
+                    return
+
+                try:
+                    logs, total_lines = _read_log_tail(log_path, tail_lines=tail_lines)
+                    self._send_json(
+                        {
+                            "launch_id": launch_id,
+                            "logs": logs,
+                            "tail_lines": tail_lines,
+                            "total_lines": total_lines,
+                            "truncated": total_lines > tail_lines,
+                        }
+                    )
+                except IOError as exc:
+                    self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, f"Failed to read logs: {exc}")
+                return
+
+            if parsed.path.startswith("/api/launches/"):
+                launch_id = _parse_launch_id(parsed.path)
+                if launch_id is None:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "invalid launch_id")
+                    return
+
+                status = process_tracker.get_status(launch_id)
+                if status is None:
+                    self.send_error(HTTPStatus.NOT_FOUND, "Launch not found")
+                    return
+
+                self._send_json(status)
+                return
+
             self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
         def do_POST(self) -> None:
@@ -410,6 +626,22 @@ def create_dashboard_handler(config: DashboardServerConfig):
 
             if not self._authorize(path=parsed.path):
                 return
+            
+            # Handle launch cancellation
+            if parsed.path.startswith("/api/launches/") and parsed.path.endswith("/cancel"):
+                launch_id = _parse_launch_id(parsed.path, suffix="/cancel")
+                if launch_id is None:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "invalid launch_id")
+                    return
+                
+                success = process_tracker.terminate(launch_id)
+                if not success:
+                    self.send_error(HTTPStatus.NOT_FOUND, "Launch not found or already completed")
+                    return
+                
+                self._send_json({"ok": True, "launch_id": launch_id, "status": "terminated"})
+                return
+            
             if parsed.path != "/api/repo-audit":
                 self.send_error(HTTPStatus.NOT_FOUND, "Not found")
                 return
@@ -428,7 +660,7 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 return
 
             try:
-                result = _launch_public_repo_audit(config, repo_url)
+                result = _launch_public_repo_audit(config, repo_url, tracker=process_tracker)
             except ValueError as exc:
                 self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
                 return

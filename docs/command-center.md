@@ -70,6 +70,51 @@ Sovereign overview workflow:
 16. Export filtered rows to hand off incidents or create follow-up attack expansions.
 17. Review API reconciliation coverage before closing transport/anomaly incidents.
 
+## Current Attack Types
+
+Current attack categories used by API and combined runs:
+
+- `agent_conflict`
+- `benign_controls`
+- `context_poisoning`
+- `data_exfiltration`
+- `economic_pressure`
+- `embedding_evasion`
+- `encoding`
+- `hybrid_tool`
+- `jailbreak`
+- `memory_poisoning`
+- `multi_turn`
+- `obfuscated`
+- `policy_evasion`
+- `prompt_injection`
+- `session_campaigns`
+- `side_channel`
+- `tool_abuse`
+- `visual_renderer`
+
+Additional advanced categories are available under `attacks/advanced/`, including:
+
+- model-level classes such as `spec_violation`, `safety_bypass_indirect`, `representation_injection`, and `chain_of_thought_leakage`
+- protocol-level classes such as `response_boundary_injection`, `function_calling_injection`, `tool_use_escalation`, and `content_type_confusion`
+- cross-surface classes such as `stored_prompt_injection`, `reflected_prompt_injection`, `crawl_based_injection`, and `multimodal_injection`
+- supply-chain classes such as `model_weight_tampering`, `dataset_poisoning`, and `rag_injection`
+- identity/safety/runtime classes such as `auth_context_confusion`, `role_confusion`, `classifier_evasion`, `test_harness_escape`, `sandbox_escape_attempt`, and `environment_variable_leakage`
+
+Each advanced category is stored in a same-name JSON file, so category-targeted runs are direct:
+
+- `python -m kit.runner --category spec_violation --output spec_violation_summary.json`
+
+## Audit Types Performed
+
+The command center supports these run types:
+
+- `api`: payload-driven model attack audit.
+- `website`: browser route and UI control audit.
+- `repo`: static repository security and supply-chain audit.
+- `combined`: API + website + repo in one gated run.
+- `agentic`: iterative autonomous adversarial loop.
+
 ## Secure Exposure
 
 Recommended production settings:
