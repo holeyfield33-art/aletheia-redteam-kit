@@ -18,6 +18,10 @@ from collections import defaultdict
 from urllib.parse import urlparse
 from typing import Any
 
+from src.reporting.enricher import enrich_repo_summary
+from src.scanners.dep_vuln import scan_dependency_advisories
+from src.scanners.git_history_secrets import scan_git_history_secrets
+
 try:  # pragma: no cover - unavailable on some platforms
     import resource
 except Exception:  # pragma: no cover - defensive
@@ -38,7 +42,7 @@ except Exception:  # pragma: no cover - defensive
 #
 SCAN_PROFILE_LIGHT = {"secrets", "ci_config", "language_risks", "threat_feed"}
 SCAN_PROFILE_MEDIUM = SCAN_PROFILE_LIGHT | {"dep_hygiene", "dep_advisories"}
-SCAN_PROFILE_FULL = SCAN_PROFILE_MEDIUM | {"semgrep", "bandit", "trivy", "npm_audit"}
+SCAN_PROFILE_FULL = SCAN_PROFILE_MEDIUM | {"semgrep", "bandit", "trivy", "npm_audit", "git_history_secrets"}
 
 SCAN_PROFILES: dict[str, set[str]] = {
     "light": SCAN_PROFILE_LIGHT,
@@ -736,145 +740,19 @@ def _parse_osv_payload(payload: dict) -> tuple[list[Finding], list[dict[str, str
     return findings, metadata
 
 
-def _scan_dependency_advisories(repo_root: Path, *, deps_scan: str = "auto") -> tuple[list[Finding], dict]:
+def _scan_dependency_advisories(repo_root: Path, *, deps_scan: str = "auto", timeout_seconds: int = 180) -> tuple[list[Finding], dict]:
     findings: list[Finding] = []
-    dep_meta: list[dict[str, str]] = []
-    manifests = _detect_dependency_manifests(repo_root)
-
-    tools: dict[str, dict[str, str]] = {
-        "pip_audit": {"status": "not_run"},
-        "osv_scanner": {"status": "not_run"},
-    }
-
-    report_path = repo_root / "pip-audit-report.json"
-    report_rel = str(report_path.relative_to(repo_root))
-    if report_path.exists():
-        try:
-            report = json.loads(report_path.read_text(encoding="utf-8", errors="ignore"))
-            report_findings, report_meta = _parse_pip_audit_payload(report, report_rel)
-            findings.extend(report_findings)
-            dep_meta.extend(report_meta)
-            tools["pip_audit"] = {"status": "report_loaded", "source": report_rel}
-        except json.JSONDecodeError:
-            findings.append(
-                Finding(
-                    severity="MEDIUM",
-                    type="invalid_pip_audit_report",
-                    title="Invalid pip-audit report format",
-                    file=report_rel,
-                    line=None,
-                    evidence="Could not parse pip-audit-report.json as JSON",
-                    recommendation="Regenerate report using 'pip-audit -f json -o pip-audit-report.json'.",
-                )
-            )
-            tools["pip_audit"] = {"status": "report_invalid", "source": report_rel}
-
-    python_manifests = manifests.get("python") or []
-    if deps_scan in {"auto", "full"} and python_manifests and tools["pip_audit"]["status"] == "not_run":
-        pip_audit_bin = shutil.which("pip-audit")
-        if not pip_audit_bin:
-            tools["pip_audit"] = {"status": "unavailable", "reason": "binary_not_found"}
-        else:
-            try:
-                result = subprocess.run(
-                    [pip_audit_bin, "-f", "json"],
-                    cwd=str(repo_root),
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                    check=False,
-                )
-                payload_text = result.stdout.strip() or "{}"
-                payload = json.loads(payload_text)
-                report_findings, report_meta = _parse_pip_audit_payload(payload, "pip-audit:runtime")
-                findings.extend(report_findings)
-                dep_meta.extend(report_meta)
-                tools["pip_audit"] = {
-                    "status": "executed",
-                    "exit_code": str(result.returncode),
-                    "source": "runtime_scan",
-                }
-            except subprocess.TimeoutExpired:
-                tools["pip_audit"] = {"status": "timeout", "reason": "scan_timed_out"}
-            except json.JSONDecodeError:
-                tools["pip_audit"] = {"status": "invalid_output", "reason": "non_json_output"}
-
-    non_python_manifests = any((paths for language, paths in manifests.items() if language != "python" and paths))
-    should_run_osv = deps_scan == "full" or (deps_scan == "auto" and non_python_manifests)
-    if should_run_osv:
-        osv_bin = shutil.which("osv-scanner")
-        if not osv_bin:
-            tools["osv_scanner"] = {"status": "unavailable", "reason": "binary_not_found"}
-        else:
-            osv_commands = [
-                [osv_bin, "scan", "--recursive", "--format", "json", "."],
-                [osv_bin, "--recursive", "--format", "json", "."],
-            ]
-            executed = False
-            for cmd in osv_commands:
-                try:
-                    result = subprocess.run(
-                        cmd,
-                        cwd=str(repo_root),
-                        capture_output=True,
-                        text=True,
-                        timeout=180,
-                        check=False,
-                    )
-                    payload_text = result.stdout.strip()
-                    if not payload_text:
-                        continue
-                    payload = json.loads(payload_text)
-                    osv_findings, osv_meta = _parse_osv_payload(payload)
-                    findings.extend(osv_findings)
-                    dep_meta.extend(osv_meta)
-                    tools["osv_scanner"] = {
-                        "status": "executed",
-                        "exit_code": str(result.returncode),
-                        "source": "runtime_scan",
-                    }
-                    executed = True
-                    break
-                except subprocess.TimeoutExpired:
-                    tools["osv_scanner"] = {"status": "timeout", "reason": "scan_timed_out"}
-                    executed = True
-                    break
-                except json.JSONDecodeError:
-                    continue
-            if not executed and tools["osv_scanner"]["status"] == "not_run":
-                tools["osv_scanner"] = {"status": "invalid_output", "reason": "non_json_output"}
-
-    dep_by_severity = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-    dep_by_language: dict[str, int] = {}
-    dep_by_reachability = {"direct": 0, "transitive": 0, "unknown": 0}
-    for item in dep_meta:
-        severity = item.get("severity", "HIGH")
-        dep_by_severity[severity] = dep_by_severity.get(severity, 0) + 1
-        language = item.get("language", "unknown")
-        dep_by_language[language] = dep_by_language.get(language, 0) + 1
-        reachability = item.get("reachability", "unknown")
-        dep_by_reachability[reachability] = dep_by_reachability.get(reachability, 0) + 1
-
-    exploitability_score = min(
-        100,
-        dep_by_severity.get("CRITICAL", 0) * 20
-        + dep_by_severity.get("HIGH", 0) * 8
-        + dep_by_severity.get("MEDIUM", 0) * 3
-        + dep_by_reachability.get("direct", 0) * 2,
+    raw_findings, dependency_summary = scan_dependency_advisories(
+        repo_root,
+        deps_scan=deps_scan,
+        timeout_seconds=timeout_seconds,
     )
-
-    summary = {
-        "scan_mode": deps_scan,
-        "manifests": manifests,
-        "tools": tools,
-        "findings_total": len(dep_meta),
-        "findings_by_severity": dep_by_severity,
-        "findings_by_language": dep_by_language,
-        "reachability": dep_by_reachability,
-        "exploitability_score": int(exploitability_score),
-    }
-
-    return findings, summary
+    for raw in raw_findings:
+        try:
+            findings.append(Finding(**raw))
+        except TypeError:
+            continue
+    return findings, dependency_summary
 
 
 def _scan_language_risks(repo_root: Path, files: list[Path]) -> list[Finding]:
@@ -1437,6 +1315,8 @@ def _audit_repo_root(
     threat_feed_path: str | None,
     include_test_fixtures: bool,
     deps_scan: str,
+    dep_scan_timeout: int,
+    history_scan_depth: int,
     enabled_scanners: set[str] | None = None,
 ) -> dict:
     """Core scanning dispatch.  *enabled_scanners* is a set of scanner names
@@ -1458,7 +1338,11 @@ def _audit_repo_root(
     dep_findings: list[Finding] = []
     dependency_summary: dict = {"scan_mode": deps_scan, "tools": {}}
     if "dep_advisories" in enabled_scanners:
-        dep_findings, dependency_summary = _scan_dependency_advisories(root, deps_scan=deps_scan)
+        dep_findings, dependency_summary = _scan_dependency_advisories(
+            root,
+            deps_scan=deps_scan,
+            timeout_seconds=dep_scan_timeout,
+        )
     findings.extend(dep_findings)
 
     if "language_risks" in enabled_scanners:
@@ -1486,6 +1370,11 @@ def _audit_repo_root(
         na_findings, na_meta = _scan_npm_audit(root)
         findings.extend(na_findings)
         extra_tool_summary.update(na_meta)
+
+    if "git_history_secrets" in enabled_scanners:
+        gh_findings, gh_meta = scan_git_history_secrets(root, history_scan_depth=history_scan_depth)
+        findings.extend(Finding(**finding) for finding in gh_findings)
+        extra_tool_summary["git_history_secrets"] = gh_meta
 
     # Deduplicate same type/file/line/evidence to reduce noise.
     deduped: dict[tuple[str, str, int | None, str], Finding] = {}
@@ -1576,9 +1465,12 @@ def run_repo_audit(
     *,
     include_test_fixtures: bool = False,
     deps_scan: str = "auto",
+    dep_scan_timeout: int = 180,
+    history_scan_depth: int = 100,
     repo_token: str | None = None,
     scan_profile: str | None = None,
     scan_profile_file: str | None = None,
+    enrich_report: bool = False,
 ) -> dict:
     """Run static repository checks and return summary dictionary.
 
@@ -1604,6 +1496,12 @@ def run_repo_audit(
         Dependency-advisory scan mode: ``"auto"``, ``"full"``, or ``"off"``.
         Overridden when *scan_profile* is ``"light"`` (sets to ``"off"``
         implicitly via enabled_scanners).
+    dep_scan_timeout:
+        Maximum runtime in seconds for dependency advisory tooling.
+    history_scan_depth:
+        Commit history depth to inspect for git-history secret scanning.
+    enrich_report:
+        When True, attach a report overview summary to the audit output.
     """
     # Resolve the active scanner set once so both code paths share it.
     effective_deps_scan = deps_scan
@@ -1622,6 +1520,8 @@ def run_repo_audit(
                 threat_feed_path=threat_feed_path,
                 include_test_fixtures=include_test_fixtures,
                 deps_scan=effective_deps_scan,
+                dep_scan_timeout=dep_scan_timeout,
+                history_scan_depth=history_scan_depth,
                 enabled_scanners=enabled_scanners,
             )
             is_private = bool(repo_token)
@@ -1632,6 +1532,8 @@ def run_repo_audit(
                 "authenticated": is_private,
             }
             summary["scan_profile"] = scan_profile or "medium"
+            if enrich_report:
+                summary = enrich_repo_summary(summary)
             return summary
 
     root = Path(repo_path).resolve()
@@ -1640,7 +1542,11 @@ def run_repo_audit(
         threat_feed_path=threat_feed_path,
         include_test_fixtures=include_test_fixtures,
         deps_scan=effective_deps_scan,
+        dep_scan_timeout=dep_scan_timeout,
+        history_scan_depth=history_scan_depth,
         enabled_scanners=enabled_scanners,
     )
     summary["scan_profile"] = scan_profile or "medium"
+    if enrich_report:
+        summary = enrich_repo_summary(summary)
     return summary

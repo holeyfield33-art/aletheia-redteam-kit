@@ -39,6 +39,7 @@ import httpx
 from engine.gap_analysis import build_category_gap_report, build_gap_report
 from engine.mutation import expand_attack_families
 from engine.repo_audit import run_repo_audit
+from src.reporting.enricher import render_markdown_report
 from engine.tests.auth_bypass import PROTECTED_ROUTE_PROFILES
 from kit.agentic_runner import AgenticRunner, AgenticRunnerConfig
 from kit.command_center import (
@@ -1467,6 +1468,37 @@ def _clamp_score(value: float) -> int:
     return int(max(0, min(100, round(value))))
 
 
+def _normalize_output_formats(raw: str | None) -> list[str]:
+    formats = [part.strip().lower() for part in (raw or "").split(",") if part.strip()]
+    if not formats:
+        return ["json"]
+    invalid = [entry for entry in formats if entry not in {"json", "md"}]
+    if invalid:
+        raise ValueError(f"Unsupported output_formats values: {', '.join(invalid)}")
+    # preserve order while deduplicating
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for entry in formats:
+        if entry not in seen:
+            seen.add(entry)
+            normalized.append(entry)
+    return normalized
+
+
+def _repo_output_paths(output_path: Path, formats: list[str]) -> dict[str, Path]:
+    paths: dict[str, Path] = {}
+    if "json" in formats:
+        paths["json"] = output_path if output_path.suffix.lower() == ".json" else output_path.with_suffix(".json")
+    if "md" in formats:
+        if output_path.suffix.lower() == ".md":
+            paths["md"] = output_path
+        elif output_path.suffix.lower() == ".json":
+            paths["md"] = output_path.with_suffix(".md")
+        else:
+            paths["md"] = output_path.with_suffix(".md")
+    return paths
+
+
 def _run_repo_audit_with_cli_options(args: argparse.Namespace) -> dict:
     return run_repo_audit(
         args.repo_path,
@@ -1474,9 +1506,12 @@ def _run_repo_audit_with_cli_options(args: argparse.Namespace) -> dict:
         threat_feed_path=args.threat_feed_file,
         include_test_fixtures=getattr(args, "repo_include_test_fixtures", False),
         deps_scan=getattr(args, "deps_scan", "auto"),
+        dep_scan_timeout=getattr(args, "dep_scan_timeout", 180),
+        history_scan_depth=getattr(args, "history_scan_depth", 100),
         repo_token=getattr(args, "repo_token", None),
         scan_profile=getattr(args, "scan_profile", None),
         scan_profile_file=getattr(args, "scan_profile_file", None),
+        enrich_report=getattr(args, "enrich_report", False),
     )
 
 
@@ -2135,6 +2170,28 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         help="Dependency scan mode for repo/combined: off, auto (manifest-aware), or full",
     )
     parser.add_argument(
+        "--dep-scan-timeout",
+        type=int,
+        default=int(os.environ.get("ALETHEIA_REPO_DEP_SCAN_TIMEOUT", "180")),
+        help="Timeout in seconds for dependency advisory scan tools",
+    )
+    parser.add_argument(
+        "--history-scan-depth",
+        type=int,
+        default=int(os.environ.get("ALETHEIA_REPO_HISTORY_SCAN_DEPTH", "100")),
+        help="Number of git commits to inspect for removed secrets history scanning",
+    )
+    parser.add_argument(
+        "--enrich-report",
+        action="store_true",
+        help="Attach enriched report metadata and enable markdown report generation",
+    )
+    parser.add_argument(
+        "--output-formats",
+        default=os.environ.get("ALETHEIA_REPO_OUTPUT_FORMATS", "json"),
+        help="Comma-separated output formats to emit, supported: json,md",
+    )
+    parser.add_argument(
         "--repo-include-test-fixtures",
         action="store_true",
         help="Include secrets and allowlisted fixture findings from tests/ and test/ in repo scans",
@@ -2522,13 +2579,20 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
                 expires_at=args.baseline_expires_at,
                 existing_state=baseline_state,
             )
-        Path(args.output).write_text(json.dumps(summary, indent=2))
 
+        formats = _normalize_output_formats(getattr(args, "output_formats", "json"))
+        output_paths = _repo_output_paths(Path(args.output), formats)
+        if "json" in output_paths:
+            output_paths["json"].write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        if "md" in output_paths:
+            output_paths["md"].write_text(render_markdown_report(summary), encoding="utf-8")
+
+        output_label = output_paths.get("json", output_paths.get("md", Path(args.output)))
         print(
             f"\nDone. Repo findings: {summary['findings_total']} "
             f"(critical={critical}, high={high}, deps_critical={deps_critical}, deps_high={deps_high}), "
             f"risk {summary.get('risk_score', 0)}. "
-            f"Output: {args.output}",
+            f"Output: {output_label}",
             file=sys.stderr,
         )
         if not gates.get("pass", False):

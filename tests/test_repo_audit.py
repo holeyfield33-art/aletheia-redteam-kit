@@ -629,3 +629,109 @@ def test_cli_repo_mode_with_scan_profile(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert rc == 0
     assert captured["scan_profile"] == "full"
     assert captured["repo_token"] is None
+
+
+def test_run_repo_audit_enrich_report_attaches_overview(tmp_path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    summary = run_repo_audit(tmp_path, enrich_report=True)
+    assert "report_overview" in summary
+    assert "executive_risk_score" in summary["report_overview"]
+    assert "top_findings" in summary["report_overview"]
+
+
+def test_cli_repo_mode_can_emit_markdown_report(monkeypatch, tmp_path) -> None:
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / "README.md").write_text("ok\n")
+    output = tmp_path / "repo_summary.json"
+    markdown_output = tmp_path / "repo_summary.md"
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "repo",
+            "--repo-path",
+            str(repo_dir),
+            "--scan-profile",
+            "light",
+            "--output-formats",
+            "json,md",
+            "--output",
+            str(output),
+            "--enrich-report",
+        ],
+    )
+
+    rc = runner.cli()
+    assert rc == 0
+    assert output.exists()
+    assert markdown_output.exists()
+    json_data = json.loads(output.read_text())
+    assert json_data["mode"] == "repo"
+    assert "report_overview" in json_data
+
+
+def test_cli_repo_mode_passes_new_repo_options(monkeypatch, tmp_path) -> None:
+    output = tmp_path / "repo_summary.json"
+    captured: dict = {}
+
+    def _fake_run_repo_audit(repo_path, repo_url=None, threat_feed_path=None,
+                              include_test_fixtures=False, deps_scan="auto",
+                              dep_scan_timeout=180, history_scan_depth=100,
+                              repo_token=None, scan_profile=None, scan_profile_file=None,
+                              enrich_report=False, **_kwargs):
+        captured["deps_scan"] = deps_scan
+        captured["dep_scan_timeout"] = dep_scan_timeout
+        captured["history_scan_depth"] = history_scan_depth
+        captured["enrich_report"] = enrich_report
+        captured["scan_profile"] = scan_profile
+        return {
+            "generated_at": "2026-01-01T00:00:00+00:00",
+            "mode": "repo",
+            "repo_root": str(repo_path),
+            "scan_profile": scan_profile or "medium",
+            "files_scanned": 0,
+            "findings_total": 0,
+            "findings_by_severity": {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+            "findings_by_type": {},
+            "risk_score": 100,
+            "gates": {"pass": True, "violations": []},
+            "findings": [],
+        }
+
+    monkeypatch.setattr(runner, "run_repo_audit", _fake_run_repo_audit)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "kit.runner",
+            "--mode",
+            "repo",
+            "--repo-path",
+            str(tmp_path),
+            "--scan-profile",
+            "medium",
+            "--dep-scan-timeout",
+            "42",
+            "--history-scan-depth",
+            "77",
+            "--enrich-report",
+            "--output",
+            str(output),
+        ],
+    )
+
+    rc = runner.cli()
+    assert rc == 0
+    assert captured["dep_scan_timeout"] == 42
+    assert captured["history_scan_depth"] == 77
+    assert captured["enrich_report"] is True
+    assert captured["scan_profile"] == "medium"

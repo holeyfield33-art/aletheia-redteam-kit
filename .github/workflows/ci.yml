@@ -32,6 +32,23 @@ jobs:
       - run: pip install -e ".[dev,deps]"
       - run: pytest -q tests/test_smoke_suite.py
 
+  repo-audit-self-test:
+    runs-on: ubuntu-latest
+    needs: smoke
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: |
+          python -m audit --mode repo --repo-path . \
+            --scan-profile light \
+            --output run_summary.json \
+            --output-formats json,md \
+            --enrich-report
+      - run: test -f run_summary.json && test -f run_summary.md
+
   dashboard-ui:
     runs-on: ubuntu-latest
     needs: test
