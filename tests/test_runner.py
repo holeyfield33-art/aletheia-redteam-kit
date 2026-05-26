@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 import json
 import sqlite3
 
@@ -338,7 +339,7 @@ def test_cli_agentic_mode_uses_default_output_path(monkeypatch: pytest.MonkeyPat
     rc = runner.cli()
 
     assert rc == 0
-    assert str(captured["output_path"]) == "runs/agentic_results.json"
+    assert captured["output_path"] == Path("runs") / "agentic_results.json"
     assert captured["max_iterations"] == 10
 
 
@@ -1933,7 +1934,7 @@ def test_cli_dashboard_serve_dispatches_hosted_server(monkeypatch: pytest.Monkey
     assert captured["host"] == "0.0.0.0"
     assert captured["port"] == 9090
     assert captured["artifact_dir"] == artifact_dir
-    assert str(captured["dashboard_file"]) == "dashboard/index.html"
+    assert captured["dashboard_file"] == Path("dashboard") / "index.html"
     assert captured["auth_mode"] == "api-key"
 
 

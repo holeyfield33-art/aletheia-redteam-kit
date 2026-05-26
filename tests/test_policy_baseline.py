@@ -5,7 +5,8 @@ import json
 
 
 def test_policy_baseline_covers_all_probe_and_scenario_families() -> None:
-    policy = json.loads(Path("/workspaces/aletheia-redteam-kit/kit/policy/baseline.yaml").read_text(encoding="utf-8"))
+    policy_path = Path(__file__).resolve().parents[1] / "kit" / "policy" / "baseline.yaml"
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
 
     entries = policy.get("probes")
     assert isinstance(entries, list)

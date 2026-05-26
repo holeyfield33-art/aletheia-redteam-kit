@@ -10,6 +10,7 @@ from typing import Any
 from src.scanners.dependency_utils import (
     _classify_dependency_finding_type,
     _normalize_dependency_severity,
+    summarize_dependency_metadata,
 )
 
 DEPENDENCY_MANIFEST_PATTERNS: dict[str, set[str]] = {
@@ -115,6 +116,8 @@ def _parse_pip_audit_payload(payload: Any, report_rel: str) -> tuple[list[dict[s
             )
             metadata.append(
                 {
+                    "package": name,
+                    "advisory_id": vuln_id,
                     "severity": severity,
                     "language": "python",
                     "reachability": "unknown",
@@ -173,6 +176,8 @@ def _parse_osv_payload(payload: Any) -> tuple[list[dict[str, Any]], list[dict[st
                 )
                 metadata.append(
                     {
+                        "package": package_name,
+                        "advisory_id": vuln_id,
                         "severity": severity,
                         "language": str(language),
                         "reachability": reachability,
@@ -231,6 +236,8 @@ def _parse_npm_audit_payload(payload: Any, report_rel: str) -> tuple[list[dict[s
         )
         metadata.append(
             {
+                "package": name,
+                "advisory_id": name,
                 "severity": severity,
                 "language": "javascript",
                 "reachability": "unknown",
@@ -284,6 +291,8 @@ def _parse_cargo_audit_payload(payload: Any, report_rel: str) -> tuple[list[dict
         )
         metadata.append(
             {
+                "package": package_name,
+                "advisory_id": vuln_id,
                 "severity": severity,
                 "language": "rust",
                 "reachability": "unknown",
@@ -465,6 +474,7 @@ def _collect_dependency_findings(repo_root: Path, deps_scan: str, timeout_second
         "exploitability_score": int(exploitability_score),
     }
 
+    summary.update(summarize_dependency_metadata(metadata))
     return findings, summary
 
 

@@ -32,6 +32,6 @@ def test_launch_runner_subprocess_uses_legacy_cli_args(monkeypatch, tmp_path: Pa
     assert exit_code == 0
     assert result["status"] == "started"
     command = captured["command"]
-    assert command[0].endswith("python") or command[0].endswith("python3")
+    assert command[0].endswith("python.exe") or command[0].endswith("python3.exe") or command[0].endswith("python") or command[0].endswith("python3")
     assert command[1:5] == ["-m", "kit.runner", "--mode", "repo"]
     assert "run" not in command
