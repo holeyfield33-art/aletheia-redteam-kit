@@ -58,8 +58,11 @@ from kit.api_analysis import build_api_regression_summary, extract_multi_turn_st
 from kit.catalog import load_attacks as load_attacks_from_catalog
 from kit.client import AletheiaClient, TargetProfile, load_target_profile
 from kit.exit_codes import FAIL_ERROR, FAIL_THRESHOLD, PASS
+from kit.probes import ProbeCase, execute_probe_cases, load_probe_cases, summarize_probe_results
 from kit.plugins import load_runner_plugins, plugin_name
 from kit.payload_quality import dedupe_attacks_semantic, limit_attacks_with_benign_ratio
+from kit.reporters.sarif import build_sarif_report, write_sarif_report
+from kit.scenarios import run_scenario
 from kit.web_audit import WebAuditConfig, run_website_audit
 from kit.web_audit.config import AuthBypassTarget, AuthStep, CustomFindingRule, PromptInjectionTest
 
@@ -1633,6 +1636,76 @@ def _create_api_client(args: argparse.Namespace) -> AletheiaClient:
     )
 
 
+def _load_zero_trust_policy(path: str | None) -> dict[str, object]:
+    if not path:
+        return {}
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("zero trust policy file must contain a JSON object")
+    return raw
+
+
+def _run_probe_registry(
+    client: AletheiaClient,
+    probe_names: list[str],
+    *,
+    policy_file: str | None = None,
+    evidence_root: Path | None = None,
+) -> dict[str, object]:
+    policy = _load_zero_trust_policy(policy_file)
+    cases = load_probe_cases(probe_names)
+
+    override_rows = policy.get("probes") if isinstance(policy.get("probes"), list) else []
+    override_map: dict[str, bool] = {}
+    for row in override_rows:
+        if not isinstance(row, dict):
+            continue
+        case_id = str(row.get("case_id") or "").strip()
+        family = str(row.get("family") or "").strip()
+        expected_block = bool(row.get("expected_block", True))
+        if case_id:
+            override_map[case_id] = expected_block
+        if family:
+            override_map[family] = expected_block
+
+    effective_cases: list[ProbeCase] = []
+    for case in cases:
+        override = override_map.get(case.case_id)
+        if override is None:
+            override = override_map.get(case.family)
+        if override is None or override == case.expected_block:
+            effective_cases.append(case)
+            continue
+        effective_cases.append(
+            ProbeCase(
+                case_id=case.case_id,
+                name=case.name,
+                family=case.family,
+                payload=case.payload,
+                expected_block=override,
+                owasp_id=case.owasp_id,
+                nist_controls=case.nist_controls,
+                target_surface=case.target_surface,
+                action=case.action,
+                risk_class=case.risk_class,
+                tool_name=case.tool_name,
+                arguments=dict(case.arguments),
+            )
+        )
+
+    results = execute_probe_cases(
+        client,
+        effective_cases,
+        evidence_root=evidence_root or Path("evidence"),
+    )
+    summary = summarize_probe_results(results)
+    summary["results"] = [result.to_dict() for result in results]
+    summary["policy_source"] = policy_file
+    summary["probe_names"] = probe_names
+    summary["evidence_root"] = str((evidence_root or Path("evidence")).resolve())
+    return summary
+
+
 def _legacy_cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Aletheia red team kit")
     parser.add_argument("--mode", choices=["api", "website", "agentic", "repo", "combined"], default="api", help="Run API catalog, autonomous agentic loop, website UI audit, static repository audit, or combined command-center sweep")
@@ -1646,6 +1719,27 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
         type=int,
         default=0,
         help="Maximum attacks to execute after expansion and plugin transforms (0 means no cap)",
+    )
+    parser.add_argument(
+        "--probes",
+        help="Comma-separated probe families to execute instead of the attack catalog (normalization,output,tool)",
+    )
+    parser.add_argument(
+        "--scenario",
+        help="Run a declarative kill-chain scenario by id (A, B, C, D, or E)",
+    )
+    parser.add_argument(
+        "--zero-trust-policy-file",
+        help="Optional JSON policy file mapping probe cases to expected_block contracts",
+    )
+    parser.add_argument(
+        "--evidence-dir",
+        default="evidence",
+        help="Directory used to persist probe evidence JSONL traces",
+    )
+    parser.add_argument(
+        "--sarif-output",
+        help="Optional SARIF output path for probe or scenario runs",
     )
     parser.add_argument(
         "--dedupe-semantic-threshold",
@@ -1885,6 +1979,57 @@ def _legacy_cli(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     args = _sanitize_legacy_args(args)
     plugins = _load_runner_plugins_from_args(args)
+
+    if args.scenario:
+        with _create_api_client(args) as client:
+            scenario_result = run_scenario(
+                client,
+                str(args.scenario).strip().upper(),
+                evidence_root=Path(args.evidence_dir),
+            )
+
+        scenario_summary = scenario_result.to_dict()
+        Path(args.output).write_text(json.dumps(scenario_summary, indent=2), encoding="utf-8")
+        if args.sarif_output:
+            sarif_report = build_sarif_report(
+                [
+                    {
+                        "case_id": stage.stage.stage_id,
+                        "finding_type": scenario_result.finding_type,
+                        "severity": scenario_result.severity,
+                        "owasp_id": stage.stage.owasp_id,
+                        "nist_controls": list(stage.stage.nist_controls),
+                        "gate_decision": stage.gate_decision,
+                    }
+                    for stage in scenario_result.stages
+                ],
+                tool_name="aletheia-redteam-kit",
+                owner="redteam-kit",
+                exception_expiry=None,
+            )
+            write_sarif_report(Path(args.sarif_output), sarif_report)
+        if any(stage.gate_decision != "blocked" for stage in scenario_result.stages):
+            return FAIL_THRESHOLD
+        return PASS
+
+    if args.probes:
+        probe_names = [item.strip() for item in str(args.probes).split(",") if item.strip()]
+        with _create_api_client(args) as client:
+            probe_summary = _run_probe_registry(
+                client,
+                probe_names,
+                policy_file=args.zero_trust_policy_file,
+                evidence_root=Path(args.evidence_dir),
+            )
+
+        Path(args.output).write_text(json.dumps(probe_summary, indent=2), encoding="utf-8")
+        if not probe_summary.get("pass", False):
+            print(
+                f"Probe gate failure: {len(probe_summary.get('violations', []))} violated expected_block contracts.",
+                file=sys.stderr,
+            )
+            return FAIL_THRESHOLD
+        return PASS
 
     if args.mode == "combined":
         if args.targets_file:
