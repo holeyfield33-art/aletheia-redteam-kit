@@ -20,6 +20,10 @@ from typing import Any
 
 from src.reporting.enricher import enrich_repo_summary
 from src.scanners.dep_vuln import scan_dependency_advisories
+from src.scanners.dependency_utils import (
+    _classify_dependency_finding_type,
+    _normalize_dependency_severity,
+)
 from src.scanners.git_history_secrets import scan_git_history_secrets
 
 try:  # pragma: no cover - unavailable on some platforms
@@ -784,27 +788,9 @@ def _load_declared_dependencies(repo_root: Path) -> list[str] | None:
     return [str(dep) for dep in deps]
 
 
-def _normalize_dependency_severity(value: str | None) -> str:
-    severity = str(value or "").strip().upper()
-    if severity in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}:
-        return severity
-    if severity in {"MODERATE"}:
-        return "MEDIUM"
-    return "HIGH"
-
-
 def _severity_rank(value: str | None) -> int:
     order = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
     return order.get(str(value or "").strip().upper(), 0)
-
-
-def _classify_dependency_finding_type(*, advisory_id: str, description: str) -> str:
-    blob = f"{advisory_id} {description}".lower()
-    if any(token in blob for token in ("malware", "backdoor", "trojan", "compromised")):
-        return "dependency_malware_suspect"
-    if any(token in blob for token in ("typosquat", "typosquatting", "dependency confusion", "substitution")):
-        return "dependency_tampering_risk"
-    return "dependency_vulnerability"
 
 
 def _parse_pip_audit_payload(payload: dict, report_rel: str) -> tuple[list[Finding], list[dict[str, str]]]:

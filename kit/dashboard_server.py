@@ -20,7 +20,11 @@ from urllib.parse import parse_qs, quote, urlparse
 from uuid import uuid4
 
 from engine.repo_audit.scanner import _normalize_public_github_repo_url
-from kit.auth import DashboardAuthManager, sanitize_next_path
+from kit.auth import (
+    DashboardAuthManager,
+    _parse_basic_auth_header,
+    sanitize_next_path,
+)
 
 LOGGER = logging.getLogger(__name__)
 LAUNCH_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -306,23 +310,6 @@ def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str, trac
         tracker.register(launch_id, result)
     
     return result
-
-
-def _parse_basic_auth_header(value: str) -> tuple[str, str] | None:
-    raw = str(value or "").strip()
-    if not raw.lower().startswith("basic "):
-        return None
-    token = raw.split(None, 1)[1].strip() if " " in raw else ""
-    if not token:
-        return None
-    try:
-        decoded = base64.b64decode(token).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
-        return None
-    if ":" not in decoded:
-        return None
-    username, password = decoded.split(":", 1)
-    return username, password
 
 
 def create_dashboard_handler(config: DashboardServerConfig):

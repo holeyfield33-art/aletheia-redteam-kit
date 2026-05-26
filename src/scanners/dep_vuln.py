@@ -7,6 +7,11 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from src.scanners.dependency_utils import (
+    _classify_dependency_finding_type,
+    _normalize_dependency_severity,
+)
+
 DEPENDENCY_MANIFEST_PATTERNS: dict[str, set[str]] = {
     "python": {"pyproject.toml", "requirements.txt", "Pipfile"},
     "npm": {"package.json", "package-lock.json", "yarn.lock"},
@@ -40,23 +45,6 @@ def detect_dependency_manifests(repo_root: Path) -> dict[str, list[str]]:
 
     return {key: sorted(paths) for key, paths in manifests.items()}
 
-
-def _normalize_dependency_severity(value: str | None) -> str:
-    severity = str(value or "").strip().upper()
-    if severity in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}:
-        return severity
-    if severity in {"MODERATE"}:
-        return "MEDIUM"
-    return "HIGH"
-
-
-def _classify_dependency_finding_type(*, advisory_id: str, description: str) -> str:
-    blob = f"{advisory_id} {description}".lower()
-    if any(token in blob for token in ("malware", "backdoor", "trojan", "compromised")):
-        return "dependency_malware_suspect"
-    if any(token in blob for token in ("typosquat", "typosquatting", "dependency confusion", "substitution")):
-        return "dependency_tampering_risk"
-    return "dependency_vulnerability"
 
 
 def _build_finding(
