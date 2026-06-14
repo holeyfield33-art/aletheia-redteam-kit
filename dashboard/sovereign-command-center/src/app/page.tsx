@@ -18,6 +18,7 @@ import {
 const SIDEBAR_ITEMS: Array<{ key: SidebarView; label: string; icon: string }> = [
   { key: "Home", label: "Home", icon: "HME" },
   { key: "RunAudit", label: "Run Audit", icon: "RUN" },
+  { key: "Attacks", label: "Attacks", icon: "ATK" },
   { key: "Results", label: "Results", icon: "RSL" },
   { key: "History", label: "History", icon: "HIS" },
   { key: "Settings", label: "Settings", icon: "SYS" },
@@ -228,6 +229,10 @@ export default function Home() {
   const [apiProfileName, setApiProfileName] = useState("");
   const [auditLaunchMode, setAuditLaunchMode] = useState<AuditLaunchMode>("combined");
   const [activeLaunchRunId, setActiveLaunchRunId] = useState<string | null>(null);
+  const [attackPayloads, setAttackPayloads] = useState<Array<{ id: string; name: string; category: string; severity: string }>>([]);
+  const [attackResults, setAttackResults] = useState<Record<string, "DENIED" | "PROCEED" | "ERROR" | "RUNNING">>({});
+  const [runningSet, setRunningSet] = useState<Set<string>>(new Set());
+
   const [apiProfiles, setApiProfiles] = useState<ApiTestProfile[]>(() => {
     if (typeof window === "undefined") {
       return [];
@@ -641,6 +646,54 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
+  async function loadAttackPayloads(): Promise<void> {
+    try {
+      const response = await fetch("/api/payloads");
+      if (!response.ok) return;
+      const data = await response.json();
+      setAttackPayloads(data.payloads ?? []);
+    } catch {
+      // silent — dashboard may be offline
+    }
+  }
+
+  async function runSingleAttack(id: string): Promise<void> {
+    setRunningSet((prev) => new Set(prev).add(id));
+    setAttackResults((prev) => ({ ...prev, [id]: "RUNNING" }));
+    try {
+      const response = await fetch("/api/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "api", projectId, runtimeMode, payloadId: id }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const decision = (data?.decision ?? data?.result ?? "ERROR") as string;
+      const normalized = decision.toUpperCase();
+      setAttackResults((prev) => ({
+        ...prev,
+        [id]: normalized === "DENIED" || normalized === "PROCEED" ? normalized : "ERROR",
+      }));
+    } catch {
+      setAttackResults((prev) => ({ ...prev, [id]: "ERROR" }));
+    } finally {
+      setRunningSet((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  }
+
+  async function runCategoryAttacks(category: string): Promise<void> {
+    const ids = attackPayloads.filter((p) => p.category === category).map((p) => p.id);
+    await Promise.all(ids.map((id) => runSingleAttack(id)));
+  }
+
+  async function runAllAttacks(): Promise<void> {
+    await Promise.all(attackPayloads.map((p) => runSingleAttack(p.id)));
+  }
+
   async function bootstrapWorkspace(): Promise<void> {
     await refreshPayloadLauncher();
     await runAudit(runtimeMode, "regular");
@@ -662,7 +715,12 @@ export default function Home() {
               <button
                 key={item.key}
                 type="button"
-                onClick={() => setActiveView(item.key)}
+                onClick={() => {
+                  setActiveView(item.key);
+                  if (item.key === "Attacks" && attackPayloads.length === 0) {
+                    void loadAttackPayloads();
+                  }
+                }}
                 className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${
                   active
                     ? "border-red-700 bg-red-950/40 text-zinc-100"
@@ -1415,6 +1473,109 @@ export default function Home() {
             </div>
           </section>
         )}
+        {activeView === "Attacks" && (() => {
+          const categories = Array.from(new Set(attackPayloads.map((p) => p.category))).sort();
+          const resultBadge = (id: string) => {
+            const r = attackResults[id];
+            if (!r) return null;
+            if (r === "RUNNING") return <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-zinc-700 text-zinc-300 animate-pulse">RUNNING</span>;
+            if (r === "DENIED") return <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-emerald-950/60 text-emerald-300 border border-emerald-800">DENIED</span>;
+            if (r === "PROCEED") return <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-red-950/60 text-red-300 border border-red-800">PROCEED</span>;
+            return <span className="rounded px-2 py-0.5 text-[10px] font-bold bg-zinc-800 text-zinc-400">ERROR</span>;
+          };
+
+          return (
+            <section className="space-y-4">
+              <div className="panel p-4 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-sm font-semibold">Attack Launcher</h2>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {attackPayloads.length} attacks across {categories.length} categories. Click Run to execute individually or by category.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void loadAttackPayloads()}
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-300 hover:border-zinc-500"
+                  >
+                    Reload
+                  </button>
+                  <button
+                    type="button"
+                    disabled={attackPayloads.length === 0 || runningSet.size > 0}
+                    onClick={() => void runAllAttacks()}
+                    className="rounded-md border border-red-700 bg-red-950/40 px-4 py-2 text-sm font-semibold text-red-100 hover:bg-red-950/60 disabled:opacity-50"
+                  >
+                    {runningSet.size > 0 ? `Running (${runningSet.size})…` : "Run All"}
+                  </button>
+                </div>
+              </div>
+
+              {attackPayloads.length === 0 && (
+                <div className="panel p-6 text-center text-sm text-zinc-500">
+                  No attack payloads loaded. Click Reload or initialize the workspace first.
+                </div>
+              )}
+
+              {categories.map((category) => {
+                const items = attackPayloads.filter((p) => p.category === category);
+                const categoryRunning = items.some((p) => runningSet.has(p.id));
+                return (
+                  <div key={category} className="panel p-4">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <h3 className="text-sm font-semibold text-zinc-100 capitalize">
+                        {category.replace(/_/g, " ")}
+                        <span className="ml-2 text-xs font-normal text-zinc-500">({items.length})</span>
+                      </h3>
+                      <button
+                        type="button"
+                        disabled={categoryRunning}
+                        onClick={() => void runCategoryAttacks(category)}
+                        className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
+                      >
+                        {categoryRunning ? "Running…" : "Run Category"}
+                      </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-zinc-800 text-left text-zinc-500">
+                            <th className="pb-2 pr-4 font-medium">ID</th>
+                            <th className="pb-2 pr-4 font-medium">Name</th>
+                            <th className="pb-2 pr-4 font-medium">Severity</th>
+                            <th className="pb-2 pr-4 font-medium">Result</th>
+                            <th className="pb-2 font-medium"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-900">
+                          {items.map((attack) => (
+                            <tr key={attack.id} className="hover:bg-zinc-900/40">
+                              <td className="py-2 pr-4 font-mono text-zinc-400">{attack.id}</td>
+                              <td className="py-2 pr-4 text-zinc-200">{attack.name}</td>
+                              <td className={`py-2 pr-4 font-semibold ${severityClass(attack.severity)}`}>{attack.severity}</td>
+                              <td className="py-2 pr-4">{resultBadge(attack.id)}</td>
+                              <td className="py-2">
+                                <button
+                                  type="button"
+                                  disabled={runningSet.has(attack.id)}
+                                  onClick={() => void runSingleAttack(attack.id)}
+                                  className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-[10px] text-zinc-300 hover:border-zinc-500 disabled:opacity-50"
+                                >
+                                  {runningSet.has(attack.id) ? "…" : "Run"}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
+          );
+        })()}
       </main>
     </div>
   );
