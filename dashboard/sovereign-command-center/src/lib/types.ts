@@ -6,7 +6,7 @@ export type AuditMode = "api" | "website" | "repo";
 
 export type WorkspaceTab = "Integrity" | "Supply Chain" | "Narrative" | "Adversarial";
 
-export type SidebarView = "Home" | "RunAudit" | "Results" | "History" | "Settings";
+export type SidebarView = "Home" | "RunAudit" | "Results" | "History" | "Settings" | "Attacks";
 
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 
