@@ -49,6 +49,18 @@ Demo media guidance:
 10. Emits a normalized SQLite database alongside JSON command-center artifacts
     so downstream tooling can query run, finding, gate, and metric tables
     directly.
+11. Measures agentic degradation with real telemetry — term-frequency cosine
+    semantic drift and token-level Jaccard disagreement plus adjudication
+    override rates — and calibrates the violation thresholds from observed
+    bypasses.
+12. Closes the loop: turns failed probes into deterministic, template-generated
+    remediation artifacts (`system_prompt_patch.md`, `manifest_rules.json`,
+    `zero_trust_policy.json`) that an operator can approve and apply with one
+    click, and gates commits on override-rate regressions in CI.
+
+See [docs/automated-remediation.md](docs/automated-remediation.md) for the
+full active-remediation runtime: telemetry math, the bypass→artifact loop,
+NIST-2025-0035 cryptographic-enforcement export, and dashboard approval.
 
 Receipts also appear in your Aletheia dashboard at
 [app.aletheia-core.com](https://app.aletheia-core.com) automatically - every
@@ -172,6 +184,71 @@ Catalog directories:
 - [Side-channel catalogs](attacks/side_channel/)
 - [Economic pressure catalogs](attacks/economic_pressure/)
 - [Agent conflict catalogs](attacks/agent_conflict/)
+
+## Active Remediation Runtime
+
+The kit is an active, self-healing security runtime, not just a measurement
+tool. Three probe suites drive the loop:
+
+- **ME** (`attacks/encoding/multi_encoding.json`, ME_001–006): hex, ROT13,
+  URL-encoding, nested base64+ROT13, zero-width separators, homoglyph+base64.
+- **HE** (`attacks/advanced/hallucination_exploitation.json`, HE_001–005): false
+  authority citation, confidence inflation, fabricated precedent, Socratic
+  drift, sycophancy via false consensus.
+- **APH** (`attacks/advanced/agentic_planning_hijack.json`, APH_001–005):
+  planning-loop sub-goal injection, tool selection override, fake memory
+  history, sub-goal privilege escalation, recursive self-improvement bait.
+
+### Telemetry (real math, no stubs)
+
+- **Semantic drift** (`engine/semantic_drift.py`): maximum cosine distance
+  between consecutive turns' term-frequency vectors (`0.0`=identical …
+  `1.0`=orthogonal). `flag_drift_violations(history, threshold=0.7)` flags
+  drifting turns.
+- **Disagreement & override** (`engine/disagreement_metrics.py`): mean
+  token-level Jaccard dissimilarity across agent outputs, plus the adjudication
+  override rate (`adjudicated_decision != subsystem_decision`).
+- **Calibration** (`scripts/calibrate_thresholds.py`): replays the suites and
+  recommends a tuned drift threshold from the scores observed on real bypasses.
+
+### Auto-remediation loop (deterministic, no LLM)
+
+A bypass (`expected DENIED`, `actual PROCEED`) is grouped by technique;
+`engine/remediation.py` emits one proposal per failing technique from a fast
+**deterministic template registry** — no API/LLM call. Each proposal bundles
+three artifacts that `kit/remediation_store.py` writes under
+`<artifact-dir>/remediation/` (all merges idempotent):
+
+- `system_prompt_patch.md` — appended guardrail constraint clauses
+- `manifest_rules.json` — `{rule_id, decision: "DENY", policy_version, …}` rule
+  definitions for the signed-manifest enforcement model
+- `zero_trust_policy.json` — `expected_block` contracts consumable directly by
+  `scripts/run_security_gates.py --zero-trust-policy-file`
+
+Run it headlessly (offline from a saved run, or live with `ALETHEIA_API_KEY`):
+
+    python scripts/generate_remediation.py --summary runs/<dir>/summary.json --artifact-dir runs
+    python scripts/generate_remediation.py --summary runs/<dir>/summary.json --approve REM-8a54442f
+
+### Cryptographic enforcement (NIST-2025-0035)
+
+The receipt trust chain is **Ed25519**-verified (`kit/verify.py` checks every
+engine receipt against the published public key). The remediation engine
+generates the technique-level `manifest_rules.json` definitions that populate the
+signed enforcement manifest, and `scripts/export_nist_telemetry.py` exports the
+agentic adjudication telemetry — correlating bypasses with receipt signature
+state (signed vs. unsigned/missing) into a hash-stamped JSON + CSV + Markdown
+dataset for the "Securing AI Agent Systems" submission.
+
+    python scripts/export_nist_telemetry.py --summary runs/<dir>/summary.json --suite APH HE
+
+### Gate commits on degradation (CI)
+
+`scripts/redteam_gate.py` (workflow: `.github/workflows/redteam-gate.yml`) breaks
+the build on an override-rate regression or a critical must-block leak (e.g.
+`false_citation`, `tool_selection_override`):
+
+    python scripts/redteam_gate.py --mode offline --suite all --summary runs/<dir>/summary.json
 
 ## Audit Modes
 
@@ -682,6 +759,23 @@ Dashboard views now include:
 - repository weak-spot quick actions
 - combined artifact surface switching (attack / website / repository)
 - top weak spots for operator triage
+- **Remediation Proposals** panel with one-click **Approve & Apply**
+
+#### Remediation approval (one-click)
+
+When served via `kit/dashboard_server.py`, the static dashboard exposes a
+Remediation Proposals panel backed by two endpoints:
+
+- `GET /api/remediation/proposals` → lists pending/approved proposals
+- `POST /api/remediation/approve` (`{"proposal_id": "REM-…"}`) → applies the
+  three artifacts and persists `status: approved`
+
+Workflow: run a sweep, generate proposals with
+`python scripts/generate_remediation.py --summary <run>/summary.json --artifact-dir runs`,
+then click **Approve & apply** on a proposal. The approved
+`zero_trust_policy.json` feeds straight back into the next gate run. Both
+endpoints sit behind the dashboard's existing auth modes; the live HTTP flow is
+covered by `tests/test_remediation_dashboard.py`.
 
 For command-center usage details, see [docs/command-center.md](docs/command-center.md).
 
@@ -714,9 +808,18 @@ Sovereign features:
 
 - Overview shell with risk score, block rate, attack visibility, critical bypasses, and latest run timestamp.
 - Runs and findings views backed by the existing run catalog and summary JSON outputs.
+- **Attacks launcher**: lists every catalog payload by category and runs them
+  individually, by category, or all-at-once (via `/api/payloads` and
+  `/api/launch`), with live DENIED / PROCEED / ERROR result badges.
 - Attack launch controls for API endpoint testing with saved profiles, method fuzzing, and parameter injection.
+- Repo-audit remediation cards (per-finding fix guidance) across the integrity,
+  supply-chain, narrative, and adversarial reports.
 - Settings and signing-ready event export for operator handoff.
 - Dark-only shell designed to match the static dashboard language and visual style.
+
+> The one-click **Approve & Apply** auto-remediation panel (proposal generation
+> and policy-artifact persistence) is served by the static dashboard +
+> `kit/dashboard_server.py` endpoints described above, not the Next.js app.
 
 Build checks:
 

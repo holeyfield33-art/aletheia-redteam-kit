@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — Active Remediation Runtime
+
+- **Real telemetry**: `engine/semantic_drift.py` computes drift as the maximum cosine distance between consecutive turns' term-frequency vectors; `engine/disagreement_metrics.py` computes token-level Jaccard dissimilarity and the adjudication override rate. No stubbed zero-values.
+- **Threshold calibration**: `engine/calibration.py` + `scripts/calibrate_thresholds.py` replay the ME/HE/APH suites and recommend a tuned `flag_drift_violations` threshold from observed bypass drift (per-suite P10 with must-catch override and false-positive guard).
+- **Headless CI gate**: `engine/ci_gates.py` + `scripts/redteam_gate.py` (workflow `.github/workflows/redteam-gate.yml`) break the build on override-rate regressions or critical must-block leaks (e.g. `false_citation`, `tool_selection_override`).
+- **NIST-2025-0035 telemetry export**: `engine/nist_export.py` + `scripts/export_nist_telemetry.py` emit a hash-stamped JSON/CSV/Markdown dataset correlating agentic bypasses with receipt signature state (signed vs. unsigned/missing).
+- **Auto-remediation loop**: `engine/remediation.py` turns each failing technique into a deterministic, template-generated proposal (no LLM) bundling a system-prompt constraint, a `DENY` manifest rule, and a zero-trust policy entry. `kit/remediation_store.py` persists them idempotently under `<artifact-dir>/remediation/` as `system_prompt_patch.md`, `manifest_rules.json`, and `zero_trust_policy.json` (the last consumable by `run_security_gates.py`).
+- **Dashboard approval**: `kit/dashboard_server.py` adds `GET /api/remediation/proposals` and `POST /api/remediation/approve`; the static dashboard gains a one-click **Approve & Apply** panel. Live HTTP flow covered by `tests/test_remediation_dashboard.py`.
+- **Expanded suites**: `multi_encoding` now ME_001–006 (adds zero-width separator and homoglyph+base64 vectors).
+- Documentation: added [docs/automated-remediation.md](docs/automated-remediation.md) and updated the README to reflect the active runtime.
+
 ## v1.3.0 (Phase 3 — Private Repo & Expanded Scanning)
 
 - **Private repo support**: `run_repo_audit` now accepts `repo_token` (PAT or fine-grained token with `Contents: read` scope). Token is passed via `GIT_ASKPASS` — it never appears in subprocess arguments, logs, or summary output. Also readable from `ALETHEIA_GITHUB_TOKEN` env var.
