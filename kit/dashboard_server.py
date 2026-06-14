@@ -524,6 +524,13 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 self._send_json(entries[-1] if entries else {}, status=HTTPStatus.OK)
                 return
 
+            if parsed.path == "/api/remediation/proposals":
+                from kit.remediation_store import load_proposals
+
+                proposals = load_proposals(config.artifact_dir)
+                self._send_json({"proposals": proposals})
+                return
+
             # Process tracking endpoints
             if parsed.path == "/api/launches":
                 launches = process_tracker.list_launches()
@@ -629,6 +636,29 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 self._send_json({"ok": True, "launch_id": launch_id, "status": "terminated"})
                 return
             
+            if parsed.path == "/api/remediation/approve":
+                content_length = int(self.headers.get("Content-Length") or 0)
+                raw_body = self.rfile.read(content_length) if content_length else b"{}"
+                try:
+                    payload = json.loads(raw_body.decode("utf-8") or "{}")
+                except json.JSONDecodeError:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON body")
+                    return
+
+                proposal_id = str((payload or {}).get("proposal_id") or "").strip()
+                if not proposal_id:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "proposal_id is required")
+                    return
+
+                from kit.remediation_store import apply_proposal
+
+                result = apply_proposal(config.artifact_dir, proposal_id)
+                if not result.get("ok"):
+                    self.send_error(HTTPStatus.NOT_FOUND, "Proposal not found")
+                    return
+                self._send_json(result, status=HTTPStatus.ACCEPTED)
+                return
+
             if parsed.path != "/api/repo-audit":
                 self.send_error(HTTPStatus.NOT_FOUND, "Not found")
                 return
