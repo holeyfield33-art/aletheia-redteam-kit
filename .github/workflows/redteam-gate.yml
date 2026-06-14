@@ -1,0 +1,90 @@
+name: redteam-gate
+
+# Faces the hallucination and planning-hijack suites against the Aletheia target
+# on every push/PR and breaks the build on override-rate regressions or critical
+# must-block probe leaks (e.g. false_citation, tool_selection_override).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  redteam-gate:
+    runs-on: ubuntu-latest
+    env:
+      ALETHEIA_GATE_SUITE: "all"
+      ALETHEIA_GATE_MAX_OVERRIDE_RATE: "0.0"
+      ALETHEIA_GATE_MAX_OVERRIDE_INCREASE: "0.0"
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Check API key availability
+        id: key_check
+        run: |
+          if [ -z "${ALETHEIA_API_KEY}" ]; then
+            echo "Missing ALETHEIA_API_KEY secret; skipping live red-team gate"
+            echo "has_api_key=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_api_key=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          ALETHEIA_API_KEY: ${{ secrets.ALETHEIA_API_KEY }}
+
+      - name: Fetch baseline summary
+        if: steps.key_check.outputs.has_api_key == 'true'
+        run: |
+          git fetch origin main --depth=1 || true
+          if git show origin/main:summary.json > baseline_summary.json 2>/dev/null; then
+            echo "Loaded baseline summary from origin/main"
+          else
+            echo "{}" > baseline_summary.json
+            echo "No baseline summary found on origin/main"
+          fi
+
+      - name: Run headless red-team gate
+        if: steps.key_check.outputs.has_api_key == 'true'
+        run: |
+          python scripts/redteam_gate.py \
+            --mode live \
+            --suite "${ALETHEIA_GATE_SUITE}" \
+            --target-url "${ALETHEIA_TARGET_URL}" \
+            --baseline-summary baseline_summary.json \
+            --max-override-rate "${ALETHEIA_GATE_MAX_OVERRIDE_RATE}" \
+            --max-override-increase "${ALETHEIA_GATE_MAX_OVERRIDE_INCREASE}" \
+            --out-json redteam_gate.json
+        env:
+          ALETHEIA_API_KEY: ${{ secrets.ALETHEIA_API_KEY }}
+          ALETHEIA_TARGET_URL: ${{ vars.ALETHEIA_TARGET_URL }}
+
+      - name: Write skipped report when API key is unavailable
+        if: steps.key_check.outputs.has_api_key != 'true'
+        run: |
+          cat > redteam_gate.json <<'JSON'
+          {
+            "skipped": true,
+            "reason": "missing_ALETHEIA_API_KEY",
+            "pass": true,
+            "violations": []
+          }
+          JSON
+
+      - name: Upload gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redteam-gate-report
+          path: redteam_gate.json

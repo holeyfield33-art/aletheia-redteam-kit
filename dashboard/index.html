@@ -761,6 +761,15 @@
       <textarea id="remediationNotes" class="remediation-notes" placeholder="Operator notes and next steps..."></textarea>
       <div class="status" id="verifyStatus"></div>
     </div>
+    <div class="detail" id="remediationPane">
+      <h2>Remediation Proposals</h2>
+      <p class="muted">Template-based fixes generated from failed probes. Approve to write the system-prompt, manifest, and zero-trust artifacts.</p>
+      <div class="detail-top">
+        <button id="refreshRemediationBtn" type="button">Refresh proposals</button>
+      </div>
+      <div id="remediationProposalsList"><p class="muted">No proposals loaded.</p></div>
+      <div class="status" id="remediationStatus"></div>
+    </div>
     </div>
   </div>
 
@@ -3224,6 +3233,77 @@
       setStatus("Baseline set to previous loaded run.");
     });
 
+    const REMEDIATION_API_PATH = "/api/remediation/proposals";
+    const REMEDIATION_APPROVE_PATH = "/api/remediation/approve";
+
+    function setRemediationStatus(message) {
+      const el = document.getElementById("remediationStatus");
+      if (el) { el.textContent = message || ""; }
+    }
+
+    function renderRemediationProposals(proposals) {
+      const container = document.getElementById("remediationProposalsList");
+      if (!container) { return; }
+      if (!proposals || !proposals.length) {
+        container.innerHTML = '<p class="muted">No proposals. Generate with scripts/generate_remediation.py.</p>';
+        return;
+      }
+      container.innerHTML = "";
+      proposals.forEach(function (p) {
+        const card = document.createElement("div");
+        card.className = "detail-top";
+        card.style.display = "block";
+        card.style.marginBottom = "0.6rem";
+        const approved = p.status === "approved";
+        const triggers = (p.trigger_ids || []).join(", ") || "n/a";
+        const constraint = (p.artifacts && p.artifacts.system_prompt_constraint) || "";
+        card.innerHTML =
+          '<strong>' + p.proposal_id + '</strong> &middot; ' + p.severity +
+          ' &middot; <code>' + p.technique + '</code> &middot; ' + (p.bypass_count || 0) + ' bypass(es)' +
+          '<div class="muted">' + constraint + '</div>' +
+          '<div class="muted">triggers: ' + triggers + '</div>';
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = approved ? "Approved ✓" : "Approve & apply";
+        btn.disabled = approved;
+        btn.addEventListener("click", function () { approveRemediation(p.proposal_id); });
+        card.appendChild(btn);
+        container.appendChild(card);
+      });
+    }
+
+    async function refreshRemediationProposals() {
+      try {
+        const payload = await fetchJson(REMEDIATION_API_PATH);
+        renderRemediationProposals((payload && payload.proposals) || []);
+        setRemediationStatus("");
+      } catch (err) {
+        setRemediationStatus("Failed to load proposals: " + err.message);
+      }
+    }
+
+    async function approveRemediation(proposalId) {
+      setRemediationStatus("Approving " + proposalId + "...");
+      try {
+        const resp = await fetch(REMEDIATION_APPROVE_PATH, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ proposal_id: proposalId }),
+        });
+        if (!resp.ok) { throw new Error("HTTP " + resp.status); }
+        const result = await resp.json();
+        setRemediationStatus("Applied " + proposalId + ": " + (result.artifacts_written || []).join(", "));
+        await refreshRemediationProposals();
+      } catch (err) {
+        setRemediationStatus("Approve failed: " + err.message);
+      }
+    }
+
+    const refreshRemediationBtnEl = document.getElementById("refreshRemediationBtn");
+    if (refreshRemediationBtnEl) {
+      refreshRemediationBtnEl.addEventListener("click", function () { refreshRemediationProposals(); });
+    }
+
     (async function bootstrapDashboard() {
       startLaunchPolling();
       await refreshLaunches({ silent: true });
@@ -3231,6 +3311,7 @@
       if (!loaded) {
         await loadDefault();
       }
+      await refreshRemediationProposals();
     })();
   </script>
 </body>
