@@ -203,3 +203,10 @@ def test_load_attacks_rejects_non_array_threat_feed(tmp_path) -> None:
     provider = FileSystemCatalogProvider(attack_dir)
     with pytest.raises(ValueError):
         load_attacks("sample", provider, threat_feed_file=str(threat_feed_file))
+
+
+def test_builtin_catalog_loads_at_least_300_payloads() -> None:
+    # Backs the README "300+ adversarial payloads" claim against the shipped
+    # recursive catalogs under attacks/.
+    attacks = load_attacks()
+    assert len(attacks) >= 300

@@ -9,7 +9,7 @@ from kit.client import AletheiaClient
 from kit.evidence import EvidenceTrace, now_utc, write_trace_jsonl
 
 from .registry import load_scenario_definition
-from .types import BlastRadius, ScenarioDefinition, ScenarioRunResult, ScenarioStage, ScenarioStageResult
+from .types import BlastRadius, ScenarioDefinition, ScenarioRunResult, ScenarioStageResult
 
 _RISK_ORDER = {"read": 1, "write": 2, "network": 3, "exec": 4}
 

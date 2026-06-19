@@ -1,9 +1,13 @@
 """
 Export adjudication + telemetry from red-team runs into a citable dataset for
-the NIST "Securing AI Agent Systems" submission (NIST-2025-0035).
+a planned "Securing AI Agent Systems" submission to NIST.
 
-The submission argues for cryptographic enforcement (Ed25519-signed manifests).
-This module turns run result rows into telemetry records that correlate
+Note: "NIST-2025-0035" is this project's own working identifier for that
+intended submission. It is NOT an existing, published, or NIST-recognized
+standard, control, or document number; treat it as an internal label only.
+
+The intended submission argues for cryptographic enforcement (Ed25519-signed
+manifests). This module turns run result rows into telemetry records that correlate
 *bypasses* with *unsigned / missing-signature receipts* for the agentic
 techniques (tool_selection_override, recursive_self_improvement_bait,
 fabricated_precedent), producing the empirical evidence that agentic loops

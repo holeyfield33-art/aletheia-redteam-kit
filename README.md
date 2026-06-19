@@ -30,7 +30,7 @@ Demo media guidance:
 
 ## What it does
 
-1. Loads ~100 adversarial payloads from recursive JSON catalogs under `attacks/`
+1. Loads 300+ adversarial payloads from recursive JSON catalogs under `attacks/`
     (prompt injection, data exfiltration, tool abuse, jailbreak, policy evasion,
     plus benign controls).
 2. Sends each payload to `https://api.aletheia-core.com/v1/audit`.
@@ -187,8 +187,8 @@ Current audit modes performed by the toolkit:
 
 Command-center control plane (single entry point):
 
-    python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs --open-dashboard
-    python -m kit.runner dashboard --artifact-dir runs --dashboard-file dashboard/index.html --open-dashboard
+    python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs
+    python -m kit.runner dashboard --artifact-dir runs --dashboard-file dashboard/index.html
     python -m kit.runner dashboard --artifact-dir runs --dashboard-file dashboard/index.html --serve --host 0.0.0.0 --port 8080
     python -m kit.runner compare --current summary.json --baseline baseline_summary.json --output compare_summary.json
     python -m kit.runner export --input summary.json --format csv --output triage.csv --filter "category=prompt_injection,mismatch=true"
@@ -200,7 +200,6 @@ Supported command-center flags:
 - `--agentic-mode` has been removed in favor of `--mode agentic`.
 - `--baseline` and `--thresholds`
 - `--filter` (category/decision/mismatch/technique/search)
-- `--open-dashboard`
 - `--artifact-dir` and `--dashboard-file`
 - `--serve`, `--host`, `--port`, and `--auth-mode` for hosted dashboard mode
 - `--cli-only`
@@ -210,7 +209,7 @@ Hosted operator mode:
 - Run a sweep once with `python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs --output summary.json`.
 - Start the hosted dashboard with `python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080`.
 - Use `ALETHEIA_DASHBOARD_USERNAME` plus `ALETHEIA_DASHBOARD_PASSWORD_HASH` for browser login, `ALETHEIA_DASHBOARD_API_KEY_HASH` for header-based API access, or `ALETHEIA_DASHBOARD_TRUST_PROXY_AUTH=true` to trust reverse-proxy identity headers.
-- Browser login issues signed `HttpOnly` session cookies with strict same-site policy and configurable 8-24 hour lifetime.
+- Browser login issues signed `HttpOnly` session cookies with strict same-site policy and a configurable lifetime (default 12 hours, minimum 1 hour, set via `ALETHEIA_DASHBOARD_SESSION_TTL_HOURS`).
 - The hosted dashboard auto-loads the latest run from `/api/runs`; the operator does not need to upload JSON manually.
 - Health-check endpoint: `http://<host>:8080/api/health`.
 
@@ -614,14 +613,13 @@ Current custom technique taxonomy examples:
 
 ## Multi-target batch mode (Phase 2)
 
-Sweep multiple API endpoints, repositories, and websites in a single command using a targets file:
+Sweep multiple API endpoints and repositories in a single command using a targets file:
 
     cat > targets.json <<'JSON'
     [
         {"type": "api",     "url": "https://api.example.com",              "label": "prod-api"},
         {"type": "repo",    "path": "/path/to/local/repo",                 "label": "backend-service"},
-        {"type": "repo",    "url": "https://github.com/example/public-api","label": "vendor-sdk"},
-        {"type": "website", "url": "https://app.example.com",              "label": "frontend"}
+        {"type": "repo",    "url": "https://github.com/example/public-api","label": "vendor-sdk"}
     ]
     JSON
 
@@ -630,7 +628,7 @@ Sweep multiple API endpoints, repositories, and websites in a single command usi
         --artifact-dir runs \
         --output runs/batch_summary.json
 
-Each target runs through its corresponding mode runner (`api`, `repo`, `website`) with the same gates and thresholds as single-target runs. Progress is streamed to stderr as each target completes.
+Each target runs through its corresponding mode runner (`api` or `repo`) with the same gates and thresholds as single-target runs. Targets are executed sequentially, and progress is streamed to stderr as each target completes.
 
 Batch output shape:
 
@@ -638,13 +636,6 @@ Batch output shape:
 - `runs/run-batch-{stamp}/targets/{label}/summary.json`: per-target summary.
 - `runs/run-batch-{stamp}/targets/{label}/artifacts/run-*/command_center.sqlite`: per-target SQLite.
 - `runs/run-combined-{stamp}/command_center.sqlite`: merged SQLite with one `targets` row per batch target.
-
-Parallel concurrency (default 2 workers):
-
-    python -m kit.runner --mode combined \
-        --targets-file targets.json \
-        --max-parallel-targets 4 \
-        --output runs/batch_summary.json
 
 Pass threshold overrides that apply to every target:
 
@@ -655,8 +646,8 @@ Pass threshold overrides that apply to every target:
 
 Target object fields:
 
-- `type` (required): `api`, `repo`, or `website`
-- `url` (optional): target URL (API base URL, repo clone URL, or website URL)
+- `type` (required): `api` or `repo`
+- `url` (optional): target URL (API base URL or repo clone URL)
 - `path` (optional): local filesystem path for repo targets
 - `label` (optional): human-readable name used in artifact paths and batch summary keys (auto-generated from type and index if omitted)
 
