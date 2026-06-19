@@ -613,14 +613,13 @@ Current custom technique taxonomy examples:
 
 ## Multi-target batch mode (Phase 2)
 
-Sweep multiple API endpoints, repositories, and websites in a single command using a targets file:
+Sweep multiple API endpoints and repositories in a single command using a targets file:
 
     cat > targets.json <<'JSON'
     [
         {"type": "api",     "url": "https://api.example.com",              "label": "prod-api"},
         {"type": "repo",    "path": "/path/to/local/repo",                 "label": "backend-service"},
-        {"type": "repo",    "url": "https://github.com/example/public-api","label": "vendor-sdk"},
-        {"type": "website", "url": "https://app.example.com",              "label": "frontend"}
+        {"type": "repo",    "url": "https://github.com/example/public-api","label": "vendor-sdk"}
     ]
     JSON
 
@@ -629,7 +628,7 @@ Sweep multiple API endpoints, repositories, and websites in a single command usi
         --artifact-dir runs \
         --output runs/batch_summary.json
 
-Each target runs through its corresponding mode runner (`api`, `repo`, `website`) with the same gates and thresholds as single-target runs. Progress is streamed to stderr as each target completes.
+Each target runs through its corresponding mode runner (`api` or `repo`) with the same gates and thresholds as single-target runs. Targets are executed sequentially, and progress is streamed to stderr as each target completes.
 
 Batch output shape:
 
@@ -637,13 +636,6 @@ Batch output shape:
 - `runs/run-batch-{stamp}/targets/{label}/summary.json`: per-target summary.
 - `runs/run-batch-{stamp}/targets/{label}/artifacts/run-*/command_center.sqlite`: per-target SQLite.
 - `runs/run-combined-{stamp}/command_center.sqlite`: merged SQLite with one `targets` row per batch target.
-
-Parallel concurrency (default 2 workers):
-
-    python -m kit.runner --mode combined \
-        --targets-file targets.json \
-        --max-parallel-targets 4 \
-        --output runs/batch_summary.json
 
 Pass threshold overrides that apply to every target:
 
@@ -654,8 +646,8 @@ Pass threshold overrides that apply to every target:
 
 Target object fields:
 
-- `type` (required): `api`, `repo`, or `website`
-- `url` (optional): target URL (API base URL, repo clone URL, or website URL)
+- `type` (required): `api` or `repo`
+- `url` (optional): target URL (API base URL or repo clone URL)
 - `path` (optional): local filesystem path for repo targets
 - `label` (optional): human-readable name used in artifact paths and batch summary keys (auto-generated from type and index if omitted)
 
