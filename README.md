@@ -187,8 +187,8 @@ Current audit modes performed by the toolkit:
 
 Command-center control plane (single entry point):
 
-    python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs --open-dashboard
-    python -m kit.runner dashboard --artifact-dir runs --dashboard-file dashboard/index.html --open-dashboard
+    python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs
+    python -m kit.runner dashboard --artifact-dir runs --dashboard-file dashboard/index.html
     python -m kit.runner dashboard --artifact-dir runs --dashboard-file dashboard/index.html --serve --host 0.0.0.0 --port 8080
     python -m kit.runner compare --current summary.json --baseline baseline_summary.json --output compare_summary.json
     python -m kit.runner export --input summary.json --format csv --output triage.csv --filter "category=prompt_injection,mismatch=true"
@@ -200,7 +200,6 @@ Supported command-center flags:
 - `--agentic-mode` has been removed in favor of `--mode agentic`.
 - `--baseline` and `--thresholds`
 - `--filter` (category/decision/mismatch/technique/search)
-- `--open-dashboard`
 - `--artifact-dir` and `--dashboard-file`
 - `--serve`, `--host`, `--port`, and `--auth-mode` for hosted dashboard mode
 - `--cli-only`
