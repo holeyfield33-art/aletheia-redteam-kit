@@ -37,3 +37,9 @@ runs/.launches/
 
 # Test fixture artifacts
 json/
+
+# Generated audit reports (tool output, not source)
+enterprise_audit_report_*.md
+
+# Agent scratch/review directories
+.review-*/
