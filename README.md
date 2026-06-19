@@ -30,7 +30,7 @@ Demo media guidance:
 
 ## What it does
 
-1. Loads ~100 adversarial payloads from recursive JSON catalogs under `attacks/`
+1. Loads 300+ adversarial payloads from recursive JSON catalogs under `attacks/`
     (prompt injection, data exfiltration, tool abuse, jailbreak, policy evasion,
     plus benign controls).
 2. Sends each payload to `https://api.aletheia-core.com/v1/audit`.
@@ -209,7 +209,7 @@ Hosted operator mode:
 - Run a sweep once with `python -m kit.runner run --mode combined --target-url https://example.com --artifact-dir runs --output summary.json`.
 - Start the hosted dashboard with `python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080`.
 - Use `ALETHEIA_DASHBOARD_USERNAME` plus `ALETHEIA_DASHBOARD_PASSWORD_HASH` for browser login, `ALETHEIA_DASHBOARD_API_KEY_HASH` for header-based API access, or `ALETHEIA_DASHBOARD_TRUST_PROXY_AUTH=true` to trust reverse-proxy identity headers.
-- Browser login issues signed `HttpOnly` session cookies with strict same-site policy and configurable 8-24 hour lifetime.
+- Browser login issues signed `HttpOnly` session cookies with strict same-site policy and a configurable lifetime (default 12 hours, minimum 1 hour, set via `ALETHEIA_DASHBOARD_SESSION_TTL_HOURS`).
 - The hosted dashboard auto-loads the latest run from `/api/runs`; the operator does not need to upload JSON manually.
 - Health-check endpoint: `http://<host>:8080/api/health`.
 
