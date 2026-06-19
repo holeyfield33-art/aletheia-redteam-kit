@@ -1,30 +1,51 @@
-# Off-Phase Status
+# Off-Phase Status — RETIRED
+
+> **This document is retired as of 2026-06-18 and no longer reflects the codebase.**
+> Kept for historical context only. Do not treat its launch decision as current.
+
+## Why this was retired
+
+The original no-go (2026-05-16) was based on a single blocker: the repo security
+gate hard-failed in a clean container because `semgrep` was not on PATH.
+
+That blocker no longer exists. The security gate now degrades gracefully when
+`semgrep` is missing, exactly as it already did for `trufflehog`:
+
+- `scripts/run_security_gates.py` reports the tool as `unavailable` instead of failing.
+- `engine/repo_audit/scanner.py` guards the invocation with `shutil.which`.
+- `semgrep` lives only in the optional `full`/`dev` profile, not the default `medium`.
+
+Verified 2026-06-18 in a clean environment (system Python, neither `semgrep` nor
+`trufflehog` installed): the gate runs to **exit 0**, and the full suite of 263
+tests passes. The kit installs and runs end-to-end offline.
+
+## Current launch blocker (non-technical)
+
+The only remaining hard block is licensing, not execution:
+
+- `LICENSE-COMMERCIAL.md` still contains unfilled placeholders
+  (`[DATE]`, `[COMPANY NAME]`, `[JURISDICTION]`). This blocks commercial-license
+  *distribution*, not running the kit. The permissive root `LICENSE` (MIT) is in
+  place as the interim license.
+
+---
+
+<details>
+<summary>Original 2026-05-16 status (historical — superseded)</summary>
 
 Date: 2026-05-16
 Branch: feature/dashboard-artifact-quicklinks
 
-## Launch Decision
+Launch decision at the time: No-go, because the repo security gate failed in a
+clean container without `semgrep` on PATH. `trufflehog` was already handled
+gracefully; `semgrep` was not. The recommended remediation was to make the gate
+treat a missing `semgrep` the same way as a missing `trufflehog` — which has
+since been done (see above).
 
-No-go for launch.
+Off-phase work completed in that cycle: dashboard launch queue and hosted launch
+APIs, bounded launch-log tailing, runner subprocess recursion fix, campaign
+planning, agentic runner stop controls and learning artifacts, command-center
+normalization of artifact paths, dashboard artifact quick links, graceful
+`trufflehog` handling, and regression tests for all of the above.
 
-Reason:
-- The repo security gate still fails in a clean container because `semgrep` is not present on PATH.
-- `trufflehog` is now handled gracefully, but the gate cannot complete until `semgrep` is available or the gate degrades in the same way.
-
-## Off-Phase Work Completed
-
-- Dashboard launch queue and hosted launch APIs are in place.
-- Bounded launch log tailing is implemented.
-- Runner subprocess launch recursion is fixed.
-- Campaign planning for run preparation is implemented.
-- Agentic runner stop controls and learning artifacts are implemented.
-- Command-center normalization now records campaign and learning artifact paths.
-- Dashboard UI now shows run artifacts and artifact quick links.
-- Security gate no longer hard-fails when `trufflehog` is missing.
-- Regression tests were added for the new campaign, agentic, command-center, dashboard, and security-gate behavior.
-
-## Remaining Work
-
-- Make the security gate fully portable in a minimal container by handling missing `semgrep` the same way as `trufflehog`, or install `semgrep` in the target environment.
-- Decide whether the dashboard quick-link helper should keep the current same-site restriction or add a stricter explicit allowlist for artifact paths.
-- If launch readiness is required now, run the security gate in an environment where both `semgrep` and `trufflehog` are installed.
+</details>

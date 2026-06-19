@@ -8,9 +8,15 @@ SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
 
 
 def _compute_executive_risk(summary: dict[str, Any]) -> int:
-    risk_score = int(summary.get("risk_score", 0))
-    dep_score = int((summary.get("dependencies") or {}).get("exploitability_score", 0))
-    return int(min(100, round((risk_score * 0.65) + (dep_score * 0.35))) )
+    # Two source scales run in OPPOSITE directions:
+    #   risk_score          -> health scale: 100 = clean repo, 0 = severe.
+    #   exploitability_score -> danger scale: 0 = no exploitable deps, 100 = many.
+    # Executive risk is a danger scale (higher = worse), so we invert risk_score
+    # into a danger value before blending. A clean repo now reports ~0, not 65.
+    risk_danger = 100 - int(summary.get("risk_score", 100))
+    dep_danger = int((summary.get("dependencies") or {}).get("exploitability_score", 0))
+    blended = (risk_danger * 0.65) + (dep_danger * 0.35)
+    return int(min(100, max(0, round(blended))))
 
 
 def _format_manifest_overview(summary: dict[str, Any]) -> str:
