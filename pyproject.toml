@@ -2,6 +2,8 @@
 name = "aletheia-redteam-kit"
 version = "1.2.0"
 description = "Adversarial test kit for the Aletheia AI security API"
+license = {file = "LICENSE"}
+classifiers = ["License :: OSI Approved :: MIT License"]
 requires-python = ">=3.11"
 dependencies = ["httpx>=0.27", "bcrypt>=4.2"]
 
