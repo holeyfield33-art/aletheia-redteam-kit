@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,7 @@ class AgenticRunnerConfig:
     success_budget: int | None = None
     diminishing_window: int = 3
     diminishing_min_delta: int = 1
+    persist_effectiveness: bool = False
 
 
 class AgenticRunner:
@@ -40,13 +42,28 @@ class AgenticRunner:
             return False
         return result.get("actual_decision") == "DENIED" and attack.get("expected_decision") == "DENIED"
 
-    def _build_requeue_variants(self, attack: dict, round_index: int) -> list[dict]:
+    def _rank_strategies(self, effectiveness: dict[str, dict[str, int]]) -> list[str] | None:
+        strategies = list(self.config.mutation_strategies or [])
+        if not strategies or not effectiveness:
+            return self.config.mutation_strategies
+
+        def _rate(s: str) -> float:
+            stats = effectiveness.get(s, {})
+            success = stats.get("success", 0)
+            total = success + stats.get("blocked", 0)
+            return (success + 1) / (total + 2)
+
+        return sorted(strategies, key=_rate, reverse=True)
+
+    def _build_requeue_variants(
+        self, attack: dict, round_index: int, effectiveness: dict[str, dict[str, int]]
+    ) -> list[dict]:
         return build_mutation_variants(
             [attack],
             objective=self.config.objective,
             round_index=round_index,
             limit=max(self.config.variants_per_round, 1),
-            strategies=self.config.mutation_strategies,
+            strategies=self._rank_strategies(effectiveness),
         )
 
     def _apply_cloaking(self, variants: list[dict]) -> list[dict]:
@@ -114,6 +131,13 @@ class AgenticRunner:
         stop_reason = "max_iterations_reached"
         accumulated_risk = 0.0
         mutation_effectiveness: dict[str, dict[str, int]] = {}
+        if self.config.persist_effectiveness:
+            _prior_path = self.config.output_path.with_name("mutation_effectiveness.json")
+            if _prior_path.exists():
+                try:
+                    mutation_effectiveness = json.loads(_prior_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError, ValueError) as exc:
+                    print(f"[agentic_runner] warning: could not load prior effectiveness data from {_prior_path}: {exc}", file=sys.stderr)
 
         try:
             for iteration in range(1, max(self.config.max_iterations, 1) + 1):
@@ -169,7 +193,7 @@ class AgenticRunner:
                         strategy = str(attack.get("mutation_strategy") or "seed")
                         stats = mutation_effectiveness.setdefault(strategy, {"success": 0, "blocked": 0})
                         stats["blocked"] += 1
-                        queue.extend(self._apply_cloaking(self._build_requeue_variants(attack, iteration + 1)))
+                        queue.extend(self._apply_cloaking(self._build_requeue_variants(attack, iteration + 1, mutation_effectiveness)))
 
                 fresh_hard_negatives = generate_hard_negatives(successful_payloads, blocked_payloads)
                 if fresh_hard_negatives:
