@@ -15,9 +15,13 @@ import pytest
 from kit.auth import DashboardAuthConfig, DashboardAuthManager
 from kit.dashboard_server import (
     DashboardServerConfig,
+    _MODE_STRING_ARGS,
+    _build_mode_command,
+    _launch_audit,
     _launch_public_repo_audit,
     _normalize_run_entries,
     _parse_basic_auth_header,
+    _sanitize_launch_value,
     create_dashboard_handler,
 )
 from tests.test_fixtures import TEST_DASHBOARD_SESSION_SECRET, TEST_PASSWORD, TEST_USERNAME
@@ -460,3 +464,245 @@ def test_auth_manager_accepts_proxy_identity_headers() -> None:
 
     assert outcome.allowed is True
     assert outcome.principal == "operator@example.com"
+
+
+# ---------------------------------------------------------------------------
+# Multi-mode launch: unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_sanitize_launch_value_rejects_unsafe_input() -> None:
+    from kit.dashboard_server import _sanitize_launch_value
+
+    # Valid values pass through unchanged
+    assert _sanitize_launch_value("https://example.com") == "https://example.com"
+    assert _sanitize_launch_value("medium") == "medium"
+    assert _sanitize_launch_value("10") == "10"
+    assert _sanitize_launch_value(".") == "."
+    assert _sanitize_launch_value("/workspace/repo") == "/workspace/repo"
+
+    # Leading dash → rejected (flag injection)
+    assert _sanitize_launch_value("-flag-inject") is None
+    assert _sanitize_launch_value("--another-flag") is None
+
+    # Shell metacharacters that are NOT in the allowlist → rejected.
+    # (Popen is invoked with a list so the OS never passes values through a
+    # shell; however the sanitiser still blocks anything outside the
+    # conservative allowlist to provide defence-in-depth.)
+    assert _sanitize_launch_value("; rm -rf /") is None   # semicolon
+    assert _sanitize_launch_value("$(whoami)") is None    # dollar / parens
+    assert _sanitize_launch_value("| cat /etc/passwd") is None  # pipe
+    assert _sanitize_launch_value("`id`") is None         # backtick
+    assert _sanitize_launch_value("val\x00ue") is None    # null byte
+    assert _sanitize_launch_value("foo!bar") is None      # exclamation
+
+    # '&' is intentionally allowed for URL query strings
+    # (e.g. "?foo=bar&baz=qux").  Because Popen is called with a list and
+    # shell=False, '&' has no shell semantics here.
+    assert _sanitize_launch_value("?foo=bar&baz=qux") == "?foo=bar&baz=qux"
+
+    # Empty / None → rejected
+    assert _sanitize_launch_value(None) is None
+    assert _sanitize_launch_value("") is None
+    assert _sanitize_launch_value("   ") is None
+
+    # Overlong string → rejected
+    assert _sanitize_launch_value("a" * 2049) is None
+    # Exactly at the limit is fine
+    assert _sanitize_launch_value("a" * 2048) == "a" * 2048
+
+
+def test_build_mode_command_allowlists_per_mode(tmp_path: Path) -> None:
+    output_path = tmp_path / "out.json"
+    artifact_root = tmp_path
+
+    # Known key is forwarded with correct flag
+    cmd = _build_mode_command(
+        "website",
+        {"target_url": "https://example.com", "max_pages": "5"},
+        output_path,
+        artifact_root,
+    )
+    assert "--target-url" in cmd
+    assert "https://example.com" in cmd
+    assert "--max-pages" in cmd
+    assert "5" in cmd
+
+    # Unknown keys for this mode are silently ignored
+    cmd2 = _build_mode_command(
+        "website",
+        {"target_url": "https://example.com", "malicious_flag": "evil"},
+        output_path,
+        artifact_root,
+    )
+    assert "malicious_flag" not in cmd2
+    assert "evil" not in cmd2
+
+    # Unsupported mode raises ValueError
+    import pytest
+    with pytest.raises(ValueError, match="Unsupported mode"):
+        _build_mode_command("unknown_mode", {}, output_path, artifact_root)
+
+    # Every mode in _MODE_STRING_ARGS can be built without error (empty payload)
+    for mode in _MODE_STRING_ARGS:
+        result = _build_mode_command(mode, {}, output_path, artifact_root)
+        assert "--mode" in result
+        assert mode in result
+
+
+def test_build_mode_command_drops_injection_values(tmp_path: Path) -> None:
+    output_path = tmp_path / "out.json"
+    artifact_root = tmp_path
+
+    unsafe_payloads = [
+        {"target_url": "; rm -rf /"},
+        {"target_url": "$(cat /etc/shadow)"},
+        {"target_url": "| evil"},
+        {"max_pages": "-5"},         # starts with dash
+        {"max_depth": "--inject"},   # starts with dash
+    ]
+    for payload in unsafe_payloads:
+        cmd = _build_mode_command("website", payload, output_path, artifact_root)
+        # No unsafe value should appear in the command
+        for v in payload.values():
+            assert v not in cmd, f"Unsafe value {v!r} leaked into command"
+        # The corresponding flag should also be absent when only that key is given
+        # (the flag is only emitted when the sanitised value is not None)
+        if list(payload.keys()) == ["target_url"]:
+            assert "--target-url" not in cmd
+
+
+def test_launch_audit_spawns_runner_for_mode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import sys
+
+    captured: dict = {}
+
+    class FakeProcess:
+        pid = 7777
+
+    def _fake_popen(command, cwd, stdout, stderr):
+        captured["command"] = command
+        captured["cwd"] = cwd
+        return FakeProcess()
+
+    monkeypatch.setattr("kit.dashboard_server.subprocess.Popen", _fake_popen)
+
+    config = DashboardServerConfig(
+        repo_root=tmp_path,
+        artifact_dir=tmp_path / "runs",
+        dashboard_file=tmp_path / "dashboard.html",
+    )
+
+    result = _launch_audit(
+        config,
+        "website",
+        {"target_url": "https://example.com", "max_pages": "3"},
+    )
+
+    # Response shape
+    assert result["ok"] is True
+    assert result["status"] == "started"
+    assert result["mode"] == "website"
+    assert result["pid"] == 7777
+    assert result["launch_id"].startswith("website-")
+    assert "output_path" in result
+    assert "log_path" in result
+    assert result["dashboard"] == "/dashboard/"
+
+    # Subprocess received a valid kit.runner invocation
+    cmd = captured["command"]
+    assert cmd[0] == sys.executable
+    assert cmd[1:3] == ["-m", "kit.runner"]
+    assert "--mode" in cmd and "website" in cmd
+    assert "--target-url" in cmd and "https://example.com" in cmd
+    assert "--max-pages" in cmd and "3" in cmd
+
+    # Launch directory and log file were created
+    launch_root = (tmp_path / "runs" / ".launches" / result["launch_id"])
+    assert launch_root.is_dir()
+    assert (launch_root / "launch.log").exists()
+
+
+# ---------------------------------------------------------------------------
+# Multi-mode launch: HTTP endpoint integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_api_launch_endpoint_returns_202_for_valid_website_mode(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """POST /api/launch with a valid website payload → 202 Accepted."""
+
+    class FakeProcess:
+        pid = 5555
+
+    def _fake_popen(command, cwd, stdout, stderr):
+        return FakeProcess()
+
+    monkeypatch.setattr("kit.dashboard_server.subprocess.Popen", _fake_popen)
+
+    with _env_vars({"ALETHEIA_DASHBOARD_API_KEY": "op-key"}):
+        with _running_dashboard(tmp_path, auth_mode="api-key") as base_url:
+            response = httpx.post(
+                f"{base_url}/api/launch",
+                json={"mode": "website", "target_url": "https://example.com"},
+                headers={"X-API-Key": "op-key"},
+            )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["ok"] is True
+    assert body["mode"] == "website"
+    assert body["launch_id"].startswith("website-")
+    assert body["pid"] == 5555
+
+
+def test_api_launch_endpoint_returns_400_for_unknown_mode(tmp_path: Path) -> None:
+    """POST /api/launch with an unsupported mode → 400 Bad Request."""
+    with _env_vars({"ALETHEIA_DASHBOARD_API_KEY": "op-key"}):
+        with _running_dashboard(tmp_path, auth_mode="api-key") as base_url:
+            response = httpx.post(
+                f"{base_url}/api/launch",
+                json={"mode": "totally_fake_mode"},
+                headers={"X-API-Key": "op-key"},
+            )
+
+    assert response.status_code == 400
+
+
+def test_api_launch_endpoint_returns_400_for_missing_required_field(tmp_path: Path) -> None:
+    """POST /api/launch for website mode without target_url → 400 Bad Request."""
+    with _env_vars({"ALETHEIA_DASHBOARD_API_KEY": "op-key"}):
+        with _running_dashboard(tmp_path, auth_mode="api-key") as base_url:
+            response = httpx.post(
+                f"{base_url}/api/launch",
+                json={"mode": "website"},
+                headers={"X-API-Key": "op-key"},
+            )
+
+    assert response.status_code == 400
+
+
+def test_api_launch_endpoint_old_repo_audit_still_works(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """/api/repo-audit must remain functional after the /api/launch addition."""
+
+    class FakeProcess:
+        pid = 1111
+
+    def _fake_popen(command, cwd, stdout, stderr):
+        return FakeProcess()
+
+    monkeypatch.setattr("kit.dashboard_server.subprocess.Popen", _fake_popen)
+
+    with _env_vars({"ALETHEIA_DASHBOARD_API_KEY": "op-key"}):
+        with _running_dashboard(tmp_path, auth_mode="api-key") as base_url:
+            response = httpx.post(
+                f"{base_url}/api/repo-audit",
+                json={"repo_url": "https://github.com/example/public-repo"},
+                headers={"X-API-Key": "op-key"},
+            )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "started"
