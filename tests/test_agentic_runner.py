@@ -115,3 +115,138 @@ def test_generate_hard_negatives_uses_successful_and_blocked_examples() -> None:
     assert generated[0]["id"] == "HN_001"
     assert "successful framing" in generated[0]["payload"]
     assert "blocked payload" in generated[0]["payload"]
+
+
+# ---------------------------------------------------------------------------
+# Adaptive ranking / exploration floor tests
+# ---------------------------------------------------------------------------
+
+def _make_runner(tmp_path, strategies, **config_kwargs):
+    def _noop(_client, _attack):
+        return {"actual_decision": "DENIED", "request_id": "r", "error": None}
+
+    return AgenticRunner(
+        client=None,
+        attacks=[],
+        run_attack_fn=_noop,
+        config=AgenticRunnerConfig(
+            objective="test",
+            output_path=tmp_path / "out.json",
+            mutation_strategies=strategies,
+            **config_kwargs,
+        ),
+    )
+
+
+def test_rank_strategies_orders_by_smoothed_success_rate(tmp_path) -> None:
+    runner = _make_runner(tmp_path, strategies=["B", "A"])
+    effectiveness = {
+        "A": {"success": 5, "blocked": 0},
+        "B": {"success": 0, "blocked": 5},
+    }
+    ranked = runner._rank_strategies(effectiveness)
+    assert ranked == ["A", "B"]
+
+
+def test_rank_strategies_keeps_unproven_strategy_explorable(tmp_path) -> None:
+    runner = _make_runner(tmp_path, strategies=["B", "C"])
+    # B has 9 failures, smoothed rate = 1/11 ≈ 0.09
+    # C is unseen, smoothed rate = 1/2 = 0.5
+    effectiveness = {"B": {"success": 0, "blocked": 9}}
+    ranked = runner._rank_strategies(effectiveness)
+    assert ranked.index("C") < ranked.index("B"), (
+        "unseen strategy C should rank above heavily-blocked B (exploration floor)"
+    )
+
+
+def test_empty_effectiveness_preserves_config_order(tmp_path) -> None:
+    strategies = ["alpha", "beta", "gamma"]
+    runner = _make_runner(tmp_path, strategies=strategies)
+    ranked = runner._rank_strategies({})
+    assert ranked == strategies
+
+
+def test_adaptive_loop_concentrates_on_winning_strategy(tmp_path) -> None:
+    strategies = ["base64_wrap", "synonym_substitution", "role_play_framing"]
+    tried_strategies: list[str] = []
+
+    def _selective_fn(_client, attack: dict) -> dict:
+        s = attack.get("mutation_strategy", "")
+        tried_strategies.append(s)
+        decision = "PROCEED" if s == "base64_wrap" else "DENIED"
+        return {"actual_decision": decision, "request_id": "r", "error": None}
+
+    original_choice = agentic_runner.random.choice
+    agentic_runner.random.choice = lambda techniques: techniques[0]
+
+    try:
+        runner = AgenticRunner(
+            client=None,
+            attacks=[
+                {
+                    "id": "PI_ADT",
+                    "name": "Adaptive test",
+                    "category": "prompt_injection",
+                    "payload": "exfil",
+                    "expected_decision": "DENIED",
+                    "severity": "HIGH",
+                }
+            ],
+            run_attack_fn=_selective_fn,
+            config=AgenticRunnerConfig(
+                objective="test adaptation",
+                max_iterations=6,
+                variants_per_round=1,
+                mutation_strategies=strategies,
+                output_path=tmp_path / "out.json",
+            ),
+        )
+        output = runner.run()
+    finally:
+        agentic_runner.random.choice = original_choice
+
+    effectiveness = output["results"]
+    me = json.loads((tmp_path / "mutation_effectiveness.json").read_text(encoding="utf-8"))
+    # base64_wrap should be the top winner
+    assert me.get("base64_wrap", {}).get("success", 0) > 0, "base64_wrap should have successes"
+    # exploration: at least one other strategy was attempted at some point
+    non_winners = [s for s in tried_strategies if s and s != "base64_wrap"]
+    assert non_winners, "exploration floor must ensure other strategies were tried at least once"
+
+
+def test_persistence_off_by_default_ignores_prior_file(tmp_path) -> None:
+    prior = {"old_strategy": {"success": 99, "blocked": 0}}
+    prior_path = tmp_path / "mutation_effectiveness.json"
+    prior_path.write_text(json.dumps(prior), encoding="utf-8")
+
+    def _always_denied(_client, _attack):
+        return {"actual_decision": "DENIED", "request_id": "r", "error": None}
+
+    runner = AgenticRunner(
+        client=None,
+        attacks=[
+            {
+                "id": "PI_PERSIST",
+                "name": "Persist test",
+                "category": "prompt_injection",
+                "payload": "test",
+                "expected_decision": "DENIED",
+                "severity": "LOW",
+            }
+        ],
+        run_attack_fn=_always_denied,
+        config=AgenticRunnerConfig(
+            objective="test persistence",
+            max_iterations=1,
+            output_path=tmp_path / "mutation_effectiveness.json",
+        ),
+    )
+    output = runner.run()
+
+    # The runner writes its OWN effectiveness at end; check that old_strategy
+    # with 99 successes is not present (it was not seeded from prior file)
+    me_path = tmp_path / "mutation_effectiveness.json"
+    loaded = json.loads(me_path.read_text(encoding="utf-8"))
+    assert loaded.get("old_strategy", {}).get("success", 0) != 99, (
+        "persist_effectiveness=False (default) must not seed from prior file"
+    )

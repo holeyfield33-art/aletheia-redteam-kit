@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,7 @@ class AgenticRunnerConfig:
     success_budget: int | None = None
     diminishing_window: int = 3
     diminishing_min_delta: int = 1
+    persist_effectiveness: bool = False
 
 
 class AgenticRunner:
@@ -47,8 +49,9 @@ class AgenticRunner:
 
         def _rate(s: str) -> float:
             stats = effectiveness.get(s, {})
-            total = stats.get("success", 0) + stats.get("blocked", 0)
-            return stats.get("success", 0) / total if total else 0.0
+            success = stats.get("success", 0)
+            total = success + stats.get("blocked", 0)
+            return (success + 1) / (total + 2)
 
         return sorted(strategies, key=_rate, reverse=True)
 
@@ -128,12 +131,13 @@ class AgenticRunner:
         stop_reason = "max_iterations_reached"
         accumulated_risk = 0.0
         mutation_effectiveness: dict[str, dict[str, int]] = {}
-        _prior_path = self.config.output_path.with_name("mutation_effectiveness.json")
-        if _prior_path.exists():
-            try:
-                mutation_effectiveness = json.loads(_prior_path.read_text())
-            except Exception:
-                pass
+        if self.config.persist_effectiveness:
+            _prior_path = self.config.output_path.with_name("mutation_effectiveness.json")
+            if _prior_path.exists():
+                try:
+                    mutation_effectiveness = json.loads(_prior_path.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError, ValueError) as exc:
+                    print(f"[agentic_runner] warning: could not load prior effectiveness data from {_prior_path}: {exc}", file=sys.stderr)
 
         try:
             for iteration in range(1, max(self.config.max_iterations, 1) + 1):
