@@ -23,7 +23,7 @@ dependencies = ["httpx>=0.27"]
     )
     (tmp_path / "app.py").write_text('API_KEY = "sk-test-0000000000000000"\n')  # aletheia-redteam:allowed-test-fixture
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
 
     assert summary["mode"] == "repo"
     assert summary["findings_total"] >= 1
@@ -42,7 +42,7 @@ dependencies = ["httpx>=0.27"]
     )
     (tmp_path / ".env.example").write_text("API_KEY=your_key_here\n")
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
 
     assert summary["findings_by_severity"]["HIGH"] == 0
     assert summary["findings_by_type"].get("api_key_literal", 0) == 0
@@ -59,7 +59,7 @@ dependencies = ["httpx>=0.27"]
     )
     (tmp_path / "settings.py").write_text('SESSION_TOKEN = "a9Xk_12LmN-45pqR+stuVw8Y=zzA9Xk_12LmN-45"\n')
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
 
     assert summary["findings_by_type"]["high_entropy_secret_literal"] >= 1
     assert summary["findings_by_severity"]["HIGH"] >= 1
@@ -76,7 +76,7 @@ dependencies = ["httpx>=0.27"]
     )
     (tmp_path / "secrets.txt").write_text("-----BEGIN RSA PRIVATE KEY-----\nfixture\n-----END RSA PRIVATE KEY-----\n")  # aletheia-redteam:allowed-test-fixture
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
     assert summary["findings_by_severity"]["CRITICAL"] >= 1
     assert summary["gates"]["pass"] is False
 
@@ -99,7 +99,7 @@ subprocess.run(cmd, shell=True)  # aletheia-redteam:allowed-test-fixture
 """.strip()
     )
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
     finding_types = {f["type"] for f in summary["findings"]}
 
     assert "python_dynamic_exec_untrusted" in finding_types
@@ -127,7 +127,7 @@ function run(req) {
 """.strip()
     )
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
     finding_types = {f["type"] for f in summary["findings"]}
 
     assert "javascript_child_process_exec_untrusted" in finding_types
@@ -194,7 +194,7 @@ dependencies = ["httpx>=0.27"]
 
     monkeypatch.setattr("engine.repo_audit.scanner.subprocess.run", _fake_run)
 
-    summary = run_repo_audit(repo_url="https://github.com/example/public-sample")
+    summary = run_repo_audit(repo_url="https://github.com/example/public-sample", deps_scan="off")
 
     assert summary["source"]["kind"] == "github_public"
     assert summary["source"]["resolved"] == "https://github.com/example/public-sample.git"
@@ -256,7 +256,7 @@ dependencies = ["httpx>=0.27"]
         )
     )
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
     finding_types = {f["type"] for f in summary["findings"]}
 
     assert "dependency_vulnerability" in finding_types
@@ -311,7 +311,7 @@ dependencies = ["httpx>=0.27"]
         )
     )
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
     top_packages = summary["dependencies"]["top_packages"]
 
     assert top_packages[0]["name"] == "urllib3"
@@ -364,7 +364,7 @@ dependencies = ["httpx>=0.27"]
         )
     )
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
     signals = summary["dependencies"]["signals"]
 
     assert signals["malware_suspect_total"] == 1
@@ -473,7 +473,7 @@ subprocess.run(cmd, shell=True)  # aletheia-redteam:allowed-test-fixture
         )
     )
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
     assert summary["threat_feed"]["matches_total"] >= 1
     assert summary["threat_feed"]["matches_by_type"]["python_subprocess_shell_true"] >= 1
     assert any(
@@ -495,7 +495,7 @@ dependencies = ["httpx>=0.27"]
         'SESSION_TOKEN = "a9Xk_12LmN-45pqR+stuVw8Y=zzA"\n'  # aletheia-redteam:allowed-test-fixture
     )
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
     finding_types = {f["type"] for f in summary["findings"]}
 
     assert "high_entropy_secret_literal" in finding_types
@@ -518,7 +518,7 @@ jwt_opts = {"alg": "none"}  # aletheia-redteam:allowed-test-fixture
 """.strip()
     )
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
     finding_types = {f["type"] for f in summary["findings"]}
 
     assert "tls_verification_disabled" in finding_types
@@ -538,7 +538,7 @@ dependencies = ["httpx>=0.27"]
     tests_dir.mkdir()
     (tests_dir / "test_fixture.py").write_text('API_KEY = "sk-test-0000000000000000"\n')
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
 
     assert summary["findings_by_type"].get("api_key_literal", 0) == 0
     assert summary["secret_scan"]["include_test_fixtures"] is False
@@ -559,7 +559,7 @@ dependencies = ["httpx>=0.27"]
         'API_KEY = "sk-test-0000000000000000"\nsubprocess.run(cmd, shell=True)  # aletheia-redteam:allowed-test-fixture\n'
     )
 
-    summary = run_repo_audit(tmp_path, include_test_fixtures=True)
+    summary = run_repo_audit(tmp_path, include_test_fixtures=True, deps_scan="off")
 
     assert summary["findings_by_type"]["api_key_literal"] >= 1
     assert summary["findings_by_type"].get("python_subprocess_shell_true", 0) == 0
@@ -616,7 +616,7 @@ dependencies = ["httpx>=0.27"]
         '{"receipt": "-----BEGIN RSA PRIVATE KEY-----\\nfixture\\n-----END RSA PRIVATE KEY-----"}'
     )
 
-    summary = run_repo_audit(tmp_path)
+    summary = run_repo_audit(tmp_path, deps_scan="off")
 
     assert summary["findings_by_severity"].get("CRITICAL", 0) == 0
     assert "summary.json" in summary["ignored_artifacts"]
@@ -673,14 +673,14 @@ def test_scan_profile_light_skips_dep_advisories(tmp_path) -> None:
     (tmp_path / "pyproject.toml").write_text(
         "[project]\nname = \"sample\"\nversion = \"0.0.1\"\ndependencies = []\n"
     )
-    summary = run_repo_audit(tmp_path, scan_profile="light")
+    summary = run_repo_audit(tmp_path, scan_profile="light", deps_scan="off")
     # When dep_advisories is skipped, the dependencies summary reflects it.
     assert "dep_advisories" not in summary.get("enabled_scanners", [])
     assert summary["scan_profile"] == "light"
 
 
 def test_run_repo_audit_scan_profile_stored_in_summary(tmp_path) -> None:
-    summary = run_repo_audit(tmp_path, scan_profile="medium")
+    summary = run_repo_audit(tmp_path, scan_profile="medium", deps_scan="off")
     assert summary["scan_profile"] == "medium"
 
 
@@ -761,6 +761,7 @@ def test_run_repo_audit_token_not_in_summary(tmp_path, monkeypatch) -> None:
     summary = run_repo_audit(
         repo_url="https://github.com/example/private-repo",
         repo_token="super-secret-token-abc123",
+        deps_scan="off",
     )
     summary_json = json.dumps(summary)
     assert "super-secret-token-abc123" not in summary_json
@@ -819,7 +820,7 @@ version = "0.0.1"
 dependencies = ["httpx>=0.27"]
 """.strip()
     )
-    summary = run_repo_audit(tmp_path, enrich_report=True)
+    summary = run_repo_audit(tmp_path, enrich_report=True, deps_scan="off")
     assert "report_overview" in summary
     assert "executive_risk_score" in summary["report_overview"]
     assert "top_findings" in summary["report_overview"]
