@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import random
-
 
 CLOAKING_TECHNIQUES = [
     "synonym_substitution",

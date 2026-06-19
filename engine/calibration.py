@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 import statistics
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Iterable, Literal
 
 from engine.disagreement_metrics import (

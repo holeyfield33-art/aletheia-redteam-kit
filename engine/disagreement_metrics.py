@@ -4,7 +4,6 @@ Metrics for agent disagreement, override rate, confidence collapse, veto instabi
 from __future__ import annotations
 
 import re
-from collections import Counter
 
 
 def _tokenize(text: str) -> set[str]:
