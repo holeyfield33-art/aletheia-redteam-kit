@@ -1,3318 +1,408 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sovereign Command Center</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #060608;
-      --bg-elevated: #0b0b10;
-      --panel: rgba(17, 17, 24, 0.92);
-      --panel-soft: rgba(23, 23, 33, 0.9);
-      --border: rgba(255, 255, 255, 0.08);
-      --border-strong: rgba(255, 255, 255, 0.14);
-      --text: #f4f3f8;
-      --muted: #a5a3b4;
-      --crimson: #ef4444;
-      --deep-crimson: #7f1d1d;
-      --ok: #22c55e;
-      --warn: #f59e0b;
-      --bad: #f97316;
-      --accent: #d9465f;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      font-family: "Space Grotesk", "IBM Plex Mono", system-ui, sans-serif;
-      color: var(--text);
-      background:
-        radial-gradient(circle at 20% 10%, rgba(217, 70, 95, 0.16), transparent 34%),
-        radial-gradient(circle at 85% 12%, rgba(245, 158, 11, 0.12), transparent 24%),
-        radial-gradient(circle at 50% 110%, rgba(34, 197, 94, 0.08), transparent 28%),
-        linear-gradient(180deg, #050507 0%, #09090d 42%, #050507 100%);
-      min-height: 100vh;
-    }
-
-    .frame {
-      width: min(1480px, calc(100vw - 2rem));
-      margin: 1rem auto 2rem;
-    }
-
-    .header {
-      border: 1px solid var(--border);
-      background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 38%),
-        linear-gradient(95deg, rgba(127, 29, 29, 0.42), rgba(17, 17, 24, 0.96) 45%, rgba(15, 15, 23, 0.98));
-      border-radius: 22px;
-      padding: 1.1rem 1.2rem;
-      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-      margin-bottom: 1rem;
-    }
-
-    .title {
-      margin: 0;
-      font-size: clamp(1.6rem, 3.8vw, 2.7rem);
-      font-family: "Space Grotesk", sans-serif;
-      letter-spacing: -0.03em;
-      color: #fff;
-    }
-
-    .subtitle {
-      max-width: 72ch;
-      margin-top: 0.45rem;
-      color: var(--muted);
-      font-size: 0.98rem;
-      line-height: 1.5;
-    }
-
-    .meta {
-      display: grid;
-      gap: 0.35rem;
-      margin-top: 0.6rem;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-
-    .meta b {
-      color: #fff;
-      font-weight: 600;
-    }
-
-    .controls {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 0.7rem;
-      margin: 1rem 0;
-    }
-
-    .dashboard-grid {
-      display: grid;
-      grid-template-columns: 260px minmax(0, 1fr) 360px;
-      gap: 0.8rem;
-      align-items: start;
-    }
-
-    .clickable {
-      cursor: pointer;
-    }
-
-    .clickable:hover {
-      border-color: rgba(255, 255, 255, 0.18);
-      background: rgba(255, 255, 255, 0.03);
-    }
-
-    .run-list {
-      display: grid;
-      gap: 0.35rem;
-    }
-
-    .run-item {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: rgba(10, 10, 14, 0.96);
-      padding: 0.45rem 0.55rem;
-      font-size: 0.8rem;
-      cursor: pointer;
-    }
-
-    .run-item:hover {
-      background: rgba(255, 255, 255, 0.03);
-    }
-
-    .run-item.active {
-      border-color: rgba(239, 68, 68, 0.75);
-      box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.35) inset;
-    }
-
-    .launch-row {
-      display: grid;
-      gap: 0.35rem;
-    }
-
-    .launch-topline {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .launch-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem;
-    }
-
-    .launch-actions button {
-      padding: 0.3rem 0.55rem;
-      font-size: 0.74rem;
-      border-radius: 8px;
-    }
-
-    .launch-actions button[disabled] {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-
-    .launch-log {
-      margin-top: 0.6rem;
-      max-height: 210px;
-      overflow: auto;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: #0b0a0e;
-      padding: 0.6rem;
-      font-size: 0.73rem;
-      line-height: 1.35;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    .drop-zone {
-      border: 1px dashed rgba(255, 255, 255, 0.18);
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.02);
-      padding: 0.9rem;
-      color: var(--muted);
-      text-align: center;
-      transition: border-color 0.2s ease, background 0.2s ease;
-    }
-
-    .drop-zone.drag {
-      border-color: rgba(239, 68, 68, 0.8);
-      background: rgba(239, 68, 68, 0.08);
-      color: #fff;
-    }
-
-    .button-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-
-    button,
-    input[type="file"]::file-selector-button {
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-      color: #fff;
-      border-radius: 10px;
-      padding: 0.5rem 0.8rem;
-      cursor: pointer;
-      font: inherit;
-    }
-
-    button:hover,
-    input[type="file"]::file-selector-button:hover {
-      background: linear-gradient(180deg, rgba(239, 68, 68, 0.16), rgba(255, 255, 255, 0.04));
-    }
-
-    .button-row input[type="text"] {
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background: rgba(7, 7, 11, 0.92);
-      color: #fff;
-      border-radius: 10px;
-      padding: 0.5rem 0.8rem;
-      font: inherit;
-      min-width: min(420px, 100%);
-      flex: 1 1 280px;
-    }
-
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 0.7rem;
-      margin-bottom: 1rem;
-    }
-
-    .card {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
-      padding: 0.8rem;
-    }
-
-    .card-label {
-      color: var(--muted);
-      font-size: 0.76rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .card-value {
-      margin-top: 0.25rem;
-      font-family: "Space Grotesk", sans-serif;
-      font-size: 1.6rem;
-      color: #fff;
-      line-height: 1.1;
-    }
-
-    .bars {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 0.9rem;
-      background: var(--panel);
-      margin-bottom: 1rem;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
-    }
-
-    .bars h2,
-    .table-wrap h2,
-    .detail h2 {
-      margin: 0 0 0.7rem;
-      font-size: 1rem;
-      color: #fff;
-      font-family: "Space Grotesk", sans-serif;
-      letter-spacing: 0.03em;
-    }
-
-    .bar-row {
-      display: grid;
-      grid-template-columns: 170px 1fr 110px;
-      gap: 0.55rem;
-      align-items: center;
-      margin-bottom: 0.5rem;
-      font-size: 0.85rem;
-    }
-
-    .bar-track {
-      width: 100%;
-      height: 12px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.08);
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .bar-fill {
-      height: 100%;
-      width: 0;
-      transition: width 0.5s ease;
-    }
-
-    .table-wrap {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: var(--panel);
-      padding: 0.75rem;
-    }
-
-    .scroll {
-      overflow: auto;
-      max-height: 420px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: rgba(7, 7, 11, 0.95);
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      min-width: 1050px;
-      font-size: 0.82rem;
-    }
-
-    th,
-    td {
-      padding: 0.52rem;
-      text-align: left;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-      white-space: nowrap;
-      vertical-align: top;
-    }
-
-    thead th {
-      position: sticky;
-      top: 0;
-      background: #0e0e14;
-      z-index: 1;
-      color: #e8e6ef;
-      font-size: 0.75rem;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    tbody tr {
-      cursor: pointer;
-    }
-
-    tbody tr:hover {
-      background: rgba(255, 255, 255, 0.03);
-    }
-
-    .match {
-      font-weight: 700;
-      color: #99dcae;
-    }
-
-    .mismatch {
-      font-weight: 700;
-      color: #f4b1b1;
-    }
-
-    .detail {
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      background: var(--panel);
-      padding: 0.8rem;
-      margin-top: 1rem;
-    }
-
-    .detail-top {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-bottom: 0.7rem;
-    }
-
-    pre {
-      margin: 0;
-      background: rgba(5, 5, 8, 0.96);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-      padding: 0.8rem;
-      color: #eceaf2;
-      overflow: auto;
-      max-height: 300px;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    .muted {
-      color: var(--muted);
-      font-size: 0.84rem;
-    }
-
-    .status {
-      margin-top: 0.55rem;
-      color: #f1d5da;
-      font-size: 0.85rem;
-      min-height: 1.2rem;
-    }
-
-    .empty-note {
-      color: var(--silver);
-      font-size: 0.85rem;
-    }
-
-    .command-controls {
-      display: grid;
-      gap: 0.65rem;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      align-items: end;
-    }
-
-    .command-controls label {
-      display: grid;
-      gap: 0.32rem;
-      color: var(--silver);
-      font-size: 0.78rem;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .command-controls select,
-    .command-controls input[type="text"] {
-      border: 1px solid #4f3b3e;
-      border-radius: 10px;
-      background: #150f10;
-      color: #efe6e8;
-      padding: 0.45rem 0.55rem;
-      font: inherit;
-      min-height: 2.1rem;
-    }
-
-    .toggle-row {
-      display: flex !important;
-      align-items: center;
-      gap: 0.5rem;
-      text-transform: none !important;
-      letter-spacing: 0 !important;
-      font-size: 0.88rem !important;
-      color: #f2e8ea !important;
-      margin-bottom: 0.1rem;
-    }
-
-    .mission-item {
-      border: 1px solid #4a373b;
-      border-radius: 12px;
-      padding: 0.65rem;
-      background: #181112;
-      display: grid;
-      gap: 0.35rem;
-      margin-bottom: 0.55rem;
-    }
-
-    .mission-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .mission-tag {
-      border-radius: 999px;
-      padding: 0.16rem 0.52rem;
-      font-size: 0.72rem;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      border: 1px solid #6c4e53;
-      color: #ffe3e8;
-      background: #3f262b;
-    }
-
-    .quick-actions {
-      margin-top: 0.7rem;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-
-    .heatmap-grid {
-      display: grid;
-      gap: 0.35rem;
-      overflow: auto;
-    }
-
-    .heatmap-header,
-    .heatmap-row {
-      display: grid;
-      gap: 0.35rem;
-      align-items: center;
-    }
-
-    .heatmap-label,
-    .heatmap-cell {
-      min-height: 34px;
-      border-radius: 8px;
-      padding: 0.35rem 0.45rem;
-      font-size: 0.76rem;
-    }
-
-    .heatmap-label {
-      background: #1d1415;
-      border: 1px solid #4a373b;
-      color: #e9dde0;
-      font-weight: 600;
-    }
-
-    .heatmap-cell {
-      border: 1px solid #4a373b;
-      color: #f7ecee;
-      cursor: pointer;
-      text-align: center;
-    }
-
-    .heatmap-cell:hover {
-      outline: 1px solid #d9b8be;
-    }
-
-    .remediation-notes {
-      width: 100%;
-      margin-top: 0.6rem;
-      border: 1px solid #4f3b3e;
-      border-radius: 10px;
-      background: #150f10;
-      color: #efe6e8;
-      padding: 0.55rem;
-      font: inherit;
-      min-height: 100px;
-      resize: vertical;
-    }
-
-    #filtersPane,
-    #runScopePane,
-    #launchesPane,
-    #trendPane {
-      grid-column: 1;
-    }
-
-    .controls,
-    #topMetrics,
-    #summaryBars,
-    #opsTable {
-      grid-column: 2;
-    }
-
-    #regressionPane,
-    #heatmapPane,
-    #mutationPane,
-    #missionPane,
-    #gapPane,
-    #detail {
-      grid-column: 3;
-    }
-
-    @media (max-width: 780px) {
-      .dashboard-grid {
-        grid-template-columns: 1fr;
-      }
-
-      #filtersPane,
-      #runScopePane,
-      #launchesPane,
-      #trendPane,
-      .controls,
-      #topMetrics,
-      #summaryBars,
-      #opsTable,
-      #regressionPane,
-      #heatmapPane,
-      #mutationPane,
-      #missionPane,
-      #gapPane,
-      #detail {
-        grid-column: 1;
-      }
-
-      .controls {
-        grid-template-columns: 1fr;
-      }
-
-      .bar-row {
-        grid-template-columns: 1fr;
-      }
-
-      .bar-row .bar-track {
-        order: 2;
-      }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aletheia Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#060608; --bg-elevated:#0b0b10;
+    --panel:rgba(17,17,24,0.92); --panel-soft:rgba(23,23,33,0.9);
+    --border:rgba(255,255,255,0.08); --border-strong:rgba(255,255,255,0.14);
+    --text:#f4f3f8; --muted:#a5a3b4;
+    --crimson:#ef4444; --deep-crimson:#7f1d1d;
+    --ok:#22c55e; --warn:#f59e0b; --bad:#f97316; --accent:#d9465f;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; color:var(--text); font-family:"Space Grotesk",system-ui,sans-serif;
+    background:radial-gradient(circle at 18% 8%,rgba(217,70,95,0.16),transparent 34%),
+      radial-gradient(circle at 86% 10%,rgba(245,158,11,0.10),transparent 24%),
+      linear-gradient(180deg,#050507 0%,#09090d 44%,#050507 100%); min-height:100vh;}
+  .mono{font-family:"IBM Plex Mono",monospace;}
+  header{display:flex; align-items:center; gap:1rem; flex-wrap:wrap; padding:1.1rem 1.4rem;
+    border-bottom:1px solid var(--border); background:linear-gradient(180deg,rgba(127,29,29,0.18),transparent);
+    position:sticky; top:0; backdrop-filter:blur(8px); z-index:20;}
+  .brand{display:flex; align-items:center; gap:.7rem;}
+  .brand .dot{width:11px; height:11px; border-radius:50%; background:var(--accent); box-shadow:0 0 14px var(--accent); animation:pulse 2.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.45;}}
+  .brand h1{font-size:1.05rem; font-weight:700; margin:0;}
+  .brand .sub{font-size:.7rem; color:var(--muted); letter-spacing:.18em; text-transform:uppercase;}
+  .conn{margin-left:auto; display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;}
+  .pill{font-size:.72rem; padding:.32rem .7rem; border-radius:999px; border:1px solid var(--border-strong); display:inline-flex; align-items:center; gap:.4rem; color:var(--muted);}
+  .pill .led{width:8px; height:8px; border-radius:50%; background:var(--muted);}
+  .pill.live .led{background:var(--ok); box-shadow:0 0 8px var(--ok);}
+  .pill.offline .led{background:var(--warn);}
+  button,.btn{font-family:inherit; font-size:.78rem; cursor:pointer; color:var(--text); background:var(--panel-soft);
+    border:1px solid var(--border-strong); padding:.45rem .85rem; border-radius:9px; transition:.15s; font-weight:500;}
+  button:hover,.btn:hover{border-color:var(--accent); background:rgba(217,70,95,0.12);}
+  button:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  button.primary{background:linear-gradient(180deg,var(--crimson),var(--deep-crimson)); border-color:var(--crimson); font-weight:600;}
+  button:disabled{opacity:.4; cursor:not-allowed;}
+  main{max-width:1180px; margin:0 auto; padding:1.4rem;}
+  .tabs{display:flex; gap:.4rem; margin-bottom:1.3rem; flex-wrap:wrap;}
+  .tab{padding:.5rem 1rem; border-radius:9px; border:1px solid var(--border); background:transparent; color:var(--muted);}
+  .tab.active{color:var(--text); border-color:var(--accent); background:rgba(217,70,95,0.1);}
+  .grid{display:grid; gap:1rem;} .cards{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:1.1rem 1.2rem;}
+  .panel h2{font-size:.78rem; text-transform:uppercase; letter-spacing:.14em; color:var(--muted); margin:0 0 .8rem;}
+  .stat{display:flex; flex-direction:column; gap:.25rem;}
+  .stat .num{font-size:2rem; font-weight:700; font-family:"IBM Plex Mono",monospace; line-height:1;}
+  .stat .lab{font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.1em;}
+  .num.ok{color:var(--ok);} .num.warn{color:var(--warn);} .num.bad{color:var(--crimson);}
+  table{width:100%; border-collapse:collapse; font-size:.82rem;}
+  th{text-align:left; color:var(--muted); font-weight:500; font-size:.7rem; text-transform:uppercase; padding:.5rem .6rem; border-bottom:1px solid var(--border);}
+  td{padding:.55rem .6rem; border-bottom:1px solid var(--border);}
+  tr:last-child td{border-bottom:none;}
+  .sev{font-size:.68rem; padding:.18rem .5rem; border-radius:6px; font-weight:600; text-transform:uppercase;}
+  .sev.CRITICAL,.sev.HIGH{background:rgba(239,68,68,0.18); color:#fca5a5;}
+  .sev.MEDIUM{background:rgba(245,158,11,0.16); color:#fcd34d;}
+  .sev.LOW{background:rgba(34,197,94,0.14); color:#86efac;}
+  .bar-row{display:flex; align-items:center; gap:.7rem; margin:.4rem 0; font-size:.8rem;}
+  .bar-row .name{width:150px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .bar-track{flex:1; height:9px; background:rgba(255,255,255,0.05); border-radius:5px; overflow:hidden;}
+  .bar-fill{height:100%; border-radius:5px; background:linear-gradient(90deg,var(--deep-crimson),var(--accent));}
+  .bar-row .val{width:42px; text-align:right; font-family:"IBM Plex Mono",monospace;}
+  .effect{display:flex; gap:.5rem; align-items:center; padding:.55rem; border:1px solid var(--border); border-radius:9px; margin-bottom:.5rem;}
+  .effect .strat{flex:1; font-size:.82rem;}
+  .sBadge{font-family:"IBM Plex Mono",monospace; font-size:.78rem;} .sBadge.s{color:var(--ok);} .sBadge.b{color:var(--muted);}
+  .empty{text-align:center; padding:2.4rem 1rem; color:var(--muted);}
+  .empty .big{font-size:1.05rem; color:var(--text); margin-bottom:.4rem;}
+  .muted{color:var(--muted);} .row{display:flex; gap:.6rem; align-items:center; flex-wrap:wrap;}
+  label.fld{display:flex; flex-direction:column; gap:.25rem; font-size:.72rem; color:var(--muted); text-transform:uppercase; letter-spacing:.06em;}
+  input,select{font-family:inherit; background:var(--bg-elevated); border:1px solid var(--border-strong); color:var(--text); padding:.5rem .65rem; border-radius:8px; font-size:.84rem; min-width:200px;}
+  .fld input,.fld select{text-transform:none; letter-spacing:normal;}
+  .hide{display:none !important;}
+  .toast{position:fixed; bottom:1.2rem; left:50%; transform:translateX(-50%); background:var(--panel); border:1px solid var(--accent); padding:.7rem 1.2rem; border-radius:10px; font-size:.82rem; z-index:50; box-shadow:0 8px 30px rgba(0,0,0,.5);}
+  code.k{background:var(--bg-elevated); padding:.15rem .4rem; border-radius:5px; font-size:.78rem;}
+  .modegrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:.5rem; margin-bottom:1rem;}
+  .modecard{padding:.7rem; border:1px solid var(--border); border-radius:10px; cursor:pointer; text-align:center; transition:.15s;}
+  .modecard.active{border-color:var(--accent); background:rgba(217,70,95,0.12);}
+  .modecard .mname{font-weight:600; font-size:.85rem;}
+  .modecard .mdesc{font-size:.68rem; color:var(--muted); margin-top:.2rem;}
+  .formgrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.8rem; margin:.6rem 0 1rem;}
+  .logbox{background:#040406; border:1px solid var(--border); border-radius:9px; padding:.8rem; font-family:"IBM Plex Mono",monospace; font-size:.74rem; color:#cdd; max-height:280px; overflow:auto; white-space:pre-wrap; line-height:1.5;}
+  .statusline{font-size:.8rem; padding:.5rem .7rem; border-radius:8px; margin:.6rem 0; border:1px solid var(--border);}
+  .statusline.run{border-color:var(--warn); color:var(--warn);}
+  .statusline.done{border-color:var(--ok); color:var(--ok);}
+  .statusline.err{border-color:var(--crimson); color:#fca5a5;}
+  footer{text-align:center; color:var(--muted); font-size:.7rem; padding:2rem 1rem;}
+  @media (max-width:640px){.bar-row .name{width:96px;} main{padding:1rem;} input,select{min-width:0; width:100%;}}
+</style>
 </head>
 <body>
-  <div class="frame">
-    <div class="header">
-      <h1 class="title">Sovereign Command Center</h1>
-      <div class="subtitle">A premium operator view for run history, attack visibility, and the most important defense weak spots. Load a summary, review results, and move from signal to action without deciphering raw artifacts.</div>
-      <div class="meta" id="meta"></div>
-    </div>
+<header>
+  <div class="brand"><span class="dot"></span>
+    <div><h1>Aletheia Command Center</h1><div class="sub">Red-Team Kit</div></div>
+  </div>
+  <div class="conn">
+    <span id="connPill" class="pill offline"><span class="led"></span><span id="connText">Offline</span></span>
+    <button id="connectBtn">Connect live</button>
+    <label class="btn" for="fileInput">Load run file</label>
+    <input id="fileInput" type="file" accept="application/json,.json" class="hide">
+  </div>
+</header>
 
-    <div class="dashboard-grid">
-    <div class="controls">
-      <div class="drop-zone" id="dropZone">Drop a run summary JSON here, or auto-scan <strong>./runs</strong> to refresh the latest history.</div>
-      <div class="button-row">
-        <input id="fileInput" type="file" accept="application/json,.json">
-        <button id="loadDefaultBtn" type="button">Load current summary</button>
-        <button id="loadWebsiteBtn" type="button">Load web summary</button>
-        <button id="autoScanBtn" type="button">Refresh run history</button>
-        <input id="repoUrlInput" type="text" placeholder="Public GitHub repo URL or owner/repo">
-        <button id="launchRepoBtn" type="button">Launch repository audit</button>
-        <button id="refreshRunsBtn" type="button">Refresh catalog</button>
-        <button id="verifyAllBtn" type="button">Verify all receipts</button>
-      </div>
-    </div>
-
-    <div class="bars" id="runScopePane">
-      <h2>Recent Runs</h2>
-      <div class="run-list" id="runList"></div>
-    </div>
-
-    <div class="bars" id="launchesPane">
-      <h2>Launch Queue</h2>
-      <div class="button-row" style="margin-bottom:0.55rem;">
-        <button id="refreshLaunchesBtn" type="button">Refresh launches</button>
-        <label>
-          Log tail
-          <select id="launchLogTailLines">
-            <option value="100">100 lines</option>
-            <option value="400" selected>400 lines</option>
-            <option value="1000">1000 lines</option>
-            <option value="2000">2000 lines</option>
-          </select>
-        </label>
-      </div>
-      <div class="run-list" id="launchesList"></div>
-      <pre class="launch-log" id="launchLogView">No launch selected.</pre>
-    </div>
-
-    <div class="bars" id="filtersPane">
-      <h2>Findings Filters</h2>
-      <div class="command-controls">
-        <label>
-          Surface
-          <select id="componentFilter">
-            <option value="auto">All surfaces</option>
-            <option value="api">Attack API</option>
-            <option value="website">Website</option>
-            <option value="repo">Repository</option>
-          </select>
-        </label>
-        <label>
-          Category
-          <select id="categoryFilter">
-            <option value="all">All categories</option>
-          </select>
-        </label>
-        <label>
-          Decision
-          <select id="decisionFilter">
-            <option value="all">All decisions</option>
-            <option value="DENIED">DENIED</option>
-            <option value="PROCEED">PROCEED</option>
-            <option value="UNKNOWN">Unverified</option>
-            <option value="ERROR">Failed</option>
-          </select>
-        </label>
-        <label>
-          Search
-          <input id="searchBox" type="text" placeholder="Search id, name, or evidence">
-        </label>
-        <label>
-          Technique
-          <select id="techniqueFilter">
-            <option value="all">All techniques</option>
-          </select>
-        </label>
-        <label class="toggle-row">
-          <input id="mismatchOnly" type="checkbox">
-          <span>Only mismatches</span>
-        </label>
-        <button id="resetFiltersBtn" type="button">Reset filters</button>
-      </div>
-      <div class="quick-actions">
-        <button id="focusWeakBtn" type="button">Highlight weak spots</button>
-        <button id="showAnomalyBtn" type="button">Show unverified 200s</button>
-        <button id="exportFilteredBtn" type="button">Export filtered JSON</button>
-        <button id="repoHotBtn" type="button">Show critical + high</button>
-        <button id="exportRepoHotBtn" type="button">Export weak spots</button>
-      </div>
-    </div>
-
-    <div class="stats" id="stats"></div>
-
-    <div class="bars" id="summaryBars">
-      <h2 id="barsTitle">Attack Visibility by Category</h2>
-      <div id="bars"></div>
-    </div>
-
-    <div class="bars" id="trendPane">
-      <h2>Attack Visibility Trend</h2>
-      <div id="trend"></div>
-    </div>
-
-    <div class="bars" id="regressionPane">
-      <h2>Defense Regressions</h2>
-      <div id="regressionApi"></div>
-      <div class="command-controls" style="margin-top:0.6rem;">
-        <label>
-          Baseline run
-          <select id="baselineRunFilter">
-            <option value="">None</option>
-          </select>
-        </label>
-        <button id="useSelectedAsBaselineBtn" type="button">Use selected run as baseline</button>
-      </div>
-    </div>
-
-    <div class="bars" id="heatmapPane">
-      <h2>Cross-run matrix</h2>
-      <div id="heatmap"></div>
-    </div>
-
-    <div class="bars" id="mutationPane">
-      <h2>Mutation quality</h2>
-      <div id="mutationAnalytics"></div>
-    </div>
-
-    <div class="bars" id="missionPane">
-      <h2>Top weak spots</h2>
-      <div id="missionBoard"></div>
-    </div>
-
-    <div class="bars" id="gapPane">
-      <h2>Defense weak spots</h2>
-      <div id="gapBars"></div>
-    </div>
-
-    <div class="table-wrap" id="opsTable">
-      <h2 id="tableTitle">Findings</h2>
-      <div class="scroll">
-        <table>
-          <thead>
-            <tr id="tableHeadRow"></tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-      <div class="status" id="status"></div>
-    </div>
-
-    <div class="detail" id="detail">
-      <h2>Run Detail</h2>
-      <p class="muted">Select any finding to inspect the receipt, diff, and recommendation.</p>
-      <div class="muted" id="detailMeta">No run selected.</div>
-      <div class="detail-top">
-        <button id="copyReceiptBtn" type="button" disabled>Copy receipt JSON</button>
-        <button id="verifyBtn" type="button" disabled>Verify signature</button>
-        <button id="openCampaignArtifactBtn" type="button" disabled>Open campaign manifest</button>
-        <button id="openLearningArtifactBtn" type="button" disabled>Open learning snapshot</button>
-        <button id="openMutationArtifactBtn" type="button" disabled>Open mutation effectiveness</button>
-      </div>
-      <pre id="receiptView">No selection.</pre>
-      <h2 style="margin-top:0.9rem;">Inline regression diff</h2>
-      <pre id="regressionDiffView">No baseline selected.</pre>
-      <textarea id="remediationNotes" class="remediation-notes" placeholder="Operator notes and next steps..."></textarea>
-      <div class="status" id="verifyStatus"></div>
-    </div>
-    <div class="detail" id="remediationPane">
-      <h2>Remediation Proposals</h2>
-      <p class="muted">Template-based fixes generated from failed probes. Approve to write the system-prompt, manifest, and zero-trust artifacts.</p>
-      <div class="detail-top">
-        <button id="refreshRemediationBtn" type="button">Refresh proposals</button>
-      </div>
-      <div id="remediationProposalsList"><p class="muted">No proposals loaded.</p></div>
-      <div class="status" id="remediationStatus"></div>
-    </div>
-    </div>
+<main>
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-tab="run">Run audit</button>
+    <button class="tab" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="findings">Findings</button>
+    <button class="tab" data-tab="learning">Learning</button>
+    <button class="tab" data-tab="launches">Launches</button>
   </div>
 
-  <script>
-    const DEFAULT_SUMMARY_PATH = "./summary.json";
-    const DEFAULT_WEBSITE_SUMMARY_PATH = "./website_summary.json";
-    const RUNS_INDEX_PATH = "./runs/index.json";
-    const HOSTED_RUNS_API_PATH = "/api/runs";
-    const HOSTED_LAUNCHES_API_PATH = "/api/launches";
-    const LAUNCH_POLL_INTERVAL_MS = 5000;
-    const DEFAULT_LAUNCH_LOG_TAIL_LINES = 400;
-    const AUTO_SCAN_CANDIDATES = [
-      "./summary.json",
-      "./summary_rerun.json",
-      "./summary_api_full.json",
-      "./runs/summary.json",
-      "./runs/summary_rerun.json",
-      "./runs/summary_api_full.json"
-    ];
-    const WELL_KNOWN_PEM_URL = "https://aletheia-core.com/.well-known/aletheia-receipt-key.pem";
-    const FALLBACK_PUBLIC_KEY_PEM = "";
-    const VERIFY_FIELDS = [
-      "request_id",
-      "decision",
-      "rule_id",
-      "severity",
-      "action",
-      "policy_version",
-      "semantic_engine"
-    ];
-
-    const state = {
-      summary: null,
-      combinedSummary: null,
-      selected: null,
-      summaries: [],
-      runCatalog: [],
-      baselineSummary: null,
-      verifyStats: { checked: 0, valid: 0 },
-      rowVerification: new Map(),
-      launches: [],
-      selectedLaunchId: "",
-      launchesHadRunning: false,
-      launchPollingTimer: null,
-      launchPollInFlight: false,
-      launchLogInFlight: false,
-      launchLogTailLines: DEFAULT_LAUNCH_LOG_TAIL_LINES,
-      mutationEffectivenessPath: "",
-      mutationEffectivenessData: null,
-      mutationEffectivenessLoadInFlight: false,
-      filters: {
-        component: "auto",
-        category: "all",
-        decision: "all",
-        technique: "all",
-        mismatchOnly: false,
-        search: "",
-      },
-    };
-
-    const metaEl = document.getElementById("meta");
-    const statsEl = document.getElementById("stats");
-    const barsEl = document.getElementById("bars");
-    const rowsEl = document.getElementById("rows");
-    const statusEl = document.getElementById("status");
-    const verifyStatusEl = document.getElementById("verifyStatus");
-    const receiptViewEl = document.getElementById("receiptView");
-    const fileInputEl = document.getElementById("fileInput");
-    const dropZoneEl = document.getElementById("dropZone");
-    const copyReceiptBtnEl = document.getElementById("copyReceiptBtn");
-    const verifyBtnEl = document.getElementById("verifyBtn");
-    const openCampaignArtifactBtnEl = document.getElementById("openCampaignArtifactBtn");
-    const openLearningArtifactBtnEl = document.getElementById("openLearningArtifactBtn");
-    const openMutationArtifactBtnEl = document.getElementById("openMutationArtifactBtn");
-    const verifyAllBtnEl = document.getElementById("verifyAllBtn");
-    const autoScanBtnEl = document.getElementById("autoScanBtn");
-    const repoUrlInputEl = document.getElementById("repoUrlInput");
-    const launchRepoBtnEl = document.getElementById("launchRepoBtn");
-    const refreshRunsBtnEl = document.getElementById("refreshRunsBtn");
-    const barsTitleEl = document.getElementById("barsTitle");
-    const tableTitleEl = document.getElementById("tableTitle");
-    const tableHeadRowEl = document.getElementById("tableHeadRow");
-    const trendEl = document.getElementById("trend");
-    const regressionApiEl = document.getElementById("regressionApi");
-    const heatmapEl = document.getElementById("heatmap");
-    const mutationAnalyticsEl = document.getElementById("mutationAnalytics");
-    const gapBarsEl = document.getElementById("gapBars");
-    const missionBoardEl = document.getElementById("missionBoard");
-    const componentFilterEl = document.getElementById("componentFilter");
-    const categoryFilterEl = document.getElementById("categoryFilter");
-    const decisionFilterEl = document.getElementById("decisionFilter");
-    const techniqueFilterEl = document.getElementById("techniqueFilter");
-    const searchBoxEl = document.getElementById("searchBox");
-    const mismatchOnlyEl = document.getElementById("mismatchOnly");
-    const resetFiltersBtnEl = document.getElementById("resetFiltersBtn");
-    const focusWeakBtnEl = document.getElementById("focusWeakBtn");
-    const showAnomalyBtnEl = document.getElementById("showAnomalyBtn");
-    const exportFilteredBtnEl = document.getElementById("exportFilteredBtn");
-    const repoHotBtnEl = document.getElementById("repoHotBtn");
-    const exportRepoHotBtnEl = document.getElementById("exportRepoHotBtn");
-    const runListEl = document.getElementById("runList");
-    const launchesListEl = document.getElementById("launchesList");
-    const launchLogViewEl = document.getElementById("launchLogView");
-    const refreshLaunchesBtnEl = document.getElementById("refreshLaunchesBtn");
-    const launchLogTailLinesEl = document.getElementById("launchLogTailLines");
-    const detailMetaEl = document.getElementById("detailMeta");
-    const baselineRunFilterEl = document.getElementById("baselineRunFilter");
-    const useSelectedAsBaselineBtnEl = document.getElementById("useSelectedAsBaselineBtn");
-    const regressionDiffViewEl = document.getElementById("regressionDiffView");
-
-    function escapeHtml(value) {
-      return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
-        .replace(/'/g, "&#39;")
-        .replace(/`/g, "&#96;");
-    }
-
-    function truncateSignature(sig) {
-      const text = String(sig || "");
-      return text ? text.slice(0, 12) : "-";
-    }
-
-    function percent(numerator, denominator) {
-      if (!denominator) return "0.0";
-      return ((100 * numerator) / denominator).toFixed(1);
-    }
-
-    function toIsoOrDash(value) {
-      if (!value) return "-";
-      try {
-        return new Date(value).toISOString();
-      } catch (_) {
-        return String(value);
-      }
-    }
-
-    function setStatus(message) {
-      statusEl.innerHTML = escapeHtml(message);
-    }
-
-    function setVerifyStatus(message) {
-      verifyStatusEl.innerHTML = escapeHtml(message);
-    }
-
-    function setLaunchLog(message) {
-      launchLogViewEl.textContent = String(message || "No launch selected.");
-    }
-
-    function launchHealthSnapshot() {
-      const launches = Array.isArray(state.launches) ? state.launches : [];
-      const total = launches.length;
-      const running = launches.filter(function (item) { return Boolean(item && item.running); }).length;
-      const completed = launches.filter(function (item) {
-        return !item.running && String(item.status || "").toLowerCase() === "completed" && Number(item.exit_code || 0) === 0;
-      }).length;
-      const failed = launches.filter(function (item) {
-        if (!item || item.running) return false;
-        const status = String(item.status || "").toLowerCase();
-        const code = Number(item.exit_code || 0);
-        return status === "failed" || status === "wait_failed" || status === "terminated" || (status === "completed" && code !== 0);
-      }).length;
-      return { total: total, running: running, completed: completed, failed: failed };
-    }
-
-    function renderLaunchHealthMetaLine() {
-      const health = launchHealthSnapshot();
-      return "<div><b>Launch Queue:</b> total " +
-        escapeHtml(String(health.total)) +
-        " · running " +
-        escapeHtml(String(health.running)) +
-        " · completed " +
-        escapeHtml(String(health.completed)) +
-        " · failed " +
-        escapeHtml(String(health.failed)) +
-        "</div>";
-    }
-
-    function summarizeLaunchState(launch) {
-      if (!launch || typeof launch !== "object") return "UNKNOWN";
-      if (launch.running) return "RUNNING";
-      const status = String(launch.status || "").toLowerCase();
-      if (status === "completed") {
-        const code = Number(launch.exit_code);
-        if (Number.isFinite(code) && code !== 0) {
-          return "FAILED";
-        }
-        return "COMPLETED";
-      }
-      if (status === "terminated") return "TERMINATED";
-      if (status === "failed") return "FAILED";
-      return status ? status.toUpperCase() : "UNKNOWN";
-    }
-
-    function renderLaunches() {
-      const launches = Array.isArray(state.launches) ? state.launches : [];
-      if (!launches.length) {
-        launchesListEl.innerHTML = '<div class="empty-note">No tracked launches yet. Start a repo audit to populate this queue.</div>';
-        if (!state.selectedLaunchId) {
-          setLaunchLog("No launch selected.");
-        }
-        return;
-      }
-
-      launchesListEl.innerHTML = launches
-        .map(function (launch) {
-          const launchId = String(launch.launch_id || "");
-          const mode = String(launch.mode || "repo");
-          const status = summarizeLaunchState(launch);
-          const pid = launch.pid ? String(launch.pid) : "-";
-          const stamp = toIsoOrDash(launch.started_at || launch.registered_at);
-          const activeClass = launchId && launchId === state.selectedLaunchId ? " active" : "";
-          return (
-            '<div class="run-item launch-row' + activeClass + '" data-launch-id="' + escapeHtml(launchId) + '">' +
-              '<div class="launch-topline">' +
-                '<strong>' + escapeHtml(mode.toUpperCase()) + '</strong>' +
-                '<span class="muted">' + escapeHtml(status) + '</span>' +
-              '</div>' +
-              '<div class="muted">Launch ' + escapeHtml(launchId) + '</div>' +
-              '<div class="muted">PID ' + escapeHtml(pid) + ' · ' + escapeHtml(stamp) + '</div>' +
-              '<div class="launch-actions">' +
-                '<button type="button" data-launch-action="status" data-launch-id="' + escapeHtml(launchId) + '">Status</button>' +
-                '<button type="button" data-launch-action="logs" data-launch-id="' + escapeHtml(launchId) + '">Logs</button>' +
-                '<button type="button" data-launch-action="cancel" data-launch-id="' + escapeHtml(launchId) + '"' + (launch.running ? "" : " disabled") + '>Cancel</button>' +
-              '</div>' +
-            '</div>'
-          );
-        })
-        .join("");
-    }
-
-    async function refreshLaunches(options) {
-      const opts = options || {};
-      const silent = Boolean(opts.silent);
-      const fromPoll = Boolean(opts.fromPoll);
-
-      if (state.launchPollInFlight) {
-        return;
-      }
-      state.launchPollInFlight = true;
-      try {
-        const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH);
-        const launches = Array.isArray(payload.launches) ? payload.launches.slice() : [];
-        launches.sort(function (a, b) {
-          const aTs = Date.parse((a && (a.started_at || a.registered_at)) || "") || 0;
-          const bTs = Date.parse((b && (b.started_at || b.registered_at)) || "") || 0;
-          return bTs - aTs;
-        });
-        state.launches = launches;
-
-        if (opts.selectLaunchId) {
-          state.selectedLaunchId = String(opts.selectLaunchId);
-        } else if (!state.selectedLaunchId && launches.length) {
-          state.selectedLaunchId = String((launches[0] && launches[0].launch_id) || "");
-        }
-
-        renderLaunches();
-        if (state.summary) {
-          renderMeta(state.summary);
-        }
-
-        const selectedLaunch = launches.find(function (item) {
-          return String((item && item.launch_id) || "") === String(state.selectedLaunchId || "");
-        });
-        if (selectedLaunch && selectedLaunch.running) {
-          try {
-            await fetchLaunchLogs(state.selectedLaunchId, { silent: true });
-          } catch (_) {
-          }
-        }
-
-        const runningCount = launches.filter(function (item) { return Boolean(item && item.running); }).length;
-        if (fromPoll && state.launchesHadRunning && runningCount === 0) {
-          try {
-            await autoScanRuns();
-          } catch (_) {
-          }
-        }
-        state.launchesHadRunning = runningCount > 0;
-
-        if (!silent) {
-          setStatus("Launch queue refreshed. " + launches.length + " tracked launch(es), " + runningCount + " running.");
-        }
-      } catch (err) {
-        if (!silent) {
-          setStatus("Launch refresh failed: " + (err && err.message ? err.message : String(err)));
-        }
-      } finally {
-        state.launchPollInFlight = false;
-      }
-    }
-
-    async function fetchLaunchStatus(launchId, options) {
-      const opts = options || {};
-      const id = String(launchId || "").trim();
-      if (!id) {
-        return;
-      }
-      const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id));
-      state.selectedLaunchId = id;
-      const launches = Array.isArray(state.launches) ? state.launches.slice() : [];
-      const idx = launches.findIndex(function (item) {
-        return String((item && item.launch_id) || "") === id;
-      });
-      if (idx >= 0) {
-        launches[idx] = payload;
-      } else {
-        launches.unshift(payload);
-      }
-      state.launches = launches;
-      renderLaunches();
-      if (!opts.silent) {
-        setStatus("Launch " + id + " status: " + summarizeLaunchState(payload) + ".");
-      }
-      return payload;
-    }
-
-    async function fetchLaunchLogs(launchId, options) {
-      const opts = options || {};
-      const id = String(launchId || "").trim();
-      if (!id) {
-        return;
-      }
-      if (state.launchLogInFlight) {
-        return;
-      }
-      state.launchLogInFlight = true;
-      try {
-      const query = "?tail_lines=" + encodeURIComponent(String(state.launchLogTailLines || DEFAULT_LAUNCH_LOG_TAIL_LINES));
-      const payload = await fetchJson(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id) + "/logs" + query);
-      state.selectedLaunchId = id;
-      renderLaunches();
-      const logText = String(payload.logs || "No logs available.");
-      const isTruncated = Boolean(payload.truncated);
-      const totalLines = Number(payload.total_lines || 0);
-      const tailLines = Number(payload.tail_lines || state.launchLogTailLines || DEFAULT_LAUNCH_LOG_TAIL_LINES);
-      if (isTruncated) {
-        setLaunchLog(
-          "Showing last " + String(tailLines) + " of " + String(totalLines) + " lines.\n\n" + logText
-        );
-      } else {
-        setLaunchLog(logText);
-      }
-      if (!opts.silent) {
-        setStatus("Loaded logs for launch " + id + ".");
-      }
-      } finally {
-        state.launchLogInFlight = false;
-      }
-    }
-
-    async function cancelLaunch(launchId) {
-      const id = String(launchId || "").trim();
-      if (!id) {
-        return;
-      }
-      const resp = await fetch(HOSTED_LAUNCHES_API_PATH + "/" + encodeURIComponent(id) + "/cancel", {
-        method: "POST",
-      });
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error("HTTP " + resp.status + " at cancel endpoint: " + text);
-      }
-      await fetchLaunchStatus(id, { silent: true });
-      setStatus("Launch " + id + " termination requested.");
-    }
-
-    function startLaunchPolling() {
-      if (state.launchPollingTimer) {
-        clearInterval(state.launchPollingTimer);
-      }
-      state.launchPollingTimer = window.setInterval(function () {
-        refreshLaunches({ silent: true, fromPoll: true });
-      }, LAUNCH_POLL_INTERVAL_MS);
-    }
-
-    function saveFilterState() {
-      const hash = new URLSearchParams({
-        component: state.filters.component,
-        category: state.filters.category,
-        decision: state.filters.decision,
-        technique: state.filters.technique,
-        mismatch: state.filters.mismatchOnly ? "1" : "0",
-        search: state.filters.search || "",
-      });
-      window.location.hash = hash.toString();
-    }
-
-    function loadFilterState() {
-      const raw = String(window.location.hash || "").replace(/^#/, "");
-      if (!raw) return;
-      const params = new URLSearchParams(raw);
-      state.filters.component = params.get("component") || state.filters.component;
-      state.filters.category = params.get("category") || state.filters.category;
-      state.filters.decision = params.get("decision") || state.filters.decision;
-      state.filters.technique = params.get("technique") || state.filters.technique;
-      state.filters.mismatchOnly = (params.get("mismatch") || "0") === "1";
-      state.filters.search = (params.get("search") || "").toLowerCase();
-    }
-
-    function renderRunList() {
-      const runs = Array.isArray(state.summaries) ? state.summaries : [];
-      if (!runs.length) {
-        runListEl.innerHTML = '<div class="empty-note">Load one or more run artifacts to populate scopes.</div>';
-        baselineRunFilterEl.innerHTML = '<option value="">none</option>';
-        return;
-      }
-      runListEl.innerHTML = runs
-        .map(function (item, idx) {
-          const mode = String(item.mode || "api");
-          const generated = toIsoOrDash(item.generated_at);
-          const artifactSummary = summarizeArtifactAvailability(item);
-          const campaignPath = String(((item.campaign || {}).manifest_path) || "").trim();
-          const learningPath = String(item.learning_snapshot_path || "").trim();
-          const mutationPath = String(item.mutation_effectiveness_path || "").trim();
-          const quickLinks = [
-            campaignPath
-              ? '<a href="' + escapeHtml(toHostedRunArtifactPath(campaignPath)) + '" target="_blank" rel="noopener" data-run-artifact-open="1">campaign</a>'
-              : "",
-            learningPath
-              ? '<a href="' + escapeHtml(toHostedRunArtifactPath(learningPath)) + '" target="_blank" rel="noopener" data-run-artifact-open="1">learning</a>'
-              : "",
-            mutationPath
-              ? '<a href="' + escapeHtml(toHostedRunArtifactPath(mutationPath)) + '" target="_blank" rel="noopener" data-run-artifact-open="1">mutation</a>'
-              : "",
-          ].filter(Boolean).join(" | ");
-          return (
-            '<div class="run-item" data-run-index="' + escapeHtml(idx) + '">' +
-            '<div><strong>' + escapeHtml(mode) + '</strong></div>' +
-            '<div class="muted">' + escapeHtml(generated) + '</div>' +
-            (artifactSummary ? ('<div class="muted">Artifacts: ' + escapeHtml(artifactSummary) + '</div>') : '') +
-            (quickLinks ? ('<div class="muted">Quick links: ' + quickLinks + '</div>') : '') +
-            '</div>'
-          );
-        })
-        .join("");
-
-      runListEl.querySelectorAll("[data-run-index]").forEach(function (node) {
-        node.addEventListener("click", function () {
-          const index = Number(node.getAttribute("data-run-index"));
-          const selected = runs[index];
-          if (!selected) return;
-          renderAll(selected, { summaries: runs });
-        });
-      });
-
-      runListEl.querySelectorAll("[data-run-artifact-open]").forEach(function (node) {
-        node.addEventListener("click", function (event) {
-          event.stopPropagation();
-        });
-      });
-
-      baselineRunFilterEl.innerHTML = ['<option value="">none</option>']
-        .concat(runs.map(function (item, idx) {
-          const mode = String(item.mode || "api");
-          const generated = toIsoOrDash(item.generated_at);
-          return '<option value="' + escapeHtml(String(idx)) + '">' + escapeHtml(mode + ' @ ' + generated) + '</option>';
-        }))
-        .join("");
-
-      if (state.baselineSummary) {
-        const baselineIndex = runs.findIndex(function (item) {
-          return String(item.generated_at || "") === String(state.baselineSummary.generated_at || "");
-        });
-        baselineRunFilterEl.value = baselineIndex >= 0 ? String(baselineIndex) : "";
-      }
-    }
-
-    function _toComparableRow(row) {
-      if (!row) return null;
-      return {
-        id: row.id || null,
-        category: row.category || row.type || null,
-        technique: row.technique || row.action || null,
-        expected: row.expected_decision || row.expected || null,
-        actual: row.actual_decision || row.observed || row.severity || null,
-        reason: row.reason || row.message || row.summary || null,
-      };
-    }
-
-    function _findBaselineRow(currentRow) {
-      if (!state.baselineSummary || !currentRow) {
-        return null;
-      }
-      const baselineRows = (isWebsiteSummary(state.baselineSummary) || isRepoSummary(state.baselineSummary))
-        ? (state.baselineSummary.findings || [])
-        : (state.baselineSummary.results || []);
-
-      return baselineRows.find(function (row) {
-        if (currentRow.id && row.id && String(row.id) === String(currentRow.id)) {
-          return true;
-        }
-        return (
-          String(row.category || row.type || "") === String(currentRow.category || currentRow.type || "") &&
-          String(row.name || row.title || "") === String(currentRow.name || currentRow.title || "")
-        );
-      }) || null;
-    }
-
-    function renderInlineRegressionDiff(currentRow) {
-      if (!currentRow) {
-        regressionDiffViewEl.textContent = "No row selected.";
-        return;
-      }
-      if (!state.baselineSummary) {
-        regressionDiffViewEl.textContent = "No baseline selected.";
-        return;
-      }
-
-      const baselineRow = _findBaselineRow(currentRow);
-      if (!baselineRow) {
-        regressionDiffViewEl.textContent = "No matching baseline row found for selected item.";
-        return;
-      }
-
-      const currentComparable = _toComparableRow(currentRow) || {};
-      const baselineComparable = _toComparableRow(baselineRow) || {};
-      const keys = ["id", "category", "technique", "expected", "actual", "reason"];
-      const diffs = keys
-        .map(function (key) {
-          const before = baselineComparable[key];
-          const after = currentComparable[key];
-          const changed = String(before || "") !== String(after || "");
-          return { key: key, before: before, after: after, changed: changed };
-        })
-        .filter(function (item) { return item.changed; });
-
-      if (!diffs.length) {
-        regressionDiffViewEl.textContent = JSON.stringify({
-          status: "no_change",
-          baseline_generated_at: state.baselineSummary.generated_at,
-          fields: keys,
-        }, null, 2);
-        return;
-      }
-
-      regressionDiffViewEl.textContent = JSON.stringify(
-        {
-          status: "changed",
-          baseline_generated_at: state.baselineSummary.generated_at,
-          current_generated_at: state.summary && state.summary.generated_at,
-          deltas: diffs,
-        },
-        null,
-        2,
-      );
-    }
-
-    function isWebsiteSummary(summary) {
-      return Array.isArray(summary.findings) && !Array.isArray(summary.results);
-    }
-
-    function isRepoSummary(summary) {
-      return summary && summary.mode === "repo" && Array.isArray(summary.findings);
-    }
-
-    function isCombinedSummary(summary) {
-      return summary && summary.mode === "combined" && summary.components && typeof summary.components === "object";
-    }
-
-    function isCommandCenterModel(summary) {
-      return summary && Array.isArray(summary.runs) && Array.isArray(summary.findings) && Array.isArray(summary.metrics);
-    }
-
-    function isDashboardRenderableSummary(summary) {
-      return (
-        isApiSummary(summary) ||
-        isWebsiteSummary(summary) ||
-        isRepoSummary(summary) ||
-        isCombinedSummary(summary)
-      );
-    }
-
-    function commandCenterToSummary(model) {
-      const runs = model.runs || [];
-      const findings = model.findings || [];
-      const artifacts = Array.isArray(model.artifacts) ? model.artifacts : [];
-      function artifactPath(type) {
-        const row = artifacts.find(function (item) {
-          return String((item && item.artifact_type) || "") === type;
-        });
-        return row ? String(row.path || "") : "";
-      }
-      const latest = runs[0] || {};
-      const categories = {};
-      let blocked = 0;
-      let proceeded = 0;
-      let unknown = 0;
-      findings.forEach(function (finding, idx) {
-        const category = String(finding.category || "unknown");
-        if (!categories[category]) {
-          categories[category] = { total: 0, matches: 0, blocked: 0, proceeded: 0, unknown: 0 };
-        }
-        categories[category].total += 1;
-        const decision = String(finding.decision || "unknown");
-        if (decision === "blocked") {
-          blocked += 1;
-          categories[category].blocked += 1;
-        } else if (decision === "proceeded") {
-          proceeded += 1;
-          categories[category].proceeded += 1;
-        } else {
-          unknown += 1;
-          categories[category].unknown += 1;
-        }
-        if (!finding.title) {
-          findings[idx].title = category + " finding";
-        }
-      });
-
-      const results = findings.map(function (finding) {
-        const decision = String(finding.decision || "unknown");
-        const actual = decision === "blocked" ? "DENIED" : (decision === "proceeded" ? "PROCEED" : "UNKNOWN");
-        return {
-          id: finding.id,
-          name: finding.title,
-          category: finding.category,
-          technique: finding.technique,
-          expected_decision: actual,
-          actual_decision: actual,
-          match: !finding.mismatch,
-          request_id: null,
-          receipt: {},
-          reason: finding.summary,
-          error: null,
-        };
-      });
-
-      const total = findings.length;
-      const passRate = total ? ((total - unknown) / total) * 100 : 0;
-      const campaignManifestPath = artifactPath("campaign_manifest_json");
-      const learningSnapshotPath = artifactPath("learning_snapshot_json");
-      const mutationEffectivenessPath = artifactPath("mutation_effectiveness_json");
-      return {
-        generated_at: model.generated_at,
-        mode: String(latest.mode || "api"),
-        attacks_total: total,
-        blocked: blocked,
-        proceeded: proceeded,
-        unknown: unknown,
-        errors: 0,
-        empty_200_anomalies: 0,
-        block_rate: total ? (blocked / total) * 100 : 0,
-        expectation_match_rate: passRate,
-        categories: categories,
-        results: results,
-        campaign: campaignManifestPath
-          ? { enabled: true, manifest_path: campaignManifestPath }
-          : undefined,
-        learning_snapshot_path: learningSnapshotPath || undefined,
-        mutation_effectiveness_path: mutationEffectivenessPath || undefined,
-      };
-    }
-
-    function summarizeArtifactAvailability(summary) {
-      const campaignPath = String(((summary && summary.campaign) || {}).manifest_path || "").trim();
-      const learningPath = String((summary && summary.learning_snapshot_path) || "").trim();
-      const mutationPath = String((summary && summary.mutation_effectiveness_path) || "").trim();
-      const tags = [];
-      if (campaignPath) tags.push("campaign");
-      if (learningPath) tags.push("learning");
-      if (mutationPath) tags.push("mutation");
-      return tags.length ? tags.join(" + ") : "";
-    }
-
-    function resolveCombinedComponent(summary) {
-      if (!isCombinedSummary(summary)) {
-        return summary;
-      }
-      const components = summary.components || {};
-      const preferred = state.filters.component;
-      if (preferred !== "auto" && components[preferred]) {
-        return components[preferred];
-      }
-      if (components.api && isApiSummary(components.api)) return components.api;
-      if (components.repo && isRepoSummary(components.repo)) return components.repo;
-      if (components.website && isWebsiteSummary(components.website)) return components.website;
-      return components.api || components.repo || components.website || summary;
-    }
-
-    function isApiSummary(summary) {
-      return Array.isArray(summary && summary.results);
-    }
-
-    function setTableHeader(labels) {
-      tableHeadRowEl.innerHTML = labels.map(function (label) {
-        return "<th>" + escapeHtml(label) + "</th>";
-      }).join("");
-    }
-
-    function populateDecisionFilter(summary) {
-      if (isRepoSummary(summary)) {
-        decisionFilterEl.innerHTML = [
-          '<option value="all">all</option>',
-          '<option value="CRITICAL">CRITICAL</option>',
-          '<option value="HIGH">HIGH</option>',
-          '<option value="MEDIUM">MEDIUM</option>',
-          '<option value="LOW">LOW</option>'
-        ].join("");
-        decisionFilterEl.value = state.filters.decision;
-        return;
-      }
-
-      if (isWebsiteSummary(summary)) {
-        decisionFilterEl.innerHTML = [
-          '<option value="all">all</option>',
-          '<option value="CRITICAL">CRITICAL</option>',
-          '<option value="HIGH">HIGH</option>',
-          '<option value="MEDIUM">MEDIUM</option>',
-          '<option value="LOW">LOW</option>'
-        ].join("");
-        decisionFilterEl.value = state.filters.decision;
-        return;
-      }
-
-      decisionFilterEl.innerHTML = [
-        '<option value="all">all</option>',
-        '<option value="DENIED">DENIED</option>',
-        '<option value="PROCEED">PROCEED</option>',
-        '<option value="UNKNOWN">UNKNOWN</option>',
-        '<option value="ERROR">ERROR</option>'
-      ].join("");
-      decisionFilterEl.value = state.filters.decision;
-    }
-
-    function renderMeta(summary) {
-      if (state.combinedSummary) {
-        const combined = state.combinedSummary;
-        const combinedApi = (combined.components || {}).api || {};
-        const combinedCampaignPath = String(((combinedApi.campaign || {}).manifest_path) || "").trim();
-        const combinedLearningPath = String(combinedApi.learning_snapshot_path || "").trim();
-        const combinedMutationPath = String(combinedApi.mutation_effectiveness_path || "").trim();
-        const generatedCombined = toIsoOrDash(combined.generated_at);
-        const gate = ((combined.gates || {}).pass ? "PASS" : "FAIL");
-        const violations = ((combined.gates || {}).violations || []).length;
-        const components = Object.keys(combined.components || {}).join(", ") || "(none)";
-        const targets = Array.isArray(combined.targets) ? combined.targets.length : 0;
-        const lines = [
-          "<div><b>Generated:</b> " + escapeHtml(generatedCombined) + "</div>",
-          "<div><b>Combined Gate:</b> " + escapeHtml(gate) + " (violations: " + escapeHtml(violations) + ")</div>",
-          "<div><b>Components:</b> " + escapeHtml(components) + "</div>",
-          "<div><b>Targets:</b> " + escapeHtml(targets) + "</div>",
-        ];
-        if (combined.batch_mode === "targets-file") {
-          const total = Number(combined.targets_total || 0);
-          const completed = Number(combined.targets_completed || 0);
-          const failed = Number(combined.targets_failed || 0);
-          lines.push("<div><b>Batch:</b> " + escapeHtml(completed + "/" + total) + " completed" + (failed ? ", <span style='color:var(--danger)'>" + escapeHtml(failed) + " failed</span>" : "") + "</div>");
-          if (combined.targets_file) {
-            lines.push("<div><b>Targets file:</b> " + escapeHtml(String(combined.targets_file)) + "</div>");
-          }
-        }
-        if (combinedCampaignPath) {
-          lines.push("<div><b>Campaign manifest:</b> " + escapeHtml(combinedCampaignPath) + "</div>");
-        }
-        if (combinedLearningPath) {
-          lines.push("<div><b>Learning snapshot:</b> " + escapeHtml(combinedLearningPath) + "</div>");
-        }
-        if (combinedMutationPath) {
-          lines.push("<div><b>Mutation effectiveness:</b> " + escapeHtml(combinedMutationPath) + "</div>");
-        }
-        lines.push(renderLaunchHealthMetaLine());
-        metaEl.innerHTML = lines.join("");
-        return;
-      }
-
-      if (isRepoSummary(summary)) {
-        const generatedRepo = toIsoOrDash(summary.generated_at);
-        const repoRoot = summary.repo_root || "(unknown)";
-        const filesScanned = Number(summary.files_scanned || 0);
-        const deps = summary.dependencies || {};
-        const depSignals = deps.signals || {};
-        const depsTotal = Number(deps.findings_total || 0);
-        const depsMode = deps.scan_mode || "auto";
-        const topPackage = Array.isArray(deps.top_packages) && deps.top_packages.length ? deps.top_packages[0] : null;
-        metaEl.innerHTML = [
-          "<div><b>Generated:</b> " + escapeHtml(generatedRepo) + "</div>",
-          "<div><b>Repo root:</b> " + escapeHtml(repoRoot) + "</div>",
-          "<div><b>Files scanned:</b> " + escapeHtml(filesScanned) + "</div>",
-          "<div><b>Supply chain findings:</b> " + escapeHtml(depsTotal) + " (mode: " + escapeHtml(depsMode) + ")</div>"
-        ].concat(topPackage ? [
-          "<div><b>Top vulnerable package:</b> " + escapeHtml(String(topPackage.name || "unknown")) + " (" + escapeHtml(Number(topPackage.advisory_count || 0)) + ", max severity: " + escapeHtml(String(topPackage.max_severity || "unknown")) + ")</div>"
-        ] : []).concat((Number(depSignals.malware_suspect_total || 0) || Number(depSignals.tampering_risk_total || 0)) ? [
-          "<div><b>Suspicious dependency signals:</b> malware " + escapeHtml(Number(depSignals.malware_suspect_total || 0)) + ", tampering " + escapeHtml(Number(depSignals.tampering_risk_total || 0)) + "</div>"
-        ] : []).concat([renderLaunchHealthMetaLine()]).join("");
-        return;
-      }
-
-      if (isWebsiteSummary(summary)) {
-        const generatedWebsite = toIsoOrDash(summary.generated_at);
-        const targetUrl = summary.target_url || "(unknown)";
-        const crawl = summary.crawl_stats || {};
-        metaEl.innerHTML = [
-          "<div><b>Generated:</b> " + escapeHtml(generatedWebsite) + "</div>",
-          "<div><b>Target URL:</b> " + escapeHtml(targetUrl) + "</div>",
-          "<div><b>Visited pages:</b> " + escapeHtml(crawl.pages_visited || 0) + "</div>"
-        ].concat([renderLaunchHealthMetaLine()]).join("");
-        return;
-      }
-
-      const generated = toIsoOrDash(summary.generated_at);
-      const engineUrl = summary.engine_url || "(unknown)";
-      const attacksTotal = summary.attacks_total || (summary.results || []).length || 0;
-      const campaignPath = String(((summary.campaign || {}).manifest_path) || "").trim();
-      const learningPath = String(summary.learning_snapshot_path || "").trim();
-      const mutationPath = String(summary.mutation_effectiveness_path || "").trim();
-      metaEl.innerHTML = [
-        "<div><b>Generated:</b> " + escapeHtml(generated) + "</div>",
-        "<div><b>Engine URL:</b> " + escapeHtml(engineUrl) + "</div>",
-        "<div><b>Total attacks:</b> " + escapeHtml(attacksTotal) + "</div>"
-      ].concat(campaignPath ? [
-        "<div><b>Campaign manifest:</b> " + escapeHtml(campaignPath) + "</div>"
-      ] : []).concat(learningPath ? [
-        "<div><b>Learning snapshot:</b> " + escapeHtml(learningPath) + "</div>"
-      ] : []).concat(mutationPath ? [
-        "<div><b>Mutation effectiveness:</b> " + escapeHtml(mutationPath) + "</div>"
-      ] : [])
-      ].concat([renderLaunchHealthMetaLine()]).join("");
-    }
-
-    function renderStats(summary) {
-      if (isRepoSummary(summary)) {
-        const sev = summary.findings_by_severity || {};
-        const depSev = ((summary.dependencies || {}).findings_by_severity) || {};
-        const depExploitability = Number(((summary.dependencies || {}).exploitability_score) || 0);
-        const depSignals = ((summary.dependencies || {}).signals) || {};
-        const findingsTotal = Number(summary.findings_total || 0);
-        const riskScore = Number(summary.risk_score || 0);
-        const cards = [
-          { label: "Risk Score", value: riskScore },
-          { label: "Findings", value: findingsTotal },
-          { label: "Critical", value: Number(sev.CRITICAL || 0) },
-          { label: "High", value: Number(sev.HIGH || 0) },
-          { label: "Supply Chain Critical", value: Number(depSev.CRITICAL || 0) },
-          { label: "Supply Chain High", value: Number(depSev.HIGH || 0) },
-          { label: "Malware Signals", value: Number(depSignals.malware_suspect_total || 0) },
-          { label: "Tampering Signals", value: Number(depSignals.tampering_risk_total || 0) },
-          { label: "Supply Chain Score", value: depExploitability },
-          { label: "Files Scanned", value: Number(summary.files_scanned || 0) }
-        ];
-
-        statsEl.innerHTML = cards.map(function (card) {
-          return (
-            "<div class=\"card\">" +
-            "<div class=\"card-label\">" + escapeHtml(card.label) + "</div>" +
-            "<div class=\"card-value\">" + escapeHtml(card.value) + "</div>" +
-            "</div>"
-          );
-        }).join("");
-        return;
-      }
-
-      if (isWebsiteSummary(summary)) {
-        const sev = summary.findings_by_severity || {};
-        const crawl = summary.crawl_stats || {};
-        const cards = [
-          { label: "Findings", value: Number(summary.findings_total || 0) },
-          { label: "Critical", value: Number(sev.CRITICAL || 0) },
-          { label: "High", value: Number(sev.HIGH || 0) },
-          { label: "Pass Rate", value: Number(summary.pass_rate || 0).toFixed(1) + "%" },
-          { label: "Visited Pages", value: Number(crawl.pages_visited || 0) }
-        ];
-
-        statsEl.innerHTML = cards.map(function (card) {
-          return (
-            "<div class=\"card\">" +
-            "<div class=\"card-label\">" + escapeHtml(card.label) + "</div>" +
-            "<div class=\"card-value\">" + escapeHtml(card.value) + "</div>" +
-            "</div>"
-          );
-        }).join("");
-        return;
-      }
-
-      const total = Number(summary.attacks_total || 0);
-      const blocked = Number(summary.blocked || 0);
-      const blockRate = Number(summary.block_rate || 0);
-      const passRate = Number(summary.expectation_match_rate || 0);
-      const unknown = Number(summary.unknown || 0);
-      const anomalies = Number(summary.empty_200_anomalies || 0);
-      const regression = summary.regression || null;
-      const activeRegressions = regression && regression.regressed ? 1 : 0;
-      const ciVerdict = (state.combinedSummary && state.combinedSummary.ci_verdict)
-        || summary.ci_verdict
-        || ((summary.errors || 0) > 0 ? "FAIL" : "PASS");
-
-      const cards = [
-        { label: "Pass Rate", value: passRate.toFixed(1) + "%", metric: "pass_rate" },
-        { label: "Blocked Rate", value: blockRate.toFixed(1) + "%", metric: "blocked_rate" },
-        { label: "Unknowns", value: unknown, metric: "unknown" },
-        { label: "Anomalies", value: anomalies, metric: "anomalies" },
-        { label: "Active Regressions", value: activeRegressions, metric: "regressions" },
-        { label: "CI Verdict", value: String(ciVerdict).toUpperCase(), metric: "ci_verdict" },
-        { label: "Total Attacks", value: total, metric: "total" },
-        { label: "Blocked", value: blocked, metric: "blocked" }
-      ];
-
-      statsEl.innerHTML = cards.map(function (card) {
-        return (
-          "<div class=\"card clickable\" data-metric=\"" + escapeHtml(card.metric || "") + "\">" +
-          "<div class=\"card-label\">" + escapeHtml(card.label) + "</div>" +
-          "<div class=\"card-value\">" + escapeHtml(card.value) + "</div>" +
-          "</div>"
-        );
-      }).join("");
-
-      statsEl.querySelectorAll("[data-metric]").forEach(function (node) {
-        node.addEventListener("click", function () {
-          const metric = node.getAttribute("data-metric");
-          if (metric === "unknown") {
-            state.filters.decision = "UNKNOWN";
-            decisionFilterEl.value = "UNKNOWN";
-          } else if (metric === "anomalies") {
-            state.filters.decision = "UNKNOWN";
-            state.filters.search = "empty json response body from server (status 200)";
-            decisionFilterEl.value = "UNKNOWN";
-            searchBoxEl.value = state.filters.search;
-          } else if (metric === "blocked" || metric === "blocked_rate") {
-            state.filters.decision = "DENIED";
-            decisionFilterEl.value = "DENIED";
-          } else if (metric === "pass_rate") {
-            state.filters.mismatchOnly = true;
-            mismatchOnlyEl.checked = true;
-          }
-          saveFilterState();
-          if (state.summary) renderRows(state.summary);
-        });
-      });
-    }
-
-    function barColor(ratio) {
-      if (ratio >= 95) return "var(--ok)";
-      if (ratio >= 80) return "var(--warn)";
-      return "var(--bad)";
-    }
-
-    function renderBars(summary) {
-      if (isRepoSummary(summary)) {
-        barsTitleEl.textContent = "Repo Findings by Severity";
-        const sev = summary.findings_by_severity || {};
-        const total = Number(summary.findings_total || 0);
-        const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
-        barsEl.innerHTML = order.map(function (name) {
-          const count = Number(sev[name] || 0);
-          const ratio = Number(percent(count, total));
-          const fill = Math.max(0, Math.min(100, ratio));
-          return (
-            "<div class=\"bar-row\">" +
-            "<div>" + escapeHtml(name) + "</div>" +
-            "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" +
-            escapeHtml(fill) + "%;background:" + escapeHtml(barColor(100 - ratio)) + "\"></div></div>" +
-            "<div>" + escapeHtml(count) + " (" + escapeHtml(fill.toFixed(1)) + "%)</div>" +
-            "</div>"
-          );
-        }).join("");
-        return;
-      }
-
-      if (isWebsiteSummary(summary)) {
-        const byType = summary.findings_by_type || {};
-        const total = Number(summary.findings_total || 0);
-        const keys = Object.keys(byType);
-        barsTitleEl.textContent = "Findings by Type";
-        barsEl.innerHTML = keys.map(function (name) {
-          const count = Number(byType[name] || 0);
-          const ratio = Number(percent(count, total));
-          const fill = Math.max(0, Math.min(100, ratio));
-          return (
-            "<div class=\"bar-row\">" +
-            "<div>" + escapeHtml(name) + "</div>" +
-            "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" +
-            escapeHtml(fill) + "%;background:" + escapeHtml(barColor(100 - ratio)) + "\"></div></div>" +
-            "<div>" + escapeHtml(count) + "</div>" +
-            "</div>"
-          );
-        }).join("");
-        return;
-      }
-
-      barsTitleEl.textContent = "Per-Category Blocking Ratio";
-      const categories = summary.categories || {};
-      const order = [
-        "prompt_injection",
-        "data_exfiltration",
-        "tool_abuse",
-        "jailbreak",
-        "policy_evasion",
-        "benign_controls"
-      ];
-
-      barsEl.innerHTML = order.map(function (name) {
-        const cat = categories[name] || { total: 0, blocked: 0 };
-        const ratio = Number(percent(cat.blocked || 0, cat.total || 0));
-        const fill = Math.max(0, Math.min(100, ratio));
-        return (
-          "<div class=\"bar-row clickable\" data-filter-category=\"" + escapeHtml(name) + "\">" +
-          "<div>" + escapeHtml(name) + "</div>" +
-          "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" +
-          escapeHtml(fill) + "%;background:" + escapeHtml(barColor(ratio)) + "\"></div></div>" +
-          "<div>" + escapeHtml(cat.blocked || 0) + "/" + escapeHtml(cat.total || 0) +
-          " (" + escapeHtml(fill.toFixed(1)) + "%)</div>" +
-          "</div>"
-        );
-      }).join("");
-
-      barsEl.querySelectorAll("[data-filter-category]").forEach(function (node) {
-        node.addEventListener("click", function () {
-          const category = node.getAttribute("data-filter-category") || "all";
-          state.filters.category = category;
-          categoryFilterEl.value = category;
-          saveFilterState();
-          if (state.summary) renderRows(state.summary);
-        });
-      });
-    }
-
-    function renderRows(summary) {
-      if (isRepoSummary(summary)) {
-        tableTitleEl.textContent = "Repository Findings";
-        setTableHeader(["Severity", "Type", "File", "Line", "Title", "Evidence"]);
-        const findings = Array.isArray(summary.findings) ? summary.findings : [];
-        const filtered = getFilteredRows(findings);
-
-        rowsEl.innerHTML = filtered.map(function (entry) {
-          const row = entry.row;
-          const idx = entry.idx;
-          const cls = row.severity === "CRITICAL" || row.severity === "HIGH" ? "mismatch" : "match";
-          return (
-            "<tr data-index=\"" + escapeHtml(idx) + "\">" +
-            "<td class=\"" + escapeHtml(cls) + "\">" + escapeHtml(row.severity || "") + "</td>" +
-            "<td>" + escapeHtml(row.type || "") + "</td>" +
-            "<td>" + escapeHtml(row.file || "") + "</td>" +
-            "<td>" + escapeHtml(row.line != null ? row.line : "-") + "</td>" +
-            "<td>" + escapeHtml(row.title || "") + "</td>" +
-            "<td>" + escapeHtml(row.evidence || "") + "</td>" +
-            "</tr>"
-          );
-        }).join("");
-
-        setStatus("Showing " + filtered.length + " of " + findings.length + " findings.");
-
-        const findingRows = rowsEl.querySelectorAll("tr");
-        findingRows.forEach(function (tr) {
-          tr.addEventListener("click", function () {
-            const index = Number(tr.getAttribute("data-index"));
-            selectRow(index);
-          });
-        });
-        return;
-      }
-
-      if (isWebsiteSummary(summary)) {
-        tableTitleEl.textContent = "Website Findings";
-        setTableHeader(["ID", "Severity", "Type", "Page", "Action", "Expected", "Observed"]);
-        const findings = Array.isArray(summary.findings) ? summary.findings : [];
-        rowsEl.innerHTML = findings.map(function (row, idx) {
-          const cls = row.severity === "CRITICAL" || row.severity === "HIGH" ? "mismatch" : "match";
-          return (
-            "<tr data-index=\"" + escapeHtml(idx) + "\">" +
-            "<td>" + escapeHtml(row.id || "") + "</td>" +
-            "<td class=\"" + escapeHtml(cls) + "\">" + escapeHtml(row.severity || "") + "</td>" +
-            "<td>" + escapeHtml(row.type || "") + "</td>" +
-            "<td>" + escapeHtml(row.page_url || "") + "</td>" +
-            "<td>" + escapeHtml(row.action || "") + "</td>" +
-            "<td>" + escapeHtml(row.expected || "") + "</td>" +
-            "<td>" + escapeHtml(row.observed || "") + "</td>" +
-            "</tr>"
-          );
-        }).join("");
-
-        const findingRows = rowsEl.querySelectorAll("tr");
-        findingRows.forEach(function (tr) {
-          tr.addEventListener("click", function () {
-            const index = Number(tr.getAttribute("data-index"));
-            selectRow(index);
-          });
-        });
-        return;
-      }
-
-      tableTitleEl.textContent = "Receipt Table";
-      setTableHeader(["Timestamp", "ID", "Category", "Name", "Expected", "Actual", "Match", "Latency ms", "Signature"]);
-      const results = Array.isArray(summary.results) ? summary.results : [];
-      const filtered = getFilteredRows(results);
-
-      rowsEl.innerHTML = filtered.map(function (entry) {
-        const row = entry.row;
-        const idx = entry.idx;
-        const ts = toIsoOrDash((row.receipt || {}).issued_at || summary.generated_at);
-        const match = row.match ? "\u2713" : "\u2717";
-        const sig = truncateSignature((row.receipt || {}).signature);
-        const cls = row.match ? "match" : "mismatch";
-        return (
-          "<tr data-index=\"" + escapeHtml(idx) + "\">" +
-          "<td>" + escapeHtml(ts) + "</td>" +
-          "<td>" + escapeHtml(row.id || "") + "</td>" +
-          "<td>" + escapeHtml(row.category || "") + "</td>" +
-          "<td>" + escapeHtml(row.name || "") + "</td>" +
-          "<td>" + escapeHtml(row.expected_decision || "") + "</td>" +
-          "<td>" + escapeHtml(row.actual_decision || "") + "</td>" +
-          "<td class=\"" + escapeHtml(cls) + "\">" + escapeHtml(match) + "</td>" +
-          "<td>" + escapeHtml(row.latency_ms != null ? row.latency_ms : "-") + "</td>" +
-          "<td>" + escapeHtml(sig) + "</td>" +
-          "</tr>"
-        );
-      }).join("");
-
-      const mismatchCount = filtered.filter(function (entry) { return !entry.row.match; }).length;
-      setStatus(
-        "Showing " + filtered.length + " of " + results.length +
-        " rows | mismatches in view: " + mismatchCount +
-        " | empty-200 anomalies: " + Number(summary.empty_200_anomalies || 0)
-      );
-
-      const allRows = rowsEl.querySelectorAll("tr");
-      allRows.forEach(function (tr) {
-        tr.addEventListener("click", function () {
-          const index = Number(tr.getAttribute("data-index"));
-          selectRow(index);
-        });
-      });
-    }
-
-    function getFilteredRows(results) {
-      return results
-        .map(function (row, idx) { return { row: row, idx: idx }; })
-        .filter(function (entry) {
-          const row = entry.row;
-          const rowCategory = String(row.category || row.type || "");
-          if (state.filters.category !== "all" && rowCategory !== state.filters.category) {
-            return false;
-          }
-          const decision = String(row.actual_decision || row.severity || "");
-          if (state.filters.decision !== "all" && decision !== state.filters.decision) {
-            return false;
-          }
-          const technique = String(row.technique || row.action || row.type || "");
-          if (state.filters.technique !== "all" && technique !== state.filters.technique) {
-            return false;
-          }
-          const isMismatch = (typeof row.match === "boolean") ? !row.match : (row.severity === "CRITICAL" || row.severity === "HIGH");
-          if (state.filters.mismatchOnly && !isMismatch) {
-            return false;
-          }
-          if (state.filters.search) {
-            const hay = [
-              row.id,
-              row.name,
-              row.category,
-              row.type,
-              row.title,
-              row.file,
-              row.reason,
-              row.error,
-              row.evidence,
-              row.technique,
-              row.action,
-              row.observed,
-              row.expected,
-              row.payload,
-            ]
-              .map(function (v) { return String(v || "").toLowerCase(); })
-              .join(" ");
-            if (!hay.includes(state.filters.search)) {
-              return false;
-            }
-          }
-          return true;
-        });
-    }
-
-    function findWeakestCategory(summary) {
-      const categories = Object.entries(summary.categories || {});
-      if (!categories.length) {
-        return null;
-      }
-      const ranked = categories
-        .map(function (entry) {
-          const name = entry[0];
-          const row = entry[1] || {};
-          const total = Number(row.total || 0);
-          const matches = Number(row.matches || 0);
-          if (!total) return null;
-          return { name: name, rate: 100 * matches / total };
-        })
-        .filter(Boolean)
-        .sort(function (a, b) { return a.rate - b.rate; });
-      return ranked.length ? ranked[0].name : null;
-    }
-
-    function exportFilteredRows() {
-      if (!isApiSummary(state.summary)) {
-        setStatus("Export is available for API summaries only.");
-        return;
-      }
-      const results = Array.isArray(state.summary.results) ? state.summary.results : [];
-      const filtered = getFilteredRows(results).map(function (entry) { return entry.row; });
-      const blob = new Blob([JSON.stringify(filtered, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "filtered_results.json";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setStatus("Exported " + filtered.length + " filtered rows to filtered_results.json.");
-    }
-
-    function exportRepoHotspots() {
-      if (!isRepoSummary(state.summary)) {
-        setStatus("Repo hotspot export is available for repo summaries only.");
-        return;
-      }
-      const findings = Array.isArray(state.summary.findings) ? state.summary.findings : [];
-      const hotspots = findings.filter(function (row) {
-        return row.severity === "CRITICAL" || row.severity === "HIGH";
-      });
-      const blob = new Blob([JSON.stringify(hotspots, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "repo_hotspots.json";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-      setStatus("Exported " + hotspots.length + " repo hotspots to repo_hotspots.json.");
-    }
-
-    function populateCategoryFilter(summary) {
-      if (isRepoSummary(summary)) {
-        const types = Object.keys(summary.findings_by_type || {}).sort();
-        categoryFilterEl.innerHTML = ['<option value="all">all</option>']
-          .concat(types.map(function (name) {
-            return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
-          }))
-          .join("");
-        categoryFilterEl.value = state.filters.category;
-        return;
-      }
-
-      if (isWebsiteSummary(summary)) {
-        const types = Object.keys(summary.findings_by_type || {}).sort();
-        categoryFilterEl.innerHTML = ['<option value="all">all</option>']
-          .concat(types.map(function (name) {
-            return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
-          }))
-          .join("");
-        categoryFilterEl.value = state.filters.category;
-        return;
-      }
-
-      if (!isApiSummary(summary)) {
-        categoryFilterEl.innerHTML = '<option value="all">all</option>';
-        return;
-      }
-      const categories = Object.keys(summary.categories || {}).sort();
-      categoryFilterEl.innerHTML = ['<option value="all">all</option>']
-        .concat(categories.map(function (name) {
-          return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
-        }))
-        .join("");
-      categoryFilterEl.value = state.filters.category;
-    }
-
-    function populateTechniqueFilter(summary) {
-      let techniques = [];
-      if (isApiSummary(summary)) {
-        const rows = Array.isArray(summary.results) ? summary.results : [];
-        techniques = Array.from(new Set(rows.map(function (row) {
-          return String(row.technique || "").trim();
-        }).filter(Boolean))).sort();
-      } else if (isRepoSummary(summary)) {
-        const rows = Array.isArray(summary.findings) ? summary.findings : [];
-        techniques = Array.from(new Set(rows.map(function (row) {
-          return String(row.type || "").trim();
-        }).filter(Boolean))).sort();
-      } else if (isWebsiteSummary(summary)) {
-        const rows = Array.isArray(summary.findings) ? summary.findings : [];
-        techniques = Array.from(new Set(rows.map(function (row) {
-          return String(row.action || row.type || "").trim();
-        }).filter(Boolean))).sort();
-      }
-
-      techniqueFilterEl.innerHTML = ['<option value="all">all</option>']
-        .concat(techniques.map(function (name) {
-          return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
-        }))
-        .join("");
-      techniqueFilterEl.value = state.filters.technique;
-    }
-
-    function renderMissionBoard(summary) {
-      if (isRepoSummary(summary)) {
-        const depSignals = (((summary || {}).dependencies || {}).signals || {});
-        const suspiciousPackages = depSignals.top_suspicious_packages || [];
-        if (suspiciousPackages.length) {
-          missionBoardEl.innerHTML = suspiciousPackages.map(function (pkg) {
-            const malwareCount = Number(((pkg.finding_types || {}).dependency_malware_suspect) || 0);
-            const tamperingCount = Number(((pkg.finding_types || {}).dependency_tampering_risk) || 0);
-            const signalBits = [];
-            if (malwareCount) signalBits.push("malware " + malwareCount);
-            if (tamperingCount) signalBits.push("tampering " + tamperingCount);
-            return (
-              '<div class="mission-item">' +
-              '<div class="mission-top">' +
-              '<strong>' + escapeHtml(String(pkg.name || "unknown")) + '</strong>' +
-              '<span class="mission-tag">critical</span>' +
-              '</div>' +
-              '<div class="muted">Suspicious signals: ' + escapeHtml(signalBits.join(", ")) + ' | Max severity: ' + escapeHtml(String(pkg.max_severity || "HIGH")) + '</div>' +
-              '<div class="muted">Advisory IDs: ' + escapeHtml(((pkg.advisory_ids || []).slice(0, 3)).join(", ") || "unknown") + '</div>' +
-              '<div class="muted">Operator action: treat this as a supply-chain trust event, remove or pin the package, verify publisher provenance, and rerun repo mode.</div>' +
-              '</div>'
-            );
-          }).join('');
-          return;
-        }
-
-        const depPackages = (((summary || {}).dependencies || {}).top_packages || []).slice(0, 5);
-        if (depPackages.length) {
-          missionBoardEl.innerHTML = depPackages.map(function (pkg, idx) {
-            const severity = String(pkg.max_severity || "LOW");
-            const priority = severity === "CRITICAL" ? "critical" : ((severity === "HIGH" || idx < 2) ? "high" : "watch");
-            const tools = Array.isArray(pkg.tools) ? pkg.tools.join(", ") : "unknown";
-            const languages = Array.isArray(pkg.languages) ? pkg.languages.join(", ") : "unknown";
-            return (
-              '<div class="mission-item">' +
-              '<div class="mission-top">' +
-              '<strong>' + escapeHtml(String(pkg.name || "unknown")) + '</strong>' +
-              '<span class="mission-tag">' + escapeHtml(priority) + '</span>' +
-              '</div>' +
-              '<div class="muted">Advisories: ' + escapeHtml(Number(pkg.advisory_count || 0)) + ' | Max severity: ' + escapeHtml(severity) + '</div>' +
-              '<div class="muted">Language: ' + escapeHtml(languages) + ' | Tooling: ' + escapeHtml(tools) + '</div>' +
-              '<div class="muted">Operator action: upgrade or replace this package, verify lockfiles, and rerun repo mode.</div>' +
-              '</div>'
-            );
-          }).join('');
-          return;
-        }
-
-        const byType = summary.findings_by_type || {};
-        const topTypes = Object.entries(byType)
-          .sort(function (a, b) { return Number(b[1] || 0) - Number(a[1] || 0); })
-          .slice(0, 5);
-
-        if (!topTypes.length) {
-          missionBoardEl.innerHTML = '<div class="empty-note">No repo findings in this summary.</div>';
-          return;
-        }
-
-        missionBoardEl.innerHTML = topTypes.map(function (entry, idx) {
-          const name = entry[0];
-          const count = Number(entry[1] || 0);
-          const priority = idx === 0 ? "critical" : (idx < 3 ? "high" : "watch");
-          return (
-            '<div class="mission-item">' +
-            '<div class="mission-top">' +
-            '<strong>' + escapeHtml(name) + '</strong>' +
-            '<span class="mission-tag">' + escapeHtml(priority) + '</span>' +
-            '</div>' +
-            '<div class="muted">Open findings: ' + escapeHtml(count) + '</div>' +
-            '<div class="muted">Operator action: patch this risk pattern and rerun repo mode with strict gates.</div>' +
-            '</div>'
-          );
-        }).join('');
-        return;
-      }
-
-      if (!isApiSummary(summary)) {
-        missionBoardEl.innerHTML = '<div class="empty-note">Mission board is available for API summaries.</div>';
-        return;
-      }
-
-      const categories = summary.categories || {};
-      const rows = Array.isArray(summary.results) ? summary.results : [];
-      const priorities = Object.entries(categories)
-        .map(function (entry) {
-          const name = entry[0];
-          const row = entry[1] || {};
-          const total = Number(row.total || 0);
-          const matches = Number(row.matches || 0);
-          const blocked = Number(row.blocked || 0);
-          const unknown = Number(row.unknown || 0);
-          const matchRate = total ? (100 * matches / total) : 0;
-          const blockRate = total ? (100 * blocked / total) : 0;
-          const categoryRows = rows.filter(function (item) { return String(item.category || "") === name; });
-          const proceededBypass = categoryRows.filter(function (item) {
-            return String(item.actual_decision || "") === "PROCEED" && String(item.expected_decision || "") === "DENIED";
-          }).length;
-          const exploitability = total ? (100 * proceededBypass / total) : 0;
-          const confidence = Math.min(100, total * 10);
-          const regressionPenalty = summary.regression && summary.regression.regressed ? 25 : 0;
-          const severityWeight = Math.max(0, 100 - matchRate);
-          const score = (severityWeight * 0.35) + (exploitability * 0.3) + (regressionPenalty * 0.2) + ((100 - confidence) * 0.15) + (unknown * 2);
-          return {
-            name: name,
-            total: total,
-            matchRate: matchRate,
-            blockRate: blockRate,
-            unknown: unknown,
-            exploitability: exploitability,
-            confidence: confidence,
-            regressed: Boolean(summary.regression && summary.regression.regressed),
-            score: score,
-          };
-        })
-        .filter(function (row) { return row.total > 0; })
-        .sort(function (a, b) { return b.score - a.score; })
-        .slice(0, 5);
-
-      if (!priorities.length) {
-        missionBoardEl.innerHTML = '<div class="empty-note">No category telemetry found in this summary.</div>';
-        return;
-      }
-
-      missionBoardEl.innerHTML = priorities.map(function (row, idx) {
-        const priority = idx === 0 ? "critical" : (idx < 3 ? "high" : "watch");
-        return (
-          '<div class="mission-item clickable" data-filter-category="' + escapeHtml(row.name) + '">' +
-          '<div class="mission-top">' +
-          '<strong>' + escapeHtml(row.name) + '</strong>' +
-          '<span class="mission-tag">' + escapeHtml(priority) + '</span>' +
-          '</div>' +
-          '<div class="muted">Severity pressure: ' + escapeHtml((100 - row.matchRate).toFixed(1)) + ' | Exploitability: ' + escapeHtml(row.exploitability.toFixed(1)) + ' | Confidence: ' + escapeHtml(row.confidence.toFixed(0)) + '</div>' +
-          '<div class="muted">Regressed: ' + escapeHtml(row.regressed ? 'yes' : 'no') + ' | Unknown: ' + escapeHtml(row.unknown) + '</div>' +
-          '<div class="muted">Operator action: open category, inspect proceeded mismatches, and apply targeted policy patch.</div>' +
-          '</div>'
-        );
-      }).join('');
-
-      missionBoardEl.querySelectorAll("[data-filter-category]").forEach(function (node) {
-        node.addEventListener("click", function () {
-          const category = node.getAttribute("data-filter-category") || "all";
-          state.filters.category = category;
-          categoryFilterEl.value = category;
-          saveFilterState();
-          if (state.summary) renderRows(state.summary);
-        });
-      });
-    }
-
-    function renderTrend(summaries) {
-      const apiSummaries = (summaries || []).filter(isApiSummary);
-      if (apiSummaries.length < 2) {
-        trendEl.innerHTML = '<div class="empty-note">Auto-scan two or more API run summaries to render category trends.</div>';
-        return;
-      }
-
-      const ordered = apiSummaries.slice().sort(function (a, b) {
-        const aTs = Date.parse(a.generated_at || "") || 0;
-        const bTs = Date.parse(b.generated_at || "") || 0;
-        return aTs - bTs;
-      });
-
-      const categories = [
-        "prompt_injection",
-        "data_exfiltration",
-        "tool_abuse",
-        "jailbreak",
-        "policy_evasion",
-        "benign_controls"
-      ];
-
-      trendEl.innerHTML = categories.map(function (name) {
-        const values = ordered.map(function (summary) {
-          const cat = (summary.categories || {})[name] || { blocked: 0, total: 0 };
-          return Number(percent(cat.blocked || 0, cat.total || 0));
-        });
-        const first = values[0] || 0;
-        const last = values[values.length - 1] || 0;
-        const delta = (last - first).toFixed(1);
-        const history = values.map(function (v) { return v.toFixed(1); }).join(" -> ");
-        return (
-          "<div class=\"bar-row\">" +
-          "<div>" + escapeHtml(name) + "</div>" +
-          "<div>" + escapeHtml(history) + "</div>" +
-          "<div>" + escapeHtml((delta.startsWith("-") ? "" : "+") + delta + "%") + "</div>" +
-          "</div>"
-        );
-      }).join("");
-    }
-
-    function heatmapColor(score) {
-      const clamped = Math.max(0, Math.min(100, score));
-      if (clamped >= 90) return "#2f8f4e";
-      if (clamped >= 70) return "#7c7b2c";
-      if (clamped >= 45) return "#9f5b25";
-      return "#8b1a2a";
-    }
-
-    function renderHeatmap(summaries) {
-      const apiSummaries = (summaries || []).filter(isApiSummary);
-      if (apiSummaries.length < 2) {
-        heatmapEl.innerHTML = '<div class="empty-note">Load two or more API runs to render the run-to-run heatmap.</div>';
-        return;
-      }
-
-      const ordered = apiSummaries.slice().sort(function (a, b) {
-        const aTs = Date.parse(a.generated_at || "") || 0;
-        const bTs = Date.parse(b.generated_at || "") || 0;
-        return aTs - bTs;
-      });
-      const categories = [
-        "prompt_injection",
-        "data_exfiltration",
-        "tool_abuse",
-        "jailbreak",
-        "policy_evasion",
-        "benign_controls"
-      ];
-
-      const columns = ordered.length + 1;
-      const headerStyle = 'grid-template-columns: 170px repeat(' + escapeHtml(String(ordered.length)) + ', minmax(70px, 1fr));';
-      const header =
-        '<div class="heatmap-header" style="' + headerStyle + '">' +
-        '<div class="heatmap-label">Category</div>' +
-        ordered.map(function (summary, idx) {
-          const stamp = new Date(summary.generated_at || Date.now()).toISOString().slice(5, 16).replace('T', ' ');
-          return '<div class="heatmap-label">R' + escapeHtml(String(idx + 1)) + '<br>' + escapeHtml(stamp) + '</div>';
-        }).join('') +
-        '</div>';
-
-      const rows = categories.map(function (category) {
-        const style = 'grid-template-columns: 170px repeat(' + escapeHtml(String(ordered.length)) + ', minmax(70px, 1fr));';
-        const cells = ordered.map(function (summary, idx) {
-          const cat = (summary.categories || {})[category] || { blocked: 0, total: 0 };
-          const rate = Number(percent(cat.blocked || 0, cat.total || 0));
-          return (
-            '<div class="heatmap-cell" data-heatmap-run="' + escapeHtml(String(idx)) + '" data-heatmap-category="' + escapeHtml(category) + '" style="background:' + escapeHtml(heatmapColor(rate)) + ';">' +
-            escapeHtml(rate.toFixed(1)) + '%</div>'
-          );
-        }).join('');
-        return '<div class="heatmap-row" style="' + style + '"><div class="heatmap-label">' + escapeHtml(category) + '</div>' + cells + '</div>';
-      }).join('');
-
-      heatmapEl.innerHTML = '<div class="heatmap-grid">' + header + rows + '</div>';
-
-      heatmapEl.querySelectorAll('[data-heatmap-run]').forEach(function (node) {
-        node.addEventListener('click', function () {
-          const runIndex = Number(node.getAttribute('data-heatmap-run'));
-          const category = node.getAttribute('data-heatmap-category') || 'all';
-          const selected = ordered[runIndex];
-          if (!selected) return;
-          state.filters.category = category;
-          categoryFilterEl.value = category;
-          renderAll(selected, { summaries: ordered });
-          state.filters.category = category;
-          categoryFilterEl.value = category;
-          saveFilterState();
-          if (state.summary) renderRows(state.summary);
-          setStatus('Heatmap selection applied: run ' + (runIndex + 1) + ', category=' + category + '.');
-        });
-      });
-    }
-
-    function renderGapReport(summary) {
-      if (!isApiSummary(summary) || !summary.gap_report || !summary.gap_report.techniques) {
-        gapBarsEl.innerHTML = '<div class="empty-note">No gap_report block found yet. Generate a new API summary to populate technique gaps.</div>';
-        return;
-      }
-
-      const entries = Object.entries(summary.gap_report.techniques)
-        .sort(function (a, b) {
-          if (b[1].bypass_rate !== a[1].bypass_rate) {
-            return b[1].bypass_rate - a[1].bypass_rate;
-          }
-          return b[1].missed_blocks - a[1].missed_blocks;
-        })
-        .slice(0, 10);
-
-      gapBarsEl.innerHTML = entries.map(function (entry) {
-        const name = entry[0];
-        const stats = entry[1] || {};
-        const ratio = Number(stats.bypass_rate || 0);
-        const fill = Math.max(0, Math.min(100, ratio));
-        return (
-          "<div class=\"bar-row clickable\" data-filter-technique=\"" + escapeHtml(name) + "\">" +
-          "<div>" + escapeHtml(name) + "</div>" +
-          "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:" +
-          escapeHtml(fill) + "%;background:" + escapeHtml(barColor(100 - ratio)) + "\"></div></div>" +
-          "<div>" + escapeHtml(stats.missed_blocks || 0) + "/" + escapeHtml(stats.total || 0) +
-          " (" + escapeHtml(fill.toFixed(1)) + "%)</div>" +
-          "</div>"
-        );
-      }).join("");
-
-      gapBarsEl.querySelectorAll("[data-filter-technique]").forEach(function (node) {
-        node.addEventListener("click", function () {
-          const technique = node.getAttribute("data-filter-technique") || "all";
-          state.filters.technique = technique;
-          techniqueFilterEl.value = technique;
-          saveFilterState();
-          if (state.summary) renderRows(state.summary);
-        });
-      });
-    }
-
-    function renderApiRegression(summary) {
-      if (!isApiSummary(summary)) {
-        regressionApiEl.innerHTML = '<div class="empty-note">Regression panel is available for API summaries.</div>';
-        return;
-      }
-
-      const regression = summary.regression;
-      if (!regression || typeof regression !== "object") {
-        regressionApiEl.innerHTML = '<div class="empty-note">No API regression block found. Run with --api-baseline-summary to populate.</div>';
-        return;
-      }
-
-      const rows = [
-        ["Baseline high-risk BLOCK rate", String(regression.baseline_high_risk_block_rate ?? "n/a") + "%"],
-        ["Current high-risk BLOCK rate", String(regression.current_high_risk_block_rate ?? "n/a") + "%"],
-        ["High-risk BLOCK-rate drop", String(regression.high_risk_block_rate_drop ?? "n/a") + "%"],
-        ["Regressed", regression.regressed ? "yes" : "no"]
-      ];
-
-      regressionApiEl.innerHTML = rows.map(function (row) {
-        return (
-          '<div class="bar-row">' +
-          '<div>' + escapeHtml(row[0]) + '</div>' +
-          '<div>' + escapeHtml(row[1]) + '</div>' +
-          '<div></div>' +
-          '</div>'
-        );
-      }).join("");
-    }
-
-    function normalizeMutationEffectiveness(raw) {
-      if (!raw || typeof raw !== "object") {
-        return null;
-      }
-      const normalized = {};
-      Object.keys(raw).forEach(function (name) {
-        const row = raw[name] || {};
-        const success = Number(row.success || row.bypasses || 0);
-        const blocked = Number(row.blocked || 0);
-        const attempts = success + blocked;
-        normalized[name] = {
-          attempts: attempts,
-          bypasses: success,
-          bypass_rate: attempts ? (100 * success / attempts) : 0,
-        };
-      });
-      return normalized;
-    }
-
-    async function loadMutationEffectivenessFromArtifact(summary) {
-      const rawPath = String((summary && summary.mutation_effectiveness_path) || "").trim();
-      if (!rawPath) {
-        return null;
-      }
-      if (state.mutationEffectivenessLoadInFlight && state.mutationEffectivenessPath === rawPath) {
-        return null;
-      }
-      if (state.mutationEffectivenessPath === rawPath && state.mutationEffectivenessData) {
-        return state.mutationEffectivenessData;
-      }
-
-      state.mutationEffectivenessLoadInFlight = true;
-      try {
-        const payload = await fetchJson(toHostedRunArtifactPath(rawPath));
-        const normalized = normalizeMutationEffectiveness(payload);
-        state.mutationEffectivenessPath = rawPath;
-        state.mutationEffectivenessData = normalized;
-        return normalized;
-      } catch (_) {
-        return null;
-      } finally {
-        state.mutationEffectivenessLoadInFlight = false;
-      }
-    }
-
-    function renderMutationAnalytics(summary) {
-      if (!isApiSummary(summary)) {
-        mutationAnalyticsEl.innerHTML = '<div class="empty-note">Mutation analytics are available for API agentic summaries.</div>';
-        return;
-      }
-
-      const analytics = (summary.agentic && summary.agentic.mutation_analytics)
-        || summary.mutation_analytics
-        || state.mutationEffectivenessData
-        || null;
-      if ((!analytics || typeof analytics !== "object") && String(summary.mutation_effectiveness_path || "").trim()) {
-        mutationAnalyticsEl.innerHTML = '<div class="empty-note">Loading mutation effectiveness artifact...</div>';
-        loadMutationEffectivenessFromArtifact(summary).then(function (loaded) {
-          if (loaded && state.summary === summary) {
-            renderMutationAnalytics(summary);
-          } else if (state.summary === summary && !loaded) {
-            mutationAnalyticsEl.innerHTML = '<div class="empty-note">Mutation effectiveness artifact could not be loaded.</div>';
-          }
-        });
-        return;
-      }
-      if (!analytics || typeof analytics !== "object") {
-        mutationAnalyticsEl.innerHTML = '<div class="empty-note">No mutation analytics present in this summary.</div>';
-        return;
-      }
-
-      const entries = Object.entries(analytics).sort(function (a, b) {
-        return Number((b[1] || {}).bypass_rate || 0) - Number((a[1] || {}).bypass_rate || 0);
-      });
-
-      mutationAnalyticsEl.innerHTML = entries.map(function (entry) {
-        const name = entry[0];
-        const stats = entry[1] || {};
-        const attempts = Number(stats.attempts || 0);
-        const bypasses = Number(stats.bypasses || 0);
-        const rate = Number(stats.bypass_rate || 0);
-        return (
-          '<div class="bar-row">' +
-          '<div>' + escapeHtml(name) + '</div>' +
-          '<div class="bar-track"><div class="bar-fill" style="width:' +
-          escapeHtml(Math.max(0, Math.min(100, rate))) + '%;background:' + escapeHtml(barColor(100 - rate)) + '"></div></div>' +
-          '<div>' + escapeHtml(bypasses) + '/' + escapeHtml(attempts) + ' (' + escapeHtml(rate.toFixed(1)) + '%)</div>' +
-          '</div>'
-        );
-      }).join("");
-    }
-
-    function selectRow(index) {
-      const rows = (isWebsiteSummary(state.summary) || isRepoSummary(state.summary))
-        ? ((state.summary && state.summary.findings) || [])
-        : ((state.summary && state.summary.results) || []);
-      const row = rows[index];
-      if (!row) return;
-      state.selected = row;
-      const classification = isApiSummary(state.summary)
-        ? (row.match ? "Expected outcome matched policy." : "Expected outcome mismatch; investigate policy coverage.")
-        : ((row.severity === "CRITICAL" || row.severity === "HIGH")
-          ? "High-risk finding requires immediate remediation."
-          : "Monitor and remediate in normal backlog.");
-      const nextBestAction = isApiSummary(state.summary)
-        ? (String(row.actual_decision || "") === "PROCEED"
-          ? "Review prompt/technique, tighten policy rule, and re-run category-focused sweep."
-          : "Validate receipt signature and compare against baseline deltas.")
-        : "Patch affected surface, re-run targeted mode, and verify gate clears.";
-
-      if (isWebsiteSummary(state.summary) || isRepoSummary(state.summary)) {
-        receiptViewEl.textContent = JSON.stringify(
-          {
-            finding: row,
-            classification_rationale: classification,
-            next_best_action: nextBestAction,
-          },
-          null,
-          2,
-        );
-        detailMetaEl.textContent =
-          "Type=" + String(row.type || "unknown") +
-          " | Severity=" + String(row.severity || "unknown") +
-          " | Action=" + String(row.action || "n/a");
-        copyReceiptBtnEl.disabled = false;
-        verifyBtnEl.disabled = true;
-        setVerifyStatus("Selected finding: " + (row.id || row.type || "(unknown)"));
-      } else {
-        const receipt = row.receipt || {};
-        receiptViewEl.textContent = JSON.stringify(
-          {
-            receipt: receipt,
-            matched_technique: row.technique || "unspecified",
-            payload_summary: row.name || row.id || "attack",
-            classification_rationale: classification,
-            next_best_action: nextBestAction,
-          },
-          null,
-          2,
-        );
-        detailMetaEl.textContent =
-          "Decision=" + String(row.actual_decision || "unknown") +
-          " | Expected=" + String(row.expected_decision || "unknown") +
-          " | Request ID=" + String(row.request_id || "n/a");
-        copyReceiptBtnEl.disabled = false;
-        verifyBtnEl.disabled = false;
-        setVerifyStatus("Selected: " + (row.id || "(unknown)"));
-      }
-      renderInlineRegressionDiff(row);
-    }
-
-    async function copySelectedReceipt() {
-      if (!state.selected) return;
-      try {
-        const text = JSON.stringify(state.selected, null, 2);
-        await navigator.clipboard.writeText(text);
-        setVerifyStatus("Selected row JSON copied to clipboard.");
-      } catch (_) {
-        setVerifyStatus("Clipboard copy failed in this browser context.");
-      }
-    }
-
-    function pemToDer(pem) {
-      const body = pem
-        .replace(/-----BEGIN PUBLIC KEY-----/g, "")
-        .replace(/-----END PUBLIC KEY-----/g, "")
-        .replace(/\s+/g, "");
-      const raw = atob(body);
-      const bytes = new Uint8Array(raw.length);
-      for (let i = 0; i < raw.length; i += 1) {
-        bytes[i] = raw.charCodeAt(i);
-      }
-      return bytes.buffer;
-    }
-
-    async function loadPublicKeyPem() {
-      try {
-        const resp = await fetch(WELL_KNOWN_PEM_URL, { cache: "no-store" });
-        if (resp.ok) {
-          return await resp.text();
-        }
-      } catch (_) {
-      }
-      if (FALLBACK_PUBLIC_KEY_PEM.trim()) {
-        return FALLBACK_PUBLIC_KEY_PEM;
-      }
-      throw new Error("No public key endpoint available and no bundled fallback key configured.");
-    }
-
-    function buildCanonicalMessage(receipt) {
-      const canonical = {};
-      VERIFY_FIELDS.forEach(function (field) {
-        if (Object.prototype.hasOwnProperty.call(receipt, field)) {
-          canonical[field] = receipt[field];
-        }
-      });
-      return new TextEncoder().encode(JSON.stringify(canonical));
-    }
-
-    async function verifyReceiptSignature(receipt) {
-      if (!receipt || typeof receipt !== "object") {
-        throw new Error("Receipt missing.");
-      }
-      const sigHex = receipt.signature;
-      if (!sigHex || typeof sigHex !== "string") {
-        return false;
-      }
-      if (sigHex === "UNSIGNED_DEV_MODE") {
-        return false;
-      }
-
-      const pem = await loadPublicKeyPem();
-      const key = await crypto.subtle.importKey(
-        "spki",
-        pemToDer(pem),
-        { name: "Ed25519" },
-        false,
-        ["verify"]
-      );
-
-      const sigBytes = new Uint8Array(sigHex.length / 2);
-      for (let i = 0; i < sigBytes.length; i += 1) {
-        sigBytes[i] = parseInt(sigHex.slice(i * 2, i * 2 + 2), 16);
-      }
-
-      const message = buildCanonicalMessage(receipt);
-      return crypto.subtle.verify({ name: "Ed25519" }, key, sigBytes, message);
-    }
-
-    async function verifySelected() {
-      if (!state.selected) return;
-      try {
-        const ok = await verifyReceiptSignature(state.selected.receipt || {});
-        setVerifyStatus(ok ? "Signature verification: VALID" : "Signature verification: INVALID");
-      } catch (err) {
-        setVerifyStatus("Signature verification failed: " + (err && err.message ? err.message : String(err)));
-      }
-    }
-
-    async function verifyAll() {
-      if (isWebsiteSummary(state.summary)) {
-        setVerifyStatus("Signature verification is only available for API receipt summaries.");
-        return;
-      }
-      if (!state.summary || !Array.isArray(state.summary.results)) {
-        setVerifyStatus("Load a summary file first.");
-        return;
-      }
-
-      let checked = 0;
-      let valid = 0;
-      for (const row of state.summary.results) {
-        const key = String(row.id || "");
-        try {
-          const ok = await verifyReceiptSignature(row.receipt || {});
-          state.rowVerification.set(key, ok);
-          if ((row.receipt || {}).signature) {
-            checked += 1;
-            if (ok) valid += 1;
-          }
-        } catch (_) {
-          state.rowVerification.set(key, false);
-          if ((row.receipt || {}).signature) {
-            checked += 1;
-          }
-        }
-      }
-
-      state.verifyStats = { checked: checked, valid: valid };
-      renderStats(state.summary);
-      setVerifyStatus("Verified " + valid + " of " + checked + " signatures.");
-    }
-
-    function renderAll(summary, options) {
-      state.combinedSummary = isCombinedSummary(summary) ? summary : null;
-      state.summary = resolveCombinedComponent(summary);
-      state.selected = null;
-      state.mutationEffectivenessData = null;
-      state.mutationEffectivenessPath = "";
-      state.mutationEffectivenessLoadInFlight = false;
-      state.summaries = (options && Array.isArray(options.summaries) && options.summaries.length)
-        ? options.summaries
-        : (isApiSummary(state.summary) ? [state.summary] : []);
-      loadFilterState();
-      state.verifyStats = { checked: 0, valid: 0 };
-      state.rowVerification = new Map();
-      componentFilterEl.value = state.filters.component;
-      categoryFilterEl.value = state.filters.category;
-      decisionFilterEl.value = state.filters.decision;
-      mismatchOnlyEl.checked = state.filters.mismatchOnly;
-      searchBoxEl.value = state.filters.search;
-      techniqueFilterEl.value = state.filters.technique;
-      copyReceiptBtnEl.disabled = true;
-      verifyBtnEl.disabled = true;
-      refreshArtifactActionButtons();
-      detailMetaEl.textContent = "No selection context.";
-      receiptViewEl.textContent = "No selection.";
-      regressionDiffViewEl.textContent = "No baseline selected.";
-      populateCategoryFilter(state.summary);
-      populateDecisionFilter(state.summary);
-      populateTechniqueFilter(state.summary);
-      renderRunList();
-      renderMeta(state.summary);
-      renderStats(state.summary);
-      renderBars(state.summary);
-      renderTrend(state.summaries);
-      renderHeatmap(state.summaries);
-      renderApiRegression(state.summary);
-      renderMutationAnalytics(state.summary);
-      renderGapReport(state.summary);
-      renderMissionBoard(state.summary);
-      renderRows(state.summary);
-      if (isWebsiteSummary(state.summary)) {
-        setStatus("Loaded " + ((state.summary.findings || []).length || 0) + " findings.");
-      } else if (isRepoSummary(state.summary)) {
-        setStatus("Loaded " + ((state.summary.findings || []).length || 0) + " repository findings.");
-      }
-      if (state.combinedSummary) {
-        const component = state.filters.component === "auto" ? "auto" : state.filters.component;
-        setStatus(
-          "Loaded combined summary; rendering component=" + component +
-          ". Overall gate: " + (((state.combinedSummary.gates || {}).pass) ? "PASS" : "FAIL")
-        );
-      }
-      saveFilterState();
-      setVerifyStatus("");
-    }
-
-    async function fetchJson(path) {
-      const resp = await fetch(path, { cache: "no-store" });
-      if (!resp.ok) {
-        throw new Error("HTTP " + resp.status + " at " + path);
-      }
-      return await resp.json();
-    }
-
-    function toRunArtifactPath(rawPath) {
-      const text = String(rawPath || "").trim();
-      if (!text) return "";
-      if (text.startsWith("./") || text.startsWith("/") || text.startsWith("http://") || text.startsWith("https://")) {
-        return text;
-      }
-      return "./runs/" + text;
-    }
-
-    function toHostedRunArtifactPath(rawPath) {
-      const text = String(rawPath || "").trim();
-      if (!text) return "";
-      if (text.startsWith("/runs/")) {
-        return text;
-      }
-      if (text.startsWith("./runs/")) {
-        return "/runs/" + text.slice("./runs/".length);
-      }
-      if (text.startsWith("runs/")) {
-        return "/runs/" + text.slice("runs/".length);
-      }
-      if (text.startsWith("/")) {
-        const marker = "/runs/";
-        const markerIndex = text.lastIndexOf(marker);
-        if (markerIndex >= 0) {
-          return text.slice(markerIndex);
-        }
-        return "";
-      }
-      return "/runs/" + text;
-    }
-
-    function currentArtifactPath(kind) {
-      const summary = state.summary || {};
-      if (kind === "campaign") {
-        return String(((summary.campaign || {}).manifest_path) || "").trim();
-      }
-      if (kind === "learning") {
-        return String(summary.learning_snapshot_path || "").trim();
-      }
-      if (kind === "mutation") {
-        return String(summary.mutation_effectiveness_path || "").trim();
-      }
-      return "";
-    }
-
-    function refreshArtifactActionButtons() {
-      const campaignPath = currentArtifactPath("campaign");
-      const learningPath = currentArtifactPath("learning");
-      const mutationPath = currentArtifactPath("mutation");
-      openCampaignArtifactBtnEl.disabled = !campaignPath;
-      openLearningArtifactBtnEl.disabled = !learningPath;
-      openMutationArtifactBtnEl.disabled = !mutationPath;
-    }
-
-    function openArtifact(kind, label) {
-      const rawPath = currentArtifactPath(kind);
-      if (!rawPath) {
-        setStatus("No " + label + " artifact path available for this run.");
-        return;
-      }
-      const targetPath = toHostedRunArtifactPath(rawPath);
-      window.open(targetPath, "_blank", "noopener");
-      setStatus("Opened " + label + " artifact: " + targetPath);
-    }
-
-    async function discoverRunSummaryPaths() {
-      const paths = new Set(AUTO_SCAN_CANDIDATES);
-      const catalogEntries = [];
-      const indexSources = [HOSTED_RUNS_API_PATH, RUNS_INDEX_PATH];
-
-      for (const indexPath of indexSources) {
-        try {
-          const indexJson = await fetchJson(indexPath);
-          const files = Array.isArray(indexJson)
-            ? indexJson
-            : (Array.isArray(indexJson.files) ? indexJson.files : []);
-          files.forEach(function (file) {
-            if (file && typeof file === "object") {
-              const normalizedEntry = {
-                summary: toRunArtifactPath(file.summary),
-                command_center: toRunArtifactPath(file.command_center),
-                sqlite: toRunArtifactPath(file.sqlite),
-                campaign_manifest: toRunArtifactPath(file.campaign_manifest),
-                learning_snapshot: toRunArtifactPath(file.learning_snapshot),
-                mutation_effectiveness: toRunArtifactPath(file.mutation_effectiveness),
-                mode: String(file.mode || ""),
-                generated_at: file.generated_at,
-              };
-              catalogEntries.push(normalizedEntry);
-              const summaryPath = String(file.summary || file.command_center || "").trim();
-              if (!summaryPath) return;
-              paths.add(toRunArtifactPath(summaryPath));
-              return;
-            }
-            const text = String(file || "").trim();
-            if (!text) return;
-            paths.add(toRunArtifactPath(text));
-          });
-          if (files.length) {
-            break;
-          }
-        } catch (_) {
-        }
-      }
-
-      state.runCatalog = catalogEntries;
-
-      return Array.from(paths);
-    }
-
-    function mergeRunCatalogArtifacts(summary, path) {
-      const normalizedPath = toRunArtifactPath(path);
-      const catalogRows = Array.isArray(state.runCatalog) ? state.runCatalog : [];
-      const entry = catalogRows.find(function (row) {
-        return String(row.summary || "") === normalizedPath || String(row.command_center || "") === normalizedPath;
-      });
-      if (!entry || !summary || typeof summary !== "object") {
-        return summary;
-      }
-
-      const merged = Object.assign({}, summary);
-      const campaignPath = String(entry.campaign_manifest || "").trim();
-      const learningPath = String(entry.learning_snapshot || "").trim();
-      const mutationPath = String(entry.mutation_effectiveness || "").trim();
-
-      if (campaignPath && !String((((merged.campaign || {}).manifest_path) || "")).trim()) {
-        merged.campaign = Object.assign({}, merged.campaign || {}, {
-          enabled: true,
-          manifest_path: campaignPath,
-        });
-      }
-      if (learningPath && !String(merged.learning_snapshot_path || "").trim()) {
-        merged.learning_snapshot_path = learningPath;
-      }
-      if (mutationPath && !String(merged.mutation_effectiveness_path || "").trim()) {
-        merged.mutation_effectiveness_path = mutationPath;
-      }
-      return merged;
-    }
-
-    async function autoScanRuns() {
-      setStatus("Auto-scanning run artifacts...");
-      const paths = await discoverRunSummaryPaths();
-      const summaries = [];
-
-      for (const path of paths) {
-        try {
-          const summary = await fetchJson(path);
-          if (isDashboardRenderableSummary(summary)) {
-            summaries.push(mergeRunCatalogArtifacts(summary, path));
-          } else if (isCommandCenterModel(summary)) {
-            summaries.push(mergeRunCatalogArtifacts(commandCenterToSummary(summary), path));
-          }
-        } catch (_) {
-        }
-      }
-
-      if (!summaries.length) {
-        renderTrend([]);
-        renderHeatmap([]);
-        setStatus("Auto-scan found no run artifacts. Add files under ./runs or use the hosted dashboard server.");
-        return false;
-      }
-
-      summaries.sort(function (a, b) {
-        const aTs = Date.parse(a.generated_at || "") || 0;
-        const bTs = Date.parse(b.generated_at || "") || 0;
-        return aTs - bTs;
-      });
-
-      const latest = summaries[summaries.length - 1];
-      renderAll(latest, { summaries: summaries });
-      setStatus("Auto-scan loaded " + summaries.length + " run artifacts; latest run displayed.");
-      return true;
-    }
-
-    async function launchRepoAudit() {
-      const repoUrl = String(repoUrlInputEl.value || "").trim();
-      if (!repoUrl) {
-        setStatus("Enter a public GitHub repo URL or owner/repo first.");
-        return;
-      }
-
-      setStatus("Starting public GitHub repo audit for " + repoUrl + "...");
-      const resp = await fetch("/api/repo-audit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_url: repoUrl }),
-      });
-
-      if (!resp.ok) {
-        const text = await resp.text();
-        throw new Error("HTTP " + resp.status + " at /api/repo-audit: " + text);
-      }
-
-      const payload = await resp.json();
-      state.selectedLaunchId = String(payload.launch_id || "");
-      await refreshLaunches({ selectLaunchId: state.selectedLaunchId, silent: true });
-      setStatus(
-        "Repo audit queued for " + repoUrl + ". Launch id " + String(payload.launch_id || "unknown") + ". Monitor queue below for live status and logs."
-      );
-    }
-
-    async function loadFromText(text, label) {
-      try {
-        const parsed = JSON.parse(text);
-        if (isCommandCenterModel(parsed)) {
-          const summary = commandCenterToSummary(parsed);
-          renderAll(summary);
-          setStatus("Loaded normalized command-center artifact " + label + " successfully.");
-          return;
-        }
-        renderAll(parsed);
-        setStatus("Loaded " + label + " successfully.");
-      } catch (err) {
-        setStatus("Invalid JSON: " + (err && err.message ? err.message : String(err)));
-      }
-    }
-
-    async function loadDefault() {
-      setStatus("Loading " + DEFAULT_SUMMARY_PATH + "...");
-      try {
-        const resp = await fetch(DEFAULT_SUMMARY_PATH, { cache: "no-store" });
-        if (!resp.ok) {
-          throw new Error("HTTP " + resp.status + " at " + DEFAULT_SUMMARY_PATH);
-        }
-        const text = await resp.text();
-        await loadFromText(text, DEFAULT_SUMMARY_PATH);
-      } catch (err) {
-        setStatus("Default load failed: " + (err && err.message ? err.message : String(err)));
-      }
-    }
-
-    async function loadWebsiteDefault() {
-      setStatus("Loading " + DEFAULT_WEBSITE_SUMMARY_PATH + "...");
-      try {
-        const resp = await fetch(DEFAULT_WEBSITE_SUMMARY_PATH, { cache: "no-store" });
-        if (!resp.ok) {
-          throw new Error("HTTP " + resp.status + " at " + DEFAULT_WEBSITE_SUMMARY_PATH);
-        }
-        const text = await resp.text();
-        await loadFromText(text, DEFAULT_WEBSITE_SUMMARY_PATH);
-      } catch (err) {
-        setStatus("Website summary load failed: " + (err && err.message ? err.message : String(err)));
-      }
-    }
-
-    fileInputEl.addEventListener("change", async function (event) {
-      const files = event.target.files || [];
-      if (!files.length) return;
-      const text = await files[0].text();
-      await loadFromText(text, files[0].name || "file");
-    });
-
-    ["dragenter", "dragover"].forEach(function (name) {
-      dropZoneEl.addEventListener(name, function (event) {
-        event.preventDefault();
-        dropZoneEl.classList.add("drag");
-      });
-    });
-
-    ["dragleave", "drop"].forEach(function (name) {
-      dropZoneEl.addEventListener(name, function (event) {
-        event.preventDefault();
-        dropZoneEl.classList.remove("drag");
-      });
-    });
-
-    dropZoneEl.addEventListener("drop", async function (event) {
-      const files = (event.dataTransfer && event.dataTransfer.files) || [];
-      if (!files.length) return;
-      const text = await files[0].text();
-      await loadFromText(text, files[0].name || "drop-file");
-    });
-
-    document.getElementById("loadDefaultBtn").addEventListener("click", loadDefault);
-    document.getElementById("loadWebsiteBtn").addEventListener("click", loadWebsiteDefault);
-    autoScanBtnEl.addEventListener("click", autoScanRuns);
-    launchRepoBtnEl.addEventListener("click", async function () {
-      try {
-        await launchRepoAudit();
-      } catch (err) {
-        setStatus("Repo launch failed: " + (err && err.message ? err.message : String(err)));
-      }
-    });
-    refreshRunsBtnEl.addEventListener("click", async function () {
-      try {
-        await autoScanRuns();
-      } catch (err) {
-        setStatus("Run catalog refresh failed: " + (err && err.message ? err.message : String(err)));
-      }
-    });
-    refreshLaunchesBtnEl.addEventListener("click", async function () {
-      await refreshLaunches({ silent: false });
-    });
-    launchLogTailLinesEl.addEventListener("change", async function () {
-      const parsed = Number(launchLogTailLinesEl.value);
-      state.launchLogTailLines = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_LAUNCH_LOG_TAIL_LINES;
-      if (!state.selectedLaunchId) {
-        return;
-      }
-      try {
-        await fetchLaunchLogs(state.selectedLaunchId);
-      } catch (err) {
-        setStatus("Log tail update failed: " + (err && err.message ? err.message : String(err)));
-      }
-    });
-    launchesListEl.addEventListener("click", async function (event) {
-      const actionButton = event.target.closest("button[data-launch-action]");
-      const row = event.target.closest("[data-launch-id]");
-      const launchId = String((actionButton && actionButton.getAttribute("data-launch-id")) || (row && row.getAttribute("data-launch-id")) || "").trim();
-      if (!launchId) {
-        return;
-      }
-      state.selectedLaunchId = launchId;
-      renderLaunches();
-
-      if (!actionButton) {
-        try {
-          await fetchLaunchStatus(launchId, { silent: true });
-        } catch (_) {
-        }
-        return;
-      }
-
-      const action = String(actionButton.getAttribute("data-launch-action") || "").trim();
-      try {
-        if (action === "status") {
-          await fetchLaunchStatus(launchId, { silent: false });
-          return;
-        }
-        if (action === "logs") {
-          await fetchLaunchLogs(launchId);
-          return;
-        }
-        if (action === "cancel") {
-          await cancelLaunch(launchId);
-          return;
-        }
-      } catch (err) {
-        setStatus("Launch action failed: " + (err && err.message ? err.message : String(err)));
-      }
-    });
-    copyReceiptBtnEl.addEventListener("click", copySelectedReceipt);
-    verifyBtnEl.addEventListener("click", verifySelected);
-    openCampaignArtifactBtnEl.addEventListener("click", function () {
-      openArtifact("campaign", "campaign manifest");
-    });
-    openLearningArtifactBtnEl.addEventListener("click", function () {
-      openArtifact("learning", "learning snapshot");
-    });
-    openMutationArtifactBtnEl.addEventListener("click", function () {
-      openArtifact("mutation", "mutation effectiveness");
-    });
-    verifyAllBtnEl.addEventListener("click", verifyAll);
-    focusWeakBtnEl.addEventListener("click", function () {
-      if (!isApiSummary(state.summary)) {
-        setStatus("Weak-category focus is available for API summaries only.");
-        return;
-      }
-      const weakest = findWeakestCategory(state.summary);
-      if (!weakest) {
-        setStatus("No category data available for weak-category focus.");
-        return;
-      }
-      state.filters.category = weakest;
-      state.filters.mismatchOnly = true;
-      categoryFilterEl.value = weakest;
-      mismatchOnlyEl.checked = true;
-      saveFilterState();
-      if (state.summary) renderRows(state.summary);
-    });
-    showAnomalyBtnEl.addEventListener("click", function () {
-      if (!isApiSummary(state.summary)) {
-        setStatus("Anomaly focus is available for API summaries only.");
-        return;
-      }
-      state.filters.search = "empty json response body from server (status 200)";
-      state.filters.decision = "UNKNOWN";
-      searchBoxEl.value = state.filters.search;
-      decisionFilterEl.value = "UNKNOWN";
-      saveFilterState();
-      if (state.summary) renderRows(state.summary);
-    });
-    exportFilteredBtnEl.addEventListener("click", exportFilteredRows);
-    repoHotBtnEl.addEventListener("click", function () {
-      if (!isRepoSummary(state.summary)) {
-        setStatus("Repo severity focus is available for repo summaries only.");
-        return;
-      }
-      state.filters.decision = "all";
-      decisionFilterEl.value = "all";
-      state.filters.mismatchOnly = true;
-      mismatchOnlyEl.checked = true;
-      if (state.summary) renderRows(state.summary);
-      setStatus("Repo focus applied: HIGH+CRITICAL findings (via mismatch and severity filters). Use decision to switch levels.");
-    });
-    exportRepoHotBtnEl.addEventListener("click", exportRepoHotspots);
-    componentFilterEl.addEventListener("change", function () {
-      state.filters.component = componentFilterEl.value;
-      if (state.combinedSummary) {
-        const display = resolveCombinedComponent(state.combinedSummary);
-        state.summary = display;
-        state.selected = null;
-        state.mutationEffectivenessData = null;
-        state.mutationEffectivenessPath = "";
-        state.mutationEffectivenessLoadInFlight = false;
-        state.filters.category = "all";
-        state.filters.decision = "all";
-        state.filters.technique = "all";
-        state.filters.mismatchOnly = false;
-        state.filters.search = "";
-        categoryFilterEl.value = "all";
-        techniqueFilterEl.value = "all";
-        mismatchOnlyEl.checked = false;
-        searchBoxEl.value = "";
-        populateCategoryFilter(display);
-        populateDecisionFilter(display);
-        populateTechniqueFilter(display);
-        renderMeta(display);
-        renderStats(display);
-        renderBars(display);
-        renderApiRegression(display);
-        renderMutationAnalytics(display);
-        renderGapReport(display);
-        renderMissionBoard(display);
-        renderRows(display);
-        refreshArtifactActionButtons();
-        saveFilterState();
-        setVerifyStatus("");
-      }
-    });
-    categoryFilterEl.addEventListener("change", function () {
-      state.filters.category = categoryFilterEl.value;
-      saveFilterState();
-      if (state.summary) renderRows(state.summary);
-    });
-    decisionFilterEl.addEventListener("change", function () {
-      state.filters.decision = decisionFilterEl.value;
-      saveFilterState();
-      if (state.summary) renderRows(state.summary);
-    });
-    techniqueFilterEl.addEventListener("change", function () {
-      state.filters.technique = techniqueFilterEl.value;
-      saveFilterState();
-      if (state.summary) renderRows(state.summary);
-    });
-    mismatchOnlyEl.addEventListener("change", function () {
-      state.filters.mismatchOnly = mismatchOnlyEl.checked;
-      saveFilterState();
-      if (state.summary) renderRows(state.summary);
-    });
-    searchBoxEl.addEventListener("input", function () {
-      state.filters.search = String(searchBoxEl.value || "").trim().toLowerCase();
-      saveFilterState();
-      if (state.summary) renderRows(state.summary);
-    });
-    resetFiltersBtnEl.addEventListener("click", function () {
-      state.filters = { component: state.filters.component || "auto", category: "all", decision: "all", technique: "all", mismatchOnly: false, search: "" };
-      categoryFilterEl.value = "all";
-      decisionFilterEl.value = "all";
-      techniqueFilterEl.value = "all";
-      mismatchOnlyEl.checked = false;
-      searchBoxEl.value = "";
-      saveFilterState();
-      if (state.summary) renderRows(state.summary);
-    });
-
-    baselineRunFilterEl.addEventListener("change", function () {
-      const idx = Number(baselineRunFilterEl.value);
-      if (Number.isNaN(idx) || idx < 0) {
-        state.baselineSummary = null;
-      } else {
-        state.baselineSummary = (state.summaries || [])[idx] || null;
-      }
-      renderInlineRegressionDiff(state.selected);
-    });
-
-    useSelectedAsBaselineBtnEl.addEventListener("click", function () {
-      if (!Array.isArray(state.summaries) || !state.summaries.length || !state.summary) {
-        setStatus("No loaded run history is available for baseline selection.");
-        return;
-      }
-      const currentIdx = state.summaries.findIndex(function (item) {
-        return String(item.generated_at || "") === String((state.summary || {}).generated_at || "");
-      });
-      if (currentIdx <= 0) {
-        setStatus("Select a non-first run to use previous run as baseline.");
-        return;
-      }
-      state.baselineSummary = state.summaries[currentIdx - 1] || null;
-      baselineRunFilterEl.value = String(currentIdx - 1);
-      renderInlineRegressionDiff(state.selected);
-      setStatus("Baseline set to previous loaded run.");
-    });
-
-    const REMEDIATION_API_PATH = "/api/remediation/proposals";
-    const REMEDIATION_APPROVE_PATH = "/api/remediation/approve";
-
-    function setRemediationStatus(message) {
-      const el = document.getElementById("remediationStatus");
-      if (el) { el.textContent = message || ""; }
-    }
-
-    function renderRemediationProposals(proposals) {
-      const container = document.getElementById("remediationProposalsList");
-      if (!container) { return; }
-      if (!proposals || !proposals.length) {
-        container.innerHTML = '<p class="muted">No proposals. Generate with scripts/generate_remediation.py.</p>';
-        return;
-      }
-      container.innerHTML = "";
-      proposals.forEach(function (p) {
-        const card = document.createElement("div");
-        card.className = "detail-top";
-        card.style.display = "block";
-        card.style.marginBottom = "0.6rem";
-        const approved = p.status === "approved";
-        const triggers = (p.trigger_ids || []).join(", ") || "n/a";
-        const constraint = (p.artifacts && p.artifacts.system_prompt_constraint) || "";
-        card.innerHTML =
-          '<strong>' + p.proposal_id + '</strong> &middot; ' + p.severity +
-          ' &middot; <code>' + p.technique + '</code> &middot; ' + (p.bypass_count || 0) + ' bypass(es)' +
-          '<div class="muted">' + constraint + '</div>' +
-          '<div class="muted">triggers: ' + triggers + '</div>';
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = approved ? "Approved ✓" : "Approve & apply";
-        btn.disabled = approved;
-        btn.addEventListener("click", function () { approveRemediation(p.proposal_id); });
-        card.appendChild(btn);
-        container.appendChild(card);
-      });
-    }
-
-    async function refreshRemediationProposals() {
-      try {
-        const payload = await fetchJson(REMEDIATION_API_PATH);
-        renderRemediationProposals((payload && payload.proposals) || []);
-        setRemediationStatus("");
-      } catch (err) {
-        setRemediationStatus("Failed to load proposals: " + err.message);
-      }
-    }
-
-    async function approveRemediation(proposalId) {
-      setRemediationStatus("Approving " + proposalId + "...");
-      try {
-        const resp = await fetch(REMEDIATION_APPROVE_PATH, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ proposal_id: proposalId }),
-        });
-        if (!resp.ok) { throw new Error("HTTP " + resp.status); }
-        const result = await resp.json();
-        setRemediationStatus("Applied " + proposalId + ": " + (result.artifacts_written || []).join(", "));
-        await refreshRemediationProposals();
-      } catch (err) {
-        setRemediationStatus("Approve failed: " + err.message);
-      }
-    }
-
-    const refreshRemediationBtnEl = document.getElementById("refreshRemediationBtn");
-    if (refreshRemediationBtnEl) {
-      refreshRemediationBtnEl.addEventListener("click", function () { refreshRemediationProposals(); });
-    }
-
-    (async function bootstrapDashboard() {
-      startLaunchPolling();
-      await refreshLaunches({ silent: true });
-      const loaded = await autoScanRuns();
-      if (!loaded) {
-        await loadDefault();
-      }
-      await refreshRemediationProposals();
-    })();
-  </script>
+  <!-- RUN AUDIT (operational console) -->
+  <section id="tab-run">
+    <div class="panel">
+      <h2>Choose audit type</h2>
+      <div class="modegrid" id="modeCards"></div>
+
+      <div id="connNote" class="statusline">Not connected. Launching requires the kit server: <code class="k">python -m kit.dashboard_server</code> then click Connect live. You can still configure inputs below.</div>
+
+      <h2 id="formTitle">Repo audit inputs</h2>
+      <div class="formgrid" id="modeForm"></div>
+
+      <div class="row">
+        <button id="launchBtn" class="primary">Launch audit</button>
+        <span class="muted mono" id="cmdPreview"></span>
+      </div>
+
+      <div id="runStatus" class="statusline hide"></div>
+      <h2 style="margin-top:1.1rem;">Live log</h2>
+      <div id="logBox" class="logbox">No active run.</div>
+    </div>
+  </section>
+
+  <!-- OVERVIEW -->
+  <section id="tab-overview" class="hide">
+    <div id="ovEmpty" class="panel empty">
+      <div class="big">No run loaded</div>
+      <div>Launch an audit, load a results file, or load sample data.</div>
+      <div class="row" style="justify-content:center; margin-top:1rem;">
+        <label class="btn" for="fileInput">Load run file</label>
+        <button id="ovSample" class="btn">Load sample data</button>
+      </div>
+    </div>
+    <div id="ovContent" class="hide">
+      <div class="grid cards" style="margin-bottom:1rem;">
+        <div class="panel stat"><span id="sMode" class="num">--</span><span class="lab">Mode</span></div>
+        <div class="panel stat"><span id="sIter" class="num">0</span><span class="lab">Iterations</span></div>
+        <div class="panel stat"><span id="sSucc" class="num bad">0</span><span class="lab">Successful attacks</span></div>
+        <div class="panel stat"><span id="sFind" class="num warn">0</span><span class="lab">Findings</span></div>
+      </div>
+      <div class="panel"><h2>Attack success by category</h2><div id="catBars"></div></div>
+      <div class="muted mono" id="runMeta" style="margin-top:.6rem;"></div>
+    </div>
+  </section>
+
+  <!-- FINDINGS -->
+  <section id="tab-findings" class="hide">
+    <div class="panel"><h2>Findings</h2>
+      <div class="row" style="margin-bottom:.8rem;">
+        <select id="sevFilter"><option value="">All severities</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
+        <span class="muted" id="findCount"></span>
+      </div>
+      <div id="findingsTable"></div>
+    </div>
+  </section>
+
+  <!-- LEARNING -->
+  <section id="tab-learning" class="hide">
+    <div class="panel"><h2>Mutation effectiveness</h2>
+      <p class="muted" style="font-size:.78rem; margin-top:-.3rem;">Which mutation strategies beat the target. Through = attack succeeded; blocked = defense held. (Agentic mode only.)</p>
+      <div id="mutEffect"></div>
+    </div>
+    <div class="panel" style="margin-top:1rem;"><h2>Successful payloads by category</h2><div id="learnBars"></div></div>
+  </section>
+
+  <!-- LAUNCHES -->
+  <section id="tab-launches" class="hide">
+    <div class="panel"><h2>Recent launches</h2>
+      <div class="row" style="margin-bottom:.6rem;"><button id="refreshLaunches" class="btn">Refresh</button></div>
+      <div id="launchList"><p class="muted">Connect live to see launches.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer>Aletheia Command Center &middot; operational preview</footer>
+<div id="toast" class="toast hide"></div>
+
+<script>
+"use strict";
+const ROUTES={health:"/api/health",runs:"/api/runs",latest:"/api/latest",launches:"/api/launches",launch:"/api/launch"};
+let BASE="",live=false,currentRun=null,activeLaunchId=null,pollTimer=null;
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.remove("hide");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.add("hide"),2600);}
+
+// ---- Mode definitions: real inputs per mode (from runner.py argparse) ----
+const MODES={
+  repo:{label:"Repo",desc:"Static code audit",title:"Repo audit inputs",fields:[
+    {k:"repo_path",l:"Local path",ph:".",def:"."},
+    {k:"repo_url",l:"GitHub URL (optional)",ph:"https://github.com/org/repo"},
+    {k:"deps_scan",l:"Dependency scan",type:"select",opts:["off","auto","full"],def:"off"},
+  ]},
+  api:{label:"API",desc:"Attack an API",title:"API attack inputs",fields:[
+    {k:"base_url",l:"Target base URL",ph:"https://target/api"},
+    {k:"target_preset",l:"Preset",type:"select",opts:["aletheia","openai"],def:"aletheia"},
+    {k:"target_model",l:"Model (openai preset)",ph:"gpt-4o-mini"},
+    {k:"category",l:"Category (optional)",ph:"prompt_injection"},
+  ]},
+  agentic:{label:"Agentic",desc:"Self-correcting loop",title:"Agentic loop inputs",fields:[
+    {k:"objective",l:"Objective",ph:"find prompt injection bypass"},
+    {k:"attack_intensity",l:"Intensity",type:"select",opts:["low","medium","high"],def:"medium"},
+    {k:"max_iterations",l:"Max iterations",ph:"10",def:"10"},
+    {k:"agentic_success_budget",l:"Success budget (optional)",ph:"5"},
+  ]},
+  website:{label:"Website",desc:"UI / browser audit",title:"Website audit inputs",fields:[
+    {k:"target_url",l:"Target URL",ph:"https://example.com"},
+    {k:"max_pages",l:"Max pages",ph:"10",def:"10"},
+    {k:"max_depth",l:"Max depth",ph:"2",def:"2"},
+    {k:"protected_route",l:"Protected route (optional)",ph:"/dashboard"},
+  ]},
+  combined:{label:"Combined",desc:"Full sweep",title:"Combined sweep inputs",fields:[
+    {k:"repo_path",l:"Local repo path",ph:".",def:"."},
+    {k:"target_url",l:"Website URL",ph:"https://example.com"},
+    {k:"base_url",l:"API base URL (optional)",ph:"https://target/api"},
+  ]},
+};
+let activeMode="repo";
+
+function renderModeCards(){
+  $("#modeCards").innerHTML=Object.entries(MODES).map(([k,m])=>
+    `<div class="modecard ${k===activeMode?'active':''}" data-mode="${k}"><div class="mname">${m.label}</div><div class="mdesc">${m.desc}</div></div>`).join("");
+  $$(".modecard").forEach(c=>c.addEventListener("click",()=>{activeMode=c.dataset.mode; renderModeCards(); renderForm();}));
+}
+function renderForm(){
+  const m=MODES[activeMode]; $("#formTitle").textContent=m.title;
+  $("#modeForm").innerHTML=m.fields.map(f=>{
+    if(f.type==="select"){return `<label class="fld">${f.l}<select data-k="${f.k}">${f.opts.map(o=>`<option ${o===f.def?'selected':''}>${o}</option>`).join("")}</select></label>`;}
+    return `<label class="fld">${f.l}<input data-k="${f.k}" placeholder="${f.ph||''}" value="${f.def||''}"></label>`;
+  }).join("");
+  updatePreview();
+  $$("#modeForm [data-k]").forEach(el=>el.addEventListener("input",updatePreview));
+}
+function collectInputs(){
+  const body={mode:activeMode};
+  $$("#modeForm [data-k]").forEach(el=>{const v=el.value.trim(); if(v) body[el.dataset.k]=v;});
+  return body;
+}
+function updatePreview(){
+  const b=collectInputs(); const parts=["--mode",b.mode];
+  Object.entries(b).forEach(([k,v])=>{if(k!=="mode") parts.push("--"+k.replace(/_/g,"-"),v);});
+  $("#cmdPreview").textContent="kit.runner "+parts.join(" ");
+}
+
+// ---- Live connection ----
+async function tryConnect(base){
+  try{
+    const r=await fetch(base+ROUTES.health,{cache:"no-store"});
+    if(!r.ok) return false;
+    const j=await r.json(); return j.ok===true||j.status==="ok";
+  }catch{return false;}
+}
+$("#connectBtn").addEventListener("click",async()=>{
+  const host=window.location.origin;
+  const ok=await tryConnect(host);
+  if(ok){BASE=host; setLive(true); loadLatest(); refreshLaunches();}
+  else toast("Could not reach server at "+host+". Is python -m kit.dashboard_server running?");
+});
+function setLive(v){
+  live=v;
+  $("#connPill").className="pill "+(v?"live":"offline");
+  $("#connText").textContent=v?"Live":"Offline";
+  $("#connNote").classList.toggle("hide",v);
+}
+
+// ---- Load latest run ----
+async function loadLatest(){
+  if(!live) return;
+  try{
+    const r=await fetch(BASE+ROUTES.latest,{cache:"no-store"});
+    if(r.ok){const j=await r.json(); j._source="latest run"; renderRun(j);}
+  }catch{}
+}
+
+// ---- File load ----
+$("#fileInput").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const fr=new FileReader();
+  fr.onload=ev=>{try{const j=JSON.parse(ev.target.result); j._source=f.name; renderRun(j); switchTab("overview");}catch{toast("Could not parse JSON");}};
+  fr.readAsText(f); e.target.value="";
+});
+
+// ---- Sample data ----
+$("#ovSample").addEventListener("click",()=>{
+  renderRun({mode:"agentic",iterations_executed:42,_source:"sample data",
+    successful_payloads:[
+      {category:"prompt_injection"},{category:"prompt_injection"},{category:"jailbreak"},
+      {category:"jailbreak"},{category:"role_confusion"},{category:"role_confusion"},
+      {category:"prompt_injection"},
+    ],
+    findings:[
+      {severity:"CRITICAL",type:"jailbreak",source:"agentic",detail:"DAN-variant bypassed refusal"},
+      {severity:"HIGH",type:"prompt_injection",source:"agentic",detail:"Indirect injection via context window"},
+      {severity:"MEDIUM",type:"role_confusion",source:"agentic",detail:"System prompt override accepted"},
+      {severity:"LOW",type:"output_filter",source:"agentic",detail:"Partial filter bypass in structured output"},
+    ],
+    mutation_effectiveness:{
+      "base64_encode":{success:3,blocked:7},
+      "role_play_wrap":{success:5,blocked:2},
+      "token_smuggle":{success:1,blocked:9},
+      "nested_instruction":{success:2,blocked:4},
+    }
+  });
+  switchTab("overview");
+});
+
+// ---- Launch ----
+$("#launchBtn").addEventListener("click",async()=>{
+  if(!live){toast("Connect live first (start the kit server)"); return;}
+  const body=collectInputs();
+  $("#launchBtn").disabled=true; setStatus("run","Launching "+body.mode+" audit…");
+  try{
+    const r=await fetch(BASE+ROUTES.launch,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!r.ok){setStatus("err",j.error||("HTTP "+r.status)); toast("Launch rejected"); return;}
+    activeLaunchId=j.launch_id; setStatus("run","Running · "+j.launch_id);
+    toast("Launched "+body.mode); pollLaunch();
+  }catch(e){setStatus("err","Launch failed: "+e.message);}
+  finally{$("#launchBtn").disabled=false;}
+});
+function setStatus(cls,msg){const s=$("#runStatus"); s.className="statusline "+cls; s.textContent=msg; s.classList.remove("hide");}
+async function pollLaunch(){
+  if(!activeLaunchId) return; clearTimeout(pollTimer);
+  try{
+    const lr=await fetch(BASE+ROUTES.launches+"/"+encodeURIComponent(activeLaunchId)+"/logs",{cache:"no-store"});
+    if(lr.ok){const txt=await lr.text(); $("#logBox").textContent=txt||"(no output yet)"; $("#logBox").scrollTop=$("#logBox").scrollHeight;}
+    const sr=await fetch(BASE+ROUTES.launches+"/"+encodeURIComponent(activeLaunchId),{cache:"no-store"});
+    const st=await sr.json();
+    if(st.status==="completed"){setStatus("done","Completed · "+activeLaunchId); loadLatest(); refreshLaunches(); return;}
+  }catch(e){}
+  pollTimer=setTimeout(pollLaunch,2000);
+}
+
+// ---- Tabs ----
+function switchTab(name){
+  $$(".tab").forEach(t=>{t.classList.toggle("active",t.dataset.tab===name);});
+  ["run","overview","findings","learning","launches"].forEach(n=>$("#tab-"+n).classList.toggle("hide",n!==name));
+  if(name==="launches") refreshLaunches();
+}
+$$(".tab").forEach(t=>t.addEventListener("click",()=>switchTab(t.dataset.tab)));
+
+// ---- Launches tab ----
+async function refreshLaunches(){
+  if(!live){$("#launchList").innerHTML='<p class="muted">Connect live to see launches.</p>'; return;}
+  try{
+    const r=await fetch(BASE+ROUTES.launches,{cache:"no-store"});
+    if(!r.ok){$("#launchList").innerHTML='<p class="muted">Could not load launches.</p>'; return;}
+    const j=await r.json(); const list=j.launches||[];
+    if(!list.length){$("#launchList").innerHTML='<p class="muted">No launches yet.</p>'; return;}
+    $("#launchList").innerHTML=`<table><thead><tr><th>ID</th><th>Mode</th><th>Status</th><th>Started</th></tr></thead><tbody>${
+      list.slice().reverse().map(l=>`<tr><td class="mono" style="font-size:.74rem">${l.launch_id||""}</td><td>${l.mode||""}</td><td>${l.status||""}</td><td class="muted">${l.started_at||""}</td></tr>`).join("")
+    }</tbody></table>`;
+  }catch{$("#launchList").innerHTML='<p class="muted">Error loading launches.</p>';}
+}
+$("#refreshLaunches").addEventListener("click",refreshLaunches);
+
+// ---- Severity filter ----
+$("#sevFilter").addEventListener("change",()=>renderFindings(currentRun?(currentRun.findings||(currentRun.report&&currentRun.report.findings)||[]):[]));
+
+// ---- Render run (viewer) ----
+function barChart(el,obj){const e=Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]);
+  if(!e.length){el.innerHTML='<p class="muted">No data.</p>';return;}
+  const mx=Math.max(...e.map(x=>x[1]),1);
+  el.innerHTML=e.map(([k,v])=>`<div class="bar-row"><span class="name" title="${k}">${k}</span><span class="bar-track"><span class="bar-fill" style="width:${Math.round(v/mx*100)}%"></span></span><span class="val">${v}</span></div>`).join("");}
+function pickNum(id,val,cls){const e=$(id);e.textContent=val;if(cls)e.className="num "+cls;}
+let _findings=[];
+function renderRun(run){
+  currentRun=run; $("#ovEmpty").classList.add("hide"); $("#ovContent").classList.remove("hide");
+  const succ=(run.successful_payloads||[]).length;
+  const findings=run.findings||(run.report&&run.report.findings)||[];
+  pickNum("#sMode",run.mode||"--"); pickNum("#sIter",run.iterations_executed??run.iterations??0);
+  pickNum("#sSucc",succ,succ>0?"bad":"ok"); pickNum("#sFind",findings.length,findings.length>0?"warn":"ok");
+  let byCat=run.successful_by_category;
+  if(!byCat){byCat={};(run.successful_payloads||[]).forEach(p=>{const c=p.category||"uncategorized";byCat[c]=(byCat[c]||0)+1;});}
+  barChart($("#catBars"),byCat); barChart($("#learnBars"),byCat);
+  const mut=run.mutation_effectiveness||{}; const rows=Object.entries(mut);
+  $("#mutEffect").innerHTML=rows.length?rows.map(([s,v])=>`<div class="effect"><span class="strat">${s}</span><span class="sBadge s">${v.success||0} through</span><span class="sBadge b">${v.blocked||0} blocked</span></div>`).join(""):'<p class="muted">No mutation data (agentic only).</p>';
+  renderFindings(findings);
+  $("#runMeta").textContent="Loaded: "+(run._source||"run file");
+}
+function renderFindings(f){_findings=f||[];const sev=$("#sevFilter").value;
+  const rows=_findings.filter(x=>!sev||(x.severity||"").toUpperCase()===sev);
+  $("#findCount").textContent=rows.length+" of "+_findings.length;
+  const t=$("#findingsTable");
+  if(!rows.length){t.innerHTML='<p class="muted">No findings'+(sev?" at "+sev:"")+'.</p>';return;}
+  t.innerHTML=`<table><thead><tr><th>Severity</th><th>Type</th><th>Source</th><th>Detail</th></tr></thead><tbody>${rows.map(x=>{const s=(x.severity||"").toUpperCase();return `<tr><td><span class="sev ${s}">${s||"?"}</span></td><td>${x.type||""}</td><td class="muted">${x.source||""}</td><td style="max-width:340px">${x.detail||""}</td></tr>`;}).join("")}</tbody></table>`;}
+
+// ---- Init ----
+renderModeCards(); renderForm();
+// Auto-connect if served from the kit server
+tryConnect(window.location.origin).then(ok=>{if(ok){BASE=window.location.origin; setLive(true); loadLatest(); refreshLaunches();}});
+</script>
 </body>
 </html>

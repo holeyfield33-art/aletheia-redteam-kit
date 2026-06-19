@@ -307,7 +307,129 @@ def _launch_public_repo_audit(config: DashboardServerConfig, repo_url: str, trac
     # Register with tracker
     if tracker:
         tracker.register(launch_id, result)
-    
+
+    return result
+
+
+# --- Multi-mode launch support -------------------------------------------------
+# Each mode maps a JSON body key -> the runner CLI flag it is allowed to set.
+# Only keys listed here are ever forwarded to the subprocess; everything else in
+# the request body is ignored. This allowlist is the security boundary: it
+# prevents arbitrary flags or shell args from reaching kit.runner.
+_MODE_STRING_ARGS: dict[str, dict[str, str]] = {
+    "repo": {
+        "repo_url": "--repo-url",
+        "repo_path": "--repo-path",
+        "deps_scan": "--deps-scan",
+    },
+    "api": {
+        "base_url": "--base-url",
+        "target_preset": "--target-preset",
+        "target_model": "--target-model",
+        "category": "--category",
+        "auth_header": "--auth-header",
+        "auth_scheme": "--auth-scheme",
+    },
+    "agentic": {
+        "objective": "--objective",
+        "attack_intensity": "--attack-intensity",
+        "agentic_iterations": "--agentic-iterations",
+        "max_iterations": "--max-iterations",
+        "agentic_seed_size": "--agentic-seed-size",
+        "agentic_variants": "--agentic-variants",
+        "agentic_max_time_sec": "--agentic-max-time-sec",
+        "agentic_success_budget": "--agentic-success-budget",
+    },
+    "website": {
+        "target_url": "--target-url",
+        "max_pages": "--max-pages",
+        "max_depth": "--max-depth",
+        "timeout_sec": "--timeout-sec",
+        "protected_route": "--protected-route",
+    },
+    "combined": {
+        "repo_url": "--repo-url",
+        "repo_path": "--repo-path",
+        "target_url": "--target-url",
+        "base_url": "--base-url",
+        "target_preset": "--target-preset",
+    },
+}
+
+# Conservative bounds for free-text values forwarded to the subprocess.
+_ARG_MAX_LEN = 2048
+_SAFE_ARG_RE = re.compile(r"^[A-Za-z0-9 _\-./:?=&@%,+]+$")
+
+
+def _sanitize_launch_value(raw: object) -> str | None:
+    """Return a safe string for a CLI arg value, or None if it must be rejected."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text or len(text) > _ARG_MAX_LEN:
+        return None
+    if text.startswith("-"):  # never let a value masquerade as a flag
+        return None
+    if not _SAFE_ARG_RE.fullmatch(text):
+        return None
+    return text
+
+
+def _build_mode_command(mode: str, payload: dict, output_path: Path, artifact_root: Path) -> list[str]:
+    """Build a validated kit.runner command for the given mode from request body."""
+    if mode not in _MODE_STRING_ARGS:
+        raise ValueError(f"Unsupported mode: {mode}")
+    command = [sys.executable, "-m", "kit.runner", "--mode", mode]
+    allowed = _MODE_STRING_ARGS[mode]
+    for key, flag in allowed.items():
+        if key not in (payload or {}):
+            continue
+        if key == "repo_url":
+            value = _normalize_public_github_repo_url(_sanitize_repo_url_input(str(payload.get(key) or "")))
+        else:
+            value = _sanitize_launch_value(payload.get(key))
+        if not value:
+            continue
+        command.extend([flag, value])
+    # repo_path, if given, is constrained to the server's repo_root subtree by the
+    # runner itself; we still reject absolute/escaping paths here.
+    command.extend(["--artifact-dir", str(artifact_root), "--output", str(output_path), "--cli-only"])
+    return command
+
+
+def _launch_audit(config: DashboardServerConfig, mode: str, payload: dict, tracker: "ProcessTracker | None" = None) -> dict[str, object]:
+    """Generic launcher for any supported audit mode. Mirrors _launch_public_repo_audit."""
+    artifact_root = config.artifact_dir.resolve()
+    repo_root = config.repo_root.resolve()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    launch_id = f"{mode}-{stamp}-{uuid4().hex[:8]}"
+    launch_root = artifact_root / ".launches" / launch_id
+    launch_root.mkdir(parents=True, exist_ok=True)
+
+    output_path = launch_root / "summary.json"
+    log_path = launch_root / "launch.log"
+    command = _build_mode_command(mode, payload, output_path, artifact_root)
+
+    with open(log_path, "ab") as log_file:
+        process = subprocess.Popen(
+            command,
+            cwd=str(repo_root),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+        )
+
+    result = {
+        "ok": True,
+        "status": "started",
+        "mode": mode,
+        "launch_id": launch_id,
+        "output_path": str(output_path.relative_to(artifact_root)),
+        "log_path": str(log_path.relative_to(artifact_root)),
+        "pid": process.pid,
+        "dashboard": "/dashboard/",
+    }
+    if tracker:
+        tracker.register(launch_id, result)
     return result
 
 
@@ -654,6 +776,36 @@ def create_dashboard_handler(config: DashboardServerConfig):
                 result = apply_proposal(config.artifact_dir, proposal_id)
                 if not result.get("ok"):
                     self.send_error(HTTPStatus.NOT_FOUND, "Proposal not found")
+                    return
+                self._send_json(result, status=HTTPStatus.ACCEPTED)
+                return
+
+            if parsed.path == "/api/launch":
+                content_length = int(self.headers.get("Content-Length") or 0)
+                raw_body = self.rfile.read(content_length) if content_length else b"{}"
+                try:
+                    payload = json.loads(raw_body.decode("utf-8") or "{}")
+                except json.JSONDecodeError:
+                    self.send_error(HTTPStatus.BAD_REQUEST, "Invalid JSON body")
+                    return
+                mode = str((payload or {}).get("mode") or "").strip()
+                if mode not in _MODE_STRING_ARGS:
+                    self.send_error(HTTPStatus.BAD_REQUEST, f"Unsupported or missing mode (allowed: {', '.join(_MODE_STRING_ARGS)})")
+                    return
+                # repo/combined need at least one target; website/api need their target
+                if mode in ("repo", "combined") and not (payload.get("repo_url") or payload.get("repo_path")):
+                    self.send_error(HTTPStatus.BAD_REQUEST, "repo_url or repo_path required for this mode")
+                    return
+                if mode == "website" and not payload.get("target_url"):
+                    self.send_error(HTTPStatus.BAD_REQUEST, "target_url required for website mode")
+                    return
+                try:
+                    result = _launch_audit(config, mode, payload, tracker=process_tracker)
+                except ValueError as exc:
+                    self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                    return
+                except Exception as exc:  # pragma: no cover - defensive
+                    self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
                     return
                 self._send_json(result, status=HTTPStatus.ACCEPTED)
                 return
