@@ -133,7 +133,7 @@ services:
     image: python:3.12-slim
     working_dir: /workspace
     command: >
-      sh -lc "pip install . && python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode auto"
+      sh -lc "pip install '.[verify]' && python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode auto"
     environment:
       ALETHEIA_DASHBOARD_PASSWORD_HASH: ${ALETHEIA_DASHBOARD_PASSWORD_HASH}
       ALETHEIA_DASHBOARD_SESSION_SECRET: ${ALETHEIA_DASHBOARD_SESSION_SECRET}

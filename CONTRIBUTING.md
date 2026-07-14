@@ -20,9 +20,13 @@ Thank you for your interest in contributing! This guide will help you get starte
 
 3. Install development dependencies:
    ```bash
-   pip install -e ".[deps]"  # includes optional pip-audit and osv-scanner
-   pip install pytest pytest-cov
+   pip install -e ".[dev,deps]"  # pytest, cryptography, semgrep, pip-audit, cyclonedx-bom
+   pip install pytest-cov
    ```
+   The `dev` extra is not optional in practice: `kit/runner.py` imports
+   `kit/verify.py` (which needs `cryptography`) at module load time, so even
+   `pytest --collect-only` fails with `ModuleNotFoundError: No module named
+   'cryptography'` if you install with just `.[deps]`.
 
 4. Verify your setup:
    ```bash
