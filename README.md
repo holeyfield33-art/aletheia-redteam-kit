@@ -56,16 +56,154 @@ API call is logged on the engine side under your tenant.
 
 ## Setup
 
+A complete, beginner-friendly walkthrough: clone the repo, create an
+isolated Python environment, install the tool, and confirm it works —
+before you ever need an API key.
+
+### Prerequisites
+
+- Python 3.11 or newer (check with `python3 --version`)
+- `git`
+- Node.js 18+ — only needed later if you use the optional Next.js
+  [Sovereign Command Center dashboard](#sovereign-command-center-nextjs);
+  not required for the CLI or the static/hosted dashboard.
+
+### 1. Clone the repository
+
     git clone https://github.com/holeyfield33-art/aletheia-redteam-kit
     cd aletheia-redteam-kit
-    pip install -e .
+
+### 2. Create and activate a virtual environment
+
+Don't skip this. Installing straight into your system Python fails on most
+current Linux distributions (Debian/Ubuntu 23.04+, Fedora, and others) with
+an `externally-managed-environment` error — a safety rule (PEP 668) that
+stops `pip` from touching OS-managed packages. A virtual environment avoids
+that entirely and keeps this project's dependencies isolated from
+everything else on your machine.
+
+macOS / Linux (bash/zsh):
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+
+Windows (PowerShell):
+
+    python -m venv .venv
+    .venv\Scripts\Activate.ps1
+
+Windows (cmd.exe):
+
+    python -m venv .venv
+    .venv\Scripts\activate.bat
+
+Your shell prompt should now start with `(.venv)`. Every command below
+assumes the virtual environment is active; if you open a new terminal,
+re-run the matching `activate` command first.
+
+### 3. Install the package
+
+    pip install -e ".[verify]"
+
+Use `".[verify]"` (quotes and brackets included), not a bare `.`. The CLI
+imports its receipt-signature-verification module (`kit/verify.py`, which
+depends on the `cryptography` package) as soon as it starts, even for
+commands that never verify a receipt. Installing without the `[verify]`
+extra completes without error but then fails the first time you actually
+run the tool with:
+
+    ModuleNotFoundError: No module named 'cryptography'
+
+If that happens, just re-run the command above — pip adds the missing
+dependency without reinstalling everything else.
+
+### 4. Confirm the install worked
+
+    python -m kit.runner --help
+
+You should see the full CLI usage text. If that prints instead of erroring,
+setup is complete.
+
+### 5. Configure your API key (optional for now)
+
+Only required for `--mode api`, `--mode website`, `--mode combined`, and
+`--mode agentic` runs against the hosted Aletheia API. You can skip this and
+go straight to [Quickstart](#quickstart-your-first-audit) if you just want
+to try a fully offline repo audit first.
+
     cp .env.example .env
     # edit .env, paste your API key from https://app.aletheia-core.com/keys
     export $(cat .env | xargs)
 
+## Quickstart: your first audit
+
+Run these once Setup above is done. This uses `repo` mode, which scans
+files on disk, needs no API key, and makes no network calls.
+
+### Run an offline repository audit
+
+    python -m kit.runner --mode repo --repo-path . --output summary.json
+
+Expected output:
+
+    Done. Repo findings: 0 (critical=0, high=0, deps_critical=0, deps_high=0), risk 100. Output: summary.json
+
+This writes `summary.json` in the current directory with full findings
+detail. A `risk` score of 100 with 0 findings means the scan ran clean —
+see [Repo summary highlights](#repository-audit-mode-phase-5b) below for
+what the other fields mean.
+
+### View the results in the dashboard
+
+    mkdir -p runs
+    cp summary.json runs/summary.json
+    python -m kit.runner dashboard --artifact-dir runs --serve --host 127.0.0.1 --port 8080 --auth-mode disabled
+
+Then open `http://127.0.0.1:8080/` in a browser, or confirm it's up from the
+command line:
+
+    curl http://127.0.0.1:8080/api/health
+    # {"ok": true, "dashboard": "/dashboard/", "auth_mode": "disabled", ...}
+
+Stop the server with Ctrl+C when you're done. `--auth-mode disabled` is fine
+for a quick local look on `127.0.0.1`, but do not use it with
+`--host 0.0.0.0` or on any network-reachable machine — see
+[Hosted operator mode](#api-red-team-quick-start) and the
+[Production Launch Checklist](#production-launch-checklist) before exposing
+the dashboard beyond your own machine.
+
+## Troubleshooting setup
+
+**`error: externally-managed-environment` when running `pip install`**
+
+You're installing into your system Python instead of a virtual environment.
+Go back to [step 2](#2-create-and-activate-a-virtual-environment), create
+and activate a `.venv`, then re-run `pip install -e ".[verify]"` inside it.
+
+**`ModuleNotFoundError: No module named 'cryptography'`**
+
+You installed with a bare `pip install -e .`. Re-run:
+
+    pip install -e ".[verify]"
+
+**`npm: command not found` / dashboard Node steps fail**
+
+Node.js is only required for the optional
+[Sovereign Command Center](#sovereign-command-center-nextjs) dashboard. The
+CLI, all five audit modes, and the static/hosted dashboard at
+`dashboard/index.html` need no Node install at all.
+
+**`playwright` errors in `website` mode**
+
+Browser automation is optional. See
+[Website UI audit mode](#website-ui-audit-mode-routesbuttonstabs) for the
+`.[web]` extra and `playwright install chromium` step, or use `repo` and
+`api` modes instead, which don't need a browser.
+
 ## Reproducible Environment (One-Command)
 
-Bootstrap all required dependencies for CLI + dashboard:
+Prefer to skip the manual steps above? This script does steps 2-3 above
+(plus extra tooling for contributors) in one shot:
 
     ./scripts/bootstrap.sh
 
@@ -73,9 +211,13 @@ What this installs:
 
 - Python virtualenv at `.venv`
 - Python package with extras: `dev`, `verify`, `web`, `deps`
-- Playwright Chromium runtime for website mode
+- Playwright Chromium runtime for website mode (~300 MB download)
 - Dashboard Node dependencies via `npm ci` in `dashboard/sovereign-command-center`
 - `.env` file from `.env.example` if missing
+
+This installs more than the [Setup](#setup) walkthrough above (Playwright's
+browser binary and the Node dashboard toolchain), so it suits contributors
+working across the whole project more than a first look at the CLI.
 
 Verify environment on any machine:
 
@@ -364,7 +506,7 @@ Docker / reverse-proxy example:
         image: python:3.12-slim
         working_dir: /workspace
         command: >
-          sh -lc "pip install . && python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode basic"
+          sh -lc "pip install '.[verify]' && python -m kit.runner dashboard --artifact-dir runs --serve --host 0.0.0.0 --port 8080 --auth-mode basic"
         environment:
           ALETHEIA_DASHBOARD_USERNAME: aletheia
           ALETHEIA_DASHBOARD_PASSWORD_HASH: ${ALETHEIA_DASHBOARD_PASSWORD_HASH}
@@ -947,7 +1089,13 @@ per-category comment including unknown/anomaly counters.
 
 ## Verifying receipt signatures
 
+The `[verify]` extra is already installed if you followed [Setup](#setup)
+above. If not:
+
     pip install -e ".[verify]"
+
+Then:
+
     python -c "from kit.verify import verify_summary; \
                print(verify_summary('summary.json'))"
 
