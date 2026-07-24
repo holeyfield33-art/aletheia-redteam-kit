@@ -1,0 +1,8 @@
+{
+  "name": "aegis-local",
+  "mode": "aletheia_audit",
+  "base_url": "http://127.0.0.1:8899",
+  "audit_path": "/api/v1/audit",
+  "api_key_env": "ALETHEIA_API_KEY",
+  "auth_header": "X-API-Key"
+}
