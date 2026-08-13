@@ -134,6 +134,42 @@ function run(req) {
     assert "weak_hash_sha1" in finding_types
 
 
+def test_repo_audit_treats_red_team_corpus_as_test_fixture(tmp_path) -> None:
+    # Regression for a false positive found auditing runtime-firewall-mvp: its
+    # adversarial payload corpus lives under red-team/corpus/, not tests/ or
+    # test/, so javascript_eval hits there were miscounted as first-party
+    # production findings and tripped the high_repo_findings_over_limit gate
+    # on a repo with zero real findings.
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+    (tmp_path / "red-team" / "corpus").mkdir(parents=True)
+    (tmp_path / "red-team" / "corpus" / "dynamic-code-exec.js").write_text(
+        "module.exports = { name: 'dce-eval-exec', payload: \"eval('code')\" };\n"
+    )
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows" / "ci.yml").write_text("name: ci\non: push\njobs: {}\n")
+
+    summary = run_repo_audit(tmp_path, deps_scan="off")
+    finding_files = {f["file"].replace("\\", "/") for f in summary["findings"]}
+
+    assert "red-team/corpus/dynamic-code-exec.js" in finding_files
+    assert summary["first_party_non_test_findings_total"] == 0
+
+
+def test_is_test_file_recognizes_red_team_conventions() -> None:
+    assert scanner.is_test_file("red-team/corpus/dynamic-code-exec.js")
+    assert scanner.is_test_file("packages/fw-control/red-team/corpus/miner.js")
+    assert scanner.is_test_file("redteam/attacks/exfil.js")
+    assert scanner.is_test_file("red_team/fixtures/shell.js")
+    assert not scanner.is_test_file("src/red-team-lookalike.js")
+
+
 def test_cli_repo_mode_writes_summary(monkeypatch, tmp_path) -> None:
     repo_dir = tmp_path / "repo"
     repo_dir.mkdir()

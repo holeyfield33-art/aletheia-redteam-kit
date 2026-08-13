@@ -369,6 +369,18 @@ def is_test_file(file_path: str) -> bool:
         or normalized.startswith("test/")
         or ".test." in normalized
         or ".spec." in normalized
+        # Security-tooling targets commonly ship their adversarial payload corpus
+        # under one of these conventions rather than tests/ or test/ (e.g. this
+        # kit's own attacks/ directory, or a scanned target's red-team/corpus/).
+        # Without this, a target's own attack fixtures get misclassified as
+        # first-party production code and inflate the repo-findings gate with
+        # detection signatures that are deliberately malicious by design.
+        or "/red-team/" in normalized
+        or normalized.startswith("red-team/")
+        or "/redteam/" in normalized
+        or normalized.startswith("redteam/")
+        or "/red_team/" in normalized
+        or normalized.startswith("red_team/")
     )
 
 
