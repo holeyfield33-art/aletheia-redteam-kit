@@ -100,7 +100,7 @@ Additional advanced categories are available under `attacks/advanced/`, includin
 - cross-surface classes such as `stored_prompt_injection`, `reflected_prompt_injection`, `crawl_based_injection`, and `multimodal_injection`
 - supply-chain classes such as `model_weight_tampering`, `dataset_poisoning`, and `rag_injection`
 - identity/safety/runtime classes such as `auth_context_confusion`, `role_confusion`, `classifier_evasion`, `test_harness_escape`, `sandbox_escape_attempt`, and `environment_variable_leakage`
-- active-threat classes such as `workflow_component_rce`, `security_control_tampering`, `dataset_loader_rce`, and `supply_chain_sandbox_egress` (see [test-case-catalog-addendum-cyber-threats-aug2026.md](./test-case-catalog-addendum-cyber-threats-aug2026.md))
+- active-threat classes such as `workflow_component_rce`, `security_control_tampering`, `dataset_loader_rce`, and `supply_chain_sandbox_egress` (see [test-case-catalog-addendum-cyber-threats-aug2026.md](./test-case-catalog-addendum-cyber-threats-aug2026.md) and [test-case-catalog-addendum-hf-breach.md](./test-case-catalog-addendum-hf-breach.md))
 
 Each advanced category is stored in a same-name JSON file, so category-targeted runs are direct:
 
