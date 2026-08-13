@@ -247,6 +247,7 @@ Current attack categories loaded from the recursive catalogs under `attacks/`:
 - `content_type_confusion`
 - `context_poisoning`
 - `crawl_based_injection`
+- `dataset_loader_rce`
 - `dataset_poisoning`
 - `data_exfiltration`
 - `economic_pressure`
@@ -277,6 +278,7 @@ Current attack categories loaded from the recursive catalogs under `attacks/`:
 - `role_confusion`
 - `safety_bypass_indirect`
 - `sandbox_escape_attempt`
+- `security_control_tampering`
 - `social_engineering_output`
 - `spec_violation`
 - `steganographic_prompting`
@@ -284,11 +286,13 @@ Current attack categories loaded from the recursive catalogs under `attacks/`:
 - `streaming_mode_desync`
 - `session_campaigns`
 - `side_channel`
+- `supply_chain_sandbox_egress`
 - `test_harness_escape`
 - `tool_abuse`
 - `tool_use_escalation`
 - `ui_injection`
 - `visual_renderer`
+- `workflow_component_rce`
 
 Advanced attack classes are now modeled as first-class catalog categories under `attacks/advanced/`, with one JSON file per category so category filters map directly to filenames.
 
