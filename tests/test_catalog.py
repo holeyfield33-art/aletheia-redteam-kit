@@ -210,3 +210,33 @@ def test_builtin_catalog_loads_at_least_300_payloads() -> None:
     # recursive catalogs under attacks/.
     attacks = load_attacks()
     assert len(attacks) >= 300
+
+
+def test_august_2026_active_threat_categories_load_and_deny() -> None:
+    # See docs/test-case-catalog-addendum-cyber-threats-aug2026.md.
+    # New/extended records modeling CVE-2026-9198 (Langflow RCE),
+    # CVE-2026-18556/-18577 (N-able N-central incomplete-fix auth bypass),
+    # and the ransomware EDR-kill-before-encrypt trend.
+    workflow_rce = load_attacks("workflow_component_rce")
+    control_tampering = load_attacks("security_control_tampering")
+    auth_confusion = load_attacks("auth_context_confusion")
+
+    by_id = {a["id"]: a for a in workflow_rce + control_tampering + auth_confusion}
+    required_ids = {
+        "WCR_001",
+        "WCR_002",
+        "WCR_003",
+        "WCR_004",
+        "WCR_005",
+        "SCT_001",
+        "SCT_002",
+        "SCT_003",
+        "SCT_004",
+        "SCT_005",
+        "ADV_034",
+        "ADV_035",
+    }
+    assert required_ids <= set(by_id)
+
+    for attack_id in required_ids:
+        assert by_id[attack_id]["expected_decision"] == "DENIED"
