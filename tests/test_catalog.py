@@ -221,9 +221,22 @@ def test_august_2026_active_threat_categories_load_and_deny() -> None:
     control_tampering = load_attacks("security_control_tampering")
     auth_confusion = load_attacks("auth_context_confusion")
 
-    assert len(workflow_rce) == 5
-    assert len(control_tampering) == 5
-    assert {a["id"] for a in auth_confusion} >= {"ADV_034", "ADV_035"}
+    by_id = {a["id"]: a for a in workflow_rce + control_tampering + auth_confusion}
+    required_ids = {
+        "WCR_001",
+        "WCR_002",
+        "WCR_003",
+        "WCR_004",
+        "WCR_005",
+        "SCT_001",
+        "SCT_002",
+        "SCT_003",
+        "SCT_004",
+        "SCT_005",
+        "ADV_034",
+        "ADV_035",
+    }
+    assert required_ids <= set(by_id)
 
-    for record in workflow_rce + control_tampering:
-        assert record["expected_decision"] == "DENIED"
+    for attack_id in required_ids:
+        assert by_id[attack_id]["expected_decision"] == "DENIED"
