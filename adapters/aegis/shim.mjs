@@ -143,7 +143,12 @@ const INTENT = [
     // Trailing (?:\b|_) -- not just \b -- so a verb used as the prefix of an
     // identifier (e.g. "export_data") still counts: \b alone fails between
     // "export" and "_" since both are word characters.
-    re: /(?:post|upload|send|exfiltrate|beacon|transmit|mirror|publish|forward|copy|push|leak|relay|transfer|export|extract|drop)(?:\b|_)[^.\n]{0,100}(?:https?:\/\/\S+|external|remote|off[- ]?network|attacker|third[- ]?party|outside|webhook|c2|collector|forum|endpoint|server|\bapi\b)/i
+    // Verb/object vocabulary widened 2026-08 (issue #22): the original list
+    // covered the generic exfil verbs/destinations but missed common
+    // exfil-*channel* phrasing -- streaming/callback verbs, and paste-site,
+    // DNS-tunnel, cloud-bucket, and beacon destinations that name a channel
+    // instead of a literal http:// URL.
+    re: /(?:post|upload|send|exfiltrate|beacon|transmit|mirror|publish|forward|copy|push|leak|relay|transfer|export|extract|drop|stream|curl|call[- ]?back|connect[- ]?back|spawn)(?:\b|_)[^.\n]{0,100}(?:https?:\/\/\S+|\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b|external|remote|off[- ]?(?:network|site)|attacker|third[- ]?party|outside|webhook|c2\b|collector|forum|endpoint|server|\bapi\b|pastebin|\bgist\b|dns[- ]?tunnel|\btunnel\b|\bbucket\b|\bs3\b|image[- ]?beacon)/i
   },
   {
     tool: 'delete_file',
@@ -179,11 +184,20 @@ const INTENT = [
     // through to the canned benign search query, discarding the actual
     // traversal path, so that content check never got a chance to see it.
     re: /(?:invoke|use|call|access|open|read)\b[^.\n]{0,40}file\b[^.\n]{0,60}(?:\.\.[\/\\]|\/etc\/(?:passwd|shadow)|\/proc\/self\/environ)/i
+  },
+  {
+    tool: 'read_file',
+    // Complementary to the read_file rule above: a shell-command-style read
+    // ("cat /etc/passwd", "run: cat ...") never says the word "file" at all,
+    // so the stricter pattern above misses it even though the target path is
+    // just as reconstructable. Added 2026-08 (issue #22).
+    re: /(?:cat|run(?:\s+shell)?|execute)\b[^.\n]{0,40}(?:\.\.[\/\\]|\/etc\/(?:passwd|shadow)|\/proc\/self\/environ)/i
   }
 ];
 
 const EMAIL = /[\w.+-]+@[\w.-]+\.\w+/;
 const URL = /https?:\/\/[^\s"'<>]+/;
+const IP_PORT = /\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b/;
 const PATH = /(?:~\/[\w./-]+|\/[\w.-]+\/[\w./-]+|[A-Za-z]:\\[\w\\.-]+|\.(?:env|ssh|npmrc|aws|kube)[\w./-]*)/;
 const TRAVERSAL_PATH = /(?:\.\.[\/\\][\w./\\-]*|\/etc\/(?:passwd|shadow)|\/proc\/self\/environ)/;
 
@@ -241,6 +255,7 @@ function mockDecide(rawPayload) {
 
   const email = (scan.match(EMAIL) || [])[0];
   const url = (scan.match(URL) || [])[0];
+  const ipPort = (scan.match(IP_PORT) || [])[0];
   const fpath = (scan.match(PATH) || [])[0];
   const travPath = (scan.match(TRAVERSAL_PATH) || [])[0];
 
@@ -252,10 +267,12 @@ function mockDecide(rawPayload) {
   // Body/notes are always paraphrased, never the raw payload.
   let args = { ...SYNTH[matchedTool] };
   if (matchedTool === 'send_email' && email) args.recipient = email;
-  if (matchedTool === 'http_post' && url) args.url = url;
+  // Raw IP:port (no scheme) covers reverse-shell/C2 connect-back phrasing
+  // that never names an http(s) URL.
+  if (matchedTool === 'http_post' && (url || ipPort)) args.url = url || `tcp://${ipPort}`;
   if (matchedTool === 'delete_file' && fpath) args.target = fpath;
   if (matchedTool === 'read_file' && travPath) args.path = travPath;
-  return { tool_name: matchedTool, tool_args: args, weaponized: true, target_source: (email || url || fpath || travPath) ? 'reconstructed' : 'synthesized' };
+  return { tool_name: matchedTool, tool_args: args, weaponized: true, target_source: (email || url || ipPort || fpath || travPath) ? 'reconstructed' : 'synthesized' };
 }
 
 async function audit({ payload, action, origin }) {
