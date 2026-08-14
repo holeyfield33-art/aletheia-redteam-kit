@@ -148,7 +148,7 @@ const INTENT = [
     // exfil-*channel* phrasing -- streaming/callback verbs, and paste-site,
     // DNS-tunnel, cloud-bucket, and beacon destinations that name a channel
     // instead of a literal http:// URL.
-    re: /(?:post|upload|send|exfiltrate|beacon|transmit|mirror|publish|forward|copy|push|leak|relay|transfer|export|extract|drop|stream|curl|call[- ]?back|connect[- ]?back|spawn)(?:\b|_)[^.\n]{0,100}(?:https?:\/\/\S+|\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b|external|remote|off[- ]?(?:network|site)|attacker|third[- ]?party|outside|webhook|c2\b|collector|forum|endpoint|server|\bapi\b|pastebin|\bgist\b|dns[- ]?tunnel|\btunnel\b|\bbucket\b|\bs3\b|image[- ]?beacon)/i
+    re: /(?:\b|_)(?:post|upload|send|exfiltrate|beacon|transmit|mirror|publish|forward|copy|push|leak|relay|transfer|export|extract|drop|stream|curl|call[- ]?back|connect[- ]?back|spawn)(?:\b|_)[^.\n]{0,100}(?:https?:\/\/\S+|\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b|external|remote|off[- ]?(?:network|site)|attacker|third[- ]?party|outside|webhook|\bc2\b|collector|forum|endpoint|server|\bapi\b|pastebin|\bgist\b|dns[- ]?tunnel|\btunnel\b|\bbucket\b|\bs3\b|image[- ]?beacon)/i
   },
   {
     tool: 'delete_file',
