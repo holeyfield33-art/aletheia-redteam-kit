@@ -221,21 +221,22 @@ const ENCODED_TOKEN = /[A-Za-z0-9+/]{20,}={0,2}|(?:[0-9a-fA-F]{2}){10,}/g;
 // through.
 function encodedSensitiveToken(text) {
   for (const tok of text.match(ENCODED_TOKEN) || []) {
-    let decoded = null;
+    // Evaluate base64 AND hex independently: an all-hex token can also be
+    // base64-shaped (length % 4 === 0), so a gibberish base64 decode must not
+    // suppress the correct hex interpretation. Mirrors aegis-provenance's
+    // expandDecodedCandidates, which decodes both forms. Kept aligned with
+    // aegis's decoder (padded base64 only) so the shim never emits an encoded
+    // arg aegis cannot itself decode.
+    const decodings = [];
     if (/^[A-Za-z0-9+/]+={0,2}$/.test(tok) && tok.length % 4 === 0) {
-      try {
-        const d = Buffer.from(tok, 'base64').toString('utf8');
-        if (/[\x20-\x7e]/.test(d) && !/[\x00-\x08\x0e-\x1f]/.test(d)) decoded = d;
-      } catch {}
+      try { decodings.push(Buffer.from(tok, 'base64').toString('utf8')); } catch {}
     }
-    if (decoded === null && /^[0-9a-fA-F]+$/.test(tok) && tok.length % 2 === 0) {
-      try {
-        const d = Buffer.from(tok, 'hex').toString('utf8');
-        if (/[\x20-\x7e]/.test(d) && !/[\x00-\x08\x0e-\x1f]/.test(d)) decoded = d;
-      } catch {}
+    if (/^[0-9a-fA-F]+$/.test(tok) && tok.length % 2 === 0) {
+      try { decodings.push(Buffer.from(tok, 'hex').toString('utf8')); } catch {}
     }
-    if (decoded && CONTENT_SENSITIVE.some((re) => re.test(decoded))) {
-      return tok;
+    for (const d of decodings) {
+      if (!/[\x20-\x7e]/.test(d) || /[\x00-\x08\x0e-\x1f]/.test(d)) continue;
+      if (CONTENT_SENSITIVE.some((re) => re.test(d))) return tok;
     }
   }
   return null;
