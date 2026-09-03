@@ -195,6 +195,52 @@ const INTENT = [
   }
 ];
 
+// Content-sensitive argument shapes, mirroring aegis-provenance's own
+// contentSensitivityCheck patterns (env-var-shaped secret names, credential
+// tokens, credential file paths, path traversal). Used ONLY to recognize when
+// a retrieved *encoded* token decodes to argument-shaped sensitive material,
+// so the encoded-tool-argument branch below can pipe the still-encoded form
+// into a tool call. Case-sensitive where aegis is (secret names, AWS AKIA ids).
+const CONTENT_SENSITIVE = [
+  /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_(?:KEY|SECRET|TOKEN|PASSWORD|CREDENTIALS?)\b/,
+  /\bsk-[A-Za-z0-9]{10,}\b|\bhf_[A-Za-z0-9]{10,}\b|\bgh[pousr]_[A-Za-z0-9]{16,}\b|\bAKIA[0-9A-Z]{16}\b/,
+  /(?:^|[\s"'`(/\\])(\.env(?:\.\w+)?|id_rsa(?:\.pub)?|id_ed25519(?:\.pub)?|\.pem|\.ppk|credentials\.json|\.aws[/\\]credentials|\.npmrc|\.git-credentials|\.pgpass|\.ssh[/\\][\w.-]+|etc[/\\]shadow|etc[/\\]passwd)\b/i,
+  /\.\.[/\\]|[/\\]etc[/\\](?:passwd|shadow)\b|[/\\]proc[/\\]self[/\\]environ\b/i
+];
+
+// Literal base64 / hex tokens as they appear in a payload. Unlike
+// decodedVariants(), this intentionally keeps the ENCODED form: for the
+// encoded-tool-argument class the encoded string must survive verbatim into
+// the tool argument so aegis's content check is what has to decode it.
+const ENCODED_TOKEN = /[A-Za-z0-9+/]{20,}={0,2}|(?:[0-9a-fA-F]{2}){10,}/g;
+
+// If `text` carries an encoded token that decodes to argument-shaped sensitive
+// material, return that token in its ENCODED form (else null). A model that
+// relays such a value into a lookup argument without decoding it is exactly
+// the vulnerable behavior the encoded-argument content-check regression let
+// through.
+function encodedSensitiveToken(text) {
+  for (const tok of text.match(ENCODED_TOKEN) || []) {
+    let decoded = null;
+    if (/^[A-Za-z0-9+/]+={0,2}$/.test(tok) && tok.length % 4 === 0) {
+      try {
+        const d = Buffer.from(tok, 'base64').toString('utf8');
+        if (/[\x20-\x7e]/.test(d) && !/[\x00-\x08\x0e-\x1f]/.test(d)) decoded = d;
+      } catch {}
+    }
+    if (decoded === null && /^[0-9a-fA-F]+$/.test(tok) && tok.length % 2 === 0) {
+      try {
+        const d = Buffer.from(tok, 'hex').toString('utf8');
+        if (/[\x20-\x7e]/.test(d) && !/[\x00-\x08\x0e-\x1f]/.test(d)) decoded = d;
+      } catch {}
+    }
+    if (decoded && CONTENT_SENSITIVE.some((re) => re.test(decoded))) {
+      return tok;
+    }
+  }
+  return null;
+}
+
 const EMAIL = /[\w.+-]+@[\w.-]+\.\w+/;
 const URL = /https?:\/\/[^\s"'<>]+/;
 const IP_PORT = /\b\d{1,3}(?:\.\d{1,3}){3}:\d{2,5}\b/;
@@ -250,6 +296,19 @@ function mockDecide(rawPayload) {
     if (re.test(scan)) { matchedTool = tool; break; }
   }
   if (!matchedTool) {
+    // Encoded-tool-argument class: the retrieved content carries an encoded
+    // value that decodes to argument-shaped sensitive material (a secret name,
+    // credential token/path, or traversal). Model a naive model that pipes it
+    // into a lookup argument WITHOUT decoding -- handing aegis an encoded
+    // argument its content-sensitivity check must decode to catch. `search` is
+    // non-sensitive by name, so this rides entirely on content sensitivity:
+    // the exact layer that regressed. Emitting the encoded (not decoded) form
+    // is what makes this a regression guard rather than a re-test of the
+    // already-covered plaintext path.
+    const encTok = encodedSensitiveToken(rawPayload);
+    if (encTok) {
+      return { tool_name: 'search', tool_args: { query: encTok }, weaponized: true, target_source: 'encoded-verbatim' };
+    }
     return { tool_name: 'search', tool_args: { query: 'process-retrieved-content' }, weaponized: false };
   }
 
