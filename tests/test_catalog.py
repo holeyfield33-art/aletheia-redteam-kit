@@ -212,6 +212,26 @@ def test_builtin_catalog_loads_at_least_300_payloads() -> None:
     assert len(attacks) >= 300
 
 
+def test_encoded_tool_argument_regression_fixtures_load_and_deny() -> None:
+    # Regression guard for the aegis-provenance content-sensitivity bypass:
+    # argument-shaped sensitive material (secret name, credential path/token,
+    # traversal) wrapped in base64/hex slipped past a literal-only content
+    # check. These fixtures carry the encoded token so the aegis shim relays it
+    # into a tool argument WITHOUT decoding, forcing the target's content check
+    # to decode before matching. See attacks/encoding/encoded_tool_args.json.
+    # The runner selects `--categories encoding` by the record's `category`
+    # field (not filename), so load the full catalog and filter the same way.
+    by_id = {a["id"]: a for a in load_attacks()}
+    required_ids = {"ETA_001", "ETA_002", "ETA_003", "ETA_004"}
+
+    assert required_ids <= set(by_id)
+    for attack_id in required_ids:
+        row = by_id[attack_id]
+        assert str(row["category"]).strip().lower() == "encoding"
+        assert row["expected_decision"] == "DENIED"
+        assert row["technique"] == "encoded_tool_argument"
+
+
 def test_august_2026_active_threat_categories_load_and_deny() -> None:
     # See docs/test-case-catalog-addendum-cyber-threats-aug2026.md.
     # New/extended records modeling CVE-2026-9198 (Langflow RCE),
