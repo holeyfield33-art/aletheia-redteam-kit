@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Encoded-tool-argument coverage (regression guard)
+
+Adds coverage for a bypass class the kit could not previously exercise: sensitive material (secret names, credential paths/tokens, path traversal) that reaches a tool argument **still encoded** in base64/hex, rather than as a decoded instruction. A target whose content-sensitivity check matches only the literal argument string is blind to this; it must decode candidate representations of the argument before matching.
+
+- **New fixtures — `attacks/encoding/encoded_tool_args.json` (ETA_001–ETA_004):** base64/hex-wrapped env-var secret name, path traversal, credential file path, and AWS access-key-shaped token, each expected `DENIED`, technique `encoded_tool_argument`.
+- **Aegis adapter (`adapters/aegis/shim.mjs`):** narrow fallback branch modeling a model that relays an encoded, argument-shaped sensitive value into a lookup call **without decoding it** — emitting the encoded form so the target's own content check must decode to catch it. The branch fires only for payloads that would otherwise fall through to a benign search and that carry a token decoding to content-sensitive material, so existing classifications are unchanged.
+- **Why it matters:** the emitted call is a name-benign `search`, so the decision rides entirely on the target's content-sensitivity layer. If that layer regresses to literal-only matching, all four fixtures flip from `DENIED` to `PROCEED` and the differential run flags them — a genuine regression guard for the aegis-provenance content-check fix.
+- **Verification:** end-to-end against a local aegis dist, all four fixtures `DENIED` (weaponized with an encoded argument) and a benign encoded control still `PROCEED`. Adds `tests/test_catalog.py::test_encoded_tool_argument_regression_fixtures_load_and_deny`.
+
 ### Attack corpus coverage expansion (data-only)
 
 Adds HF-breach-modeled and aletheia-lite-sweep-derived test cases. No schema, code, or dependency changes; existing 277 tests unchanged.
