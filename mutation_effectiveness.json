@@ -1,0 +1,42 @@
+{
+  "seed": {
+    "success": 260,
+    "blocked": 71
+  },
+  "objective_suffix": {
+    "success": 1286,
+    "blocked": 2325
+  },
+  "safe_reframe": {
+    "success": 1118,
+    "blocked": 1864
+  },
+  "step_escalation": {
+    "success": 1948,
+    "blocked": 3805
+  },
+  "base64_wrap": {
+    "success": 8,
+    "blocked": 12
+  },
+  "roleplay": {
+    "success": 1987,
+    "blocked": 4011
+  },
+  "multilingual_reframe": {
+    "success": 1917,
+    "blocked": 3649
+  },
+  "synonym_substitution": {
+    "success": 1749,
+    "blocked": 2568
+  },
+  "hard_negative": {
+    "success": 0,
+    "blocked": 15
+  },
+  "markdown_wrap": {
+    "success": 1129,
+    "blocked": 2643
+  }
+}

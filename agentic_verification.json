@@ -1,0 +1,9 @@
+{
+  "total_successful_payloads": 11402,
+  "tool_name_distribution": {
+    "search": 11402
+  },
+  "replay_errors": 0,
+  "weaponized_bypass_count": 0,
+  "weaponized_examples": []
+}

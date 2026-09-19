@@ -1,0 +1,299 @@
+{
+  "generated_at": "2026-08-13T07:15:40.359705+00:00",
+  "mode": "repo",
+  "repo_root": "C:\\Users\\SuperAdmin\\.vscode\\aletheia-redteam-kit\\targets\\aegis-provenance",
+  "source": {
+    "kind": "local_path",
+    "value": "C:\\Users\\SuperAdmin\\.vscode\\aletheia-redteam-kit\\targets\\aegis-provenance"
+  },
+  "files_scanned": 57,
+  "secret_scan": {
+    "include_test_fixtures": false,
+    "excluded_globs": [
+      "tests/**",
+      "test/**"
+    ],
+    "allowlist_marker": "aletheia-redteam:allowed-test-fixture"
+  },
+  "enabled_scanners": [
+    "ci_config",
+    "dep_advisories",
+    "dep_hygiene",
+    "language_risks",
+    "secrets",
+    "threat_feed"
+  ],
+  "ignored_artifacts": [
+    "summary.json",
+    "summary_*.json",
+    "website_summary.json",
+    "report.md",
+    "runs/**"
+  ],
+  "dependencies": {
+    "scan_mode": "auto",
+    "manifests": {
+      "python": [],
+      "npm": [
+        "node_modules\\@esbuild\\win32-x64\\package.json",
+        "node_modules\\@jridgewell\\sourcemap-codec\\package.json",
+        "node_modules\\@noble\\curves\\node_modules\\@noble\\hashes\\package.json",
+        "node_modules\\@noble\\curves\\package.json",
+        "node_modules\\@noble\\hashes\\esm\\package.json",
+        "node_modules\\@noble\\hashes\\package.json",
+        "node_modules\\@oxc-project\\types\\package.json",
+        "node_modules\\@rolldown\\binding-win32-x64-msvc\\package.json",
+        "node_modules\\@rolldown\\pluginutils\\package.json",
+        "node_modules\\@standard-schema\\spec\\package.json",
+        "node_modules\\@types\\chai\\package.json",
+        "node_modules\\@types\\deep-eql\\package.json",
+        "node_modules\\@types\\estree\\package.json",
+        "node_modules\\@types\\node\\package.json",
+        "node_modules\\@vitest\\expect\\package.json",
+        "node_modules\\@vitest\\mocker\\package.json",
+        "node_modules\\@vitest\\pretty-format\\package.json",
+        "node_modules\\@vitest\\runner\\package.json",
+        "node_modules\\@vitest\\snapshot\\package.json",
+        "node_modules\\@vitest\\spy\\package.json",
+        "node_modules\\@vitest\\utils\\package.json",
+        "node_modules\\assertion-error\\package.json",
+        "node_modules\\chai\\package.json",
+        "node_modules\\convert-source-map\\package.json",
+        "node_modules\\detect-libc\\package.json",
+        "node_modules\\es-module-lexer\\package.json",
+        "node_modules\\esbuild\\package.json",
+        "node_modules\\estree-walker\\package.json",
+        "node_modules\\expect-type\\package.json",
+        "node_modules\\fdir\\package.json",
+        "node_modules\\lightningcss-win32-x64-msvc\\package.json",
+        "node_modules\\lightningcss\\package.json",
+        "node_modules\\magic-string\\package.json",
+        "node_modules\\nanoid\\async\\package.json",
+        "node_modules\\nanoid\\non-secure\\package.json",
+        "node_modules\\nanoid\\package.json",
+        "node_modules\\nanoid\\url-alphabet\\package.json",
+        "node_modules\\obug\\package.json",
+        "node_modules\\pathe\\package.json",
+        "node_modules\\picocolors\\package.json",
+        "node_modules\\picomatch\\package.json",
+        "node_modules\\postcss\\package.json",
+        "node_modules\\rolldown\\package.json",
+        "node_modules\\siginfo\\package.json",
+        "node_modules\\source-map-js\\package.json",
+        "node_modules\\stackback\\package.json",
+        "node_modules\\std-env\\package.json",
+        "node_modules\\tinybench\\package.json",
+        "node_modules\\tinyexec\\package.json",
+        "node_modules\\tinyglobby\\package.json",
+        "node_modules\\tinyrainbow\\package.json",
+        "node_modules\\tsx\\package.json",
+        "node_modules\\typescript\\package.json",
+        "node_modules\\undici-types\\package.json",
+        "node_modules\\vite\\package.json",
+        "node_modules\\vitest\\package.json",
+        "node_modules\\why-is-node-running\\package.json",
+        "package-lock.json",
+        "package.json"
+      ],
+      "cargo": [],
+      "go": [],
+      "ruby": [],
+      "other": []
+    },
+    "tools": {
+      "pip_audit": {
+        "status": "not_run"
+      },
+      "osv_scanner": {
+        "status": "unavailable",
+        "reason": "binary_not_found"
+      },
+      "npm_audit": {
+        "status": "executed",
+        "exit_code": "1",
+        "source": "runtime_scan"
+      },
+      "cargo_audit": {
+        "status": "not_run"
+      }
+    },
+    "findings_total": 2,
+    "findings_by_severity": {
+      "CRITICAL": 0,
+      "HIGH": 2,
+      "MEDIUM": 0,
+      "LOW": 0
+    },
+    "findings_by_language": {
+      "javascript": 2
+    },
+    "reachability": {
+      "direct": 0,
+      "transitive": 0,
+      "unknown": 2
+    },
+    "exploitability_score": 16,
+    "top_packages": [
+      {
+        "name": "nanoid",
+        "advisory_ids": [
+          "nanoid"
+        ],
+        "languages": {
+          "javascript": 1
+        },
+        "reachability": {
+          "unknown": 1
+        },
+        "tools": {
+          "npm_audit": 1
+        },
+        "finding_types": {
+          "dependency_vulnerability": 1
+        },
+        "max_severity": "HIGH",
+        "advisory_count": 1
+      },
+      {
+        "name": "postcss",
+        "advisory_ids": [
+          "postcss"
+        ],
+        "languages": {
+          "javascript": 1
+        },
+        "reachability": {
+          "unknown": 1
+        },
+        "tools": {
+          "npm_audit": 1
+        },
+        "finding_types": {
+          "dependency_vulnerability": 1
+        },
+        "max_severity": "HIGH",
+        "advisory_count": 1
+      }
+    ],
+    "signals": {
+      "malware_suspect_total": 0,
+      "tampering_risk_total": 0,
+      "suspicious_package_total": 0,
+      "top_suspicious_packages": []
+    }
+  },
+  "extra_tools": {},
+  "findings_total": 5,
+  "findings_by_severity": {
+    "CRITICAL": 0,
+    "HIGH": 2,
+    "MEDIUM": 1,
+    "LOW": 2
+  },
+  "findings_by_type": {
+    "api_key_literal": 2,
+    "missing_pyproject": 1,
+    "dependency_vulnerability": 2
+  },
+  "first_party_non_test_findings_total": 5,
+  "first_party_non_test_by_severity": {
+    "CRITICAL": 0,
+    "HIGH": 2,
+    "MEDIUM": 1,
+    "LOW": 2
+  },
+  "first_party_non_test_high_critical_count": 2,
+  "risk_score": 67,
+  "threat_feed": {
+    "source": "built_in",
+    "matches_total": 2,
+    "matches_by_type": {
+      "dependency_vulnerability": 2
+    }
+  },
+  "gates": {
+    "pass": true,
+    "violations": []
+  },
+  "findings": [
+    {
+      "severity": "HIGH",
+      "type": "dependency_vulnerability",
+      "title": "Dependency advisory: nanoid",
+      "file": "npm-audit",
+      "line": null,
+      "evidence": "nanoid: nanoid: non-secure generators can loop indefinitely with negative size, nanoid: custom generators can loop indefinitely when size is zero",
+      "recommendation": "Upgrade nanoid to a secure version (<=3.3.16) and rerun npm audit.",
+      "threat_context": [
+        {
+          "threat": "Known vulnerable dependency",
+          "reference": "https://owasp.org/www-project-top-ten/"
+        }
+      ]
+    },
+    {
+      "severity": "HIGH",
+      "type": "dependency_vulnerability",
+      "title": "Dependency advisory: postcss",
+      "file": "npm-audit",
+      "line": null,
+      "evidence": "postcss: PostCSS: Path Traversal in Previous Source Map Auto-Loading (sourceMappingURL) leads to Arbitrary .map File Disclosure, PostCSS: incomplete fix of GHSA-6g55-p6w",
+      "recommendation": "Upgrade postcss to a secure version (<=8.5.22) and rerun npm audit.",
+      "threat_context": [
+        {
+          "threat": "Known vulnerable dependency",
+          "reference": "https://owasp.org/www-project-top-ten/"
+        }
+      ]
+    },
+    {
+      "severity": "LOW",
+      "type": "api_key_literal",
+      "title": "Potential API key literal",
+      "file": "README.md",
+      "line": 239,
+      "evidence": "export AEGIS_EVAL_API_KEY=hf_your_token_here",
+      "recommendation": "Move sensitive values to runtime secrets and rotate exposed credentials."
+    },
+    {
+      "severity": "LOW",
+      "type": "api_key_literal",
+      "title": "Potential API key literal",
+      "file": "docs\\llm-evaluation.md",
+      "line": 96,
+      "evidence": "export AEGIS_EVAL_API_KEY=hf_your_token_here",
+      "recommendation": "Move sensitive values to runtime secrets and rotate exposed credentials."
+    },
+    {
+      "severity": "MEDIUM",
+      "type": "missing_pyproject",
+      "title": "Missing pyproject.toml",
+      "file": "pyproject.toml",
+      "line": null,
+      "evidence": "file not found",
+      "recommendation": "Define dependencies and build metadata in pyproject.toml."
+    }
+  ],
+  "scan_profile": "medium",
+  "gate_exceptions": {
+    "source": null,
+    "parse_error": null,
+    "invalid_entries": 0,
+    "applied": [],
+    "ignored_expired": [],
+    "remaining_violations": [],
+    "pass_with_exceptions": false
+  },
+  "baseline": {
+    "source": null,
+    "status": null,
+    "mode": null,
+    "active": false,
+    "approved_by": null,
+    "approved_at": null,
+    "expires_at": null,
+    "new_violations": [],
+    "resolved_violations": [],
+    "enforced_pass": false
+  }
+}
