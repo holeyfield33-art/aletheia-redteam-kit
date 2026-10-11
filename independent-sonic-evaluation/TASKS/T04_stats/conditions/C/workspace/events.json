@@ -1,0 +1,326 @@
+[
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "summarize",
+      "parameters": [
+        {
+          "name": "readings",
+          "type": "list"
+        }
+      ],
+      "returns": "dict",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "not isinstance(readings, list)",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "TypeError('readings must be a list')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "assign",
+          "target": "values",
+          "expression": "[]"
+        },
+        {
+          "kind": "loop",
+          "target": "item",
+          "iterable": "readings",
+          "body": [
+            {
+              "kind": "branch",
+              "condition": "item is not None and (isinstance(item, bool) or not isinstance(item, (int, float)))",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "TypeError('non-numeric reading')"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "branch",
+              "condition": "item is not None",
+              "body": [
+                {
+                  "kind": "call",
+                  "expression": "values.append(item)"
+                }
+              ],
+              "otherwise": []
+            }
+          ]
+        },
+        {
+          "kind": "branch",
+          "condition": "not values",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('no numeric readings')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Set result to a dict with count, min, max and mean (mean rounded to 2 places) of values",
+          "allowed_calls": [
+            "len",
+            "min",
+            "max",
+            "sum",
+            "round"
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "result"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not isinstance(readings, list)",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "TypeError('readings must be a list')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "TypeError('readings must be a list')"
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "assign",
+      "target": "values",
+      "expression": "[]"
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "loop",
+    "note": 65,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "loop",
+      "target": "item",
+      "iterable": "readings",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "item is not None and (isinstance(item, bool) or not isinstance(item, (int, float)))",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "TypeError('non-numeric reading')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "branch",
+          "condition": "item is not None",
+          "body": [
+            {
+              "kind": "call",
+              "expression": "values.append(item)"
+            }
+          ],
+          "otherwise": []
+        }
+      ]
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/2/body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "item is not None and (isinstance(item, bool) or not isinstance(item, (int, float)))",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "TypeError('non-numeric reading')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 3,
+    "scope": "body/2/body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "TypeError('non-numeric reading')"
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/2/body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "item is not None",
+      "body": [
+        {
+          "kind": "call",
+          "expression": "values.append(item)"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "call",
+    "note": 67,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 3,
+    "scope": "body/2/body/1/body/0",
+    "metadata": {
+      "kind": "call",
+      "expression": "values.append(item)"
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not values",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('no numeric readings')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 3.2,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/3/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('no numeric readings')"
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 3.52,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/4",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set result to a dict with count, min, max and mean (mean rounded to 2 places) of values",
+      "allowed_calls": [
+        "len",
+        "min",
+        "max",
+        "sum",
+        "round"
+      ]
+    }
+  },
+  {
+    "module": "stats.py",
+    "function": "summarize",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 3.84,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/5",
+    "metadata": {
+      "kind": "return",
+      "expression": "result"
+    }
+  }
+]

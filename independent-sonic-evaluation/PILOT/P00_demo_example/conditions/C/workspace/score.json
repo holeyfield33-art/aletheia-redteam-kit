@@ -1,0 +1,124 @@
+{
+  "format": "sonic-template-v1",
+  "title": "Validate, authorize, calculate, return",
+  "requirements": [
+    "Reject amounts at or below zero.",
+    "Reject any role other than admin.",
+    "For an accepted order return amount multiplied by 100."
+  ],
+  "modules": [
+    {
+      "path": "validation.py",
+      "functions": [
+        {
+          "name": "require_positive",
+          "parameters": [
+            {
+              "name": "amount",
+              "type": "int"
+            }
+          ],
+          "returns": "None",
+          "body": [
+            {
+              "kind": "branch",
+              "condition": "amount <= 0",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "ValueError('amount must be positive')"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "return",
+              "expression": "None"
+            }
+          ],
+          "requirements": []
+        }
+      ],
+      "imports": []
+    },
+    {
+      "path": "authorization.py",
+      "functions": [
+        {
+          "name": "require_authorized",
+          "parameters": [
+            {
+              "name": "role",
+              "type": "str"
+            }
+          ],
+          "returns": "None",
+          "body": [
+            {
+              "kind": "branch",
+              "condition": "role != 'admin'",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "PermissionError('admin required')"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "return",
+              "expression": "None"
+            }
+          ],
+          "requirements": []
+        }
+      ],
+      "imports": []
+    },
+    {
+      "path": "orders.py",
+      "imports": [
+        "from validation import require_positive",
+        "from authorization import require_authorized"
+      ],
+      "functions": [
+        {
+          "name": "process_order",
+          "parameters": [
+            {
+              "name": "amount",
+              "type": "int"
+            },
+            {
+              "name": "role",
+              "type": "str"
+            }
+          ],
+          "returns": "int",
+          "requirements": [
+            "Keep the validation and authorization calls before implementation."
+          ],
+          "body": [
+            {
+              "kind": "validate",
+              "expression": "require_positive(amount)"
+            },
+            {
+              "kind": "call",
+              "expression": "require_authorized(role)"
+            },
+            {
+              "kind": "hole",
+              "label": "Set receipt to amount * 100",
+              "allowed_calls": []
+            },
+            {
+              "kind": "return",
+              "expression": "receipt"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

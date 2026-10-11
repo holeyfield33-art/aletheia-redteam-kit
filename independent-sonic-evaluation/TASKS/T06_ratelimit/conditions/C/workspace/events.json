@@ -1,0 +1,254 @@
+[
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "allow",
+      "parameters": [
+        {
+          "name": "state",
+          "type": "dict"
+        },
+        {
+          "name": "client",
+          "type": "str"
+        },
+        {
+          "name": "now",
+          "type": "int"
+        },
+        {
+          "name": "limit",
+          "type": "int"
+        },
+        {
+          "name": "window",
+          "type": "int"
+        }
+      ],
+      "returns": "bool",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "limit <= 0 or window <= 0",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('limit and window must be positive')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Set recent to a new list of the client's timestamps in state that are strictly greater than now - window",
+          "allowed_calls": [
+            "state.get"
+          ]
+        },
+        {
+          "kind": "branch",
+          "condition": "len(recent) < limit",
+          "body": [
+            {
+              "kind": "call",
+              "expression": "recent.append(now)"
+            },
+            {
+              "kind": "hole",
+              "label": "Store recent as state[client]",
+              "allowed_calls": []
+            },
+            {
+              "kind": "return",
+              "expression": "True"
+            }
+          ],
+          "otherwise": [
+            {
+              "kind": "hole",
+              "label": "Store recent as state[client]",
+              "allowed_calls": []
+            },
+            {
+              "kind": "return",
+              "expression": "False"
+            }
+          ]
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "limit <= 0 or window <= 0",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('limit and window must be positive')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('limit and window must be positive')"
+    }
+  },
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set recent to a new list of the client's timestamps in state that are strictly greater than now - window",
+      "allowed_calls": [
+        "state.get"
+      ]
+    }
+  },
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "branch",
+      "condition": "len(recent) < limit",
+      "body": [
+        {
+          "kind": "call",
+          "expression": "recent.append(now)"
+        },
+        {
+          "kind": "hole",
+          "label": "Store recent as state[client]",
+          "allowed_calls": []
+        },
+        {
+          "kind": "return",
+          "expression": "True"
+        }
+      ],
+      "otherwise": [
+        {
+          "kind": "hole",
+          "label": "Store recent as state[client]",
+          "allowed_calls": []
+        },
+        {
+          "kind": "return",
+          "expression": "False"
+        }
+      ]
+    }
+  },
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "call",
+    "note": 67,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/2/body/0",
+    "metadata": {
+      "kind": "call",
+      "expression": "recent.append(now)"
+    }
+  },
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/2/body/1",
+    "metadata": {
+      "kind": "hole",
+      "label": "Store recent as state[client]",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/2/body/2",
+    "metadata": {
+      "kind": "return",
+      "expression": "True"
+    }
+  },
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/2/otherwise/0",
+    "metadata": {
+      "kind": "hole",
+      "label": "Store recent as state[client]",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "limiter.py",
+    "function": "allow",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/2/otherwise/1",
+    "metadata": {
+      "kind": "return",
+      "expression": "False"
+    }
+  }
+]

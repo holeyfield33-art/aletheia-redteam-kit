@@ -1,0 +1,256 @@
+[
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "compute_total",
+      "parameters": [
+        {
+          "name": "subtotal_cents",
+          "type": "int"
+        },
+        {
+          "name": "tier",
+          "type": "str"
+        },
+        {
+          "name": "coupon",
+          "type": "str"
+        }
+      ],
+      "returns": "int",
+      "requirements": [],
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "not isinstance(subtotal_cents, int) or isinstance(subtotal_cents, bool)",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "TypeError('subtotal_cents must be an int')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "branch",
+          "condition": "subtotal_cents < 0",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('subtotal_cents must be non-negative')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "branch",
+          "condition": "tier not in ('basic', 'silver', 'gold')",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('unknown tier')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "branch",
+          "condition": "coupon not in ('', 'SAVE10')",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('unknown coupon')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Set total: apply the tier percentage discount with floor division, then subtract 1000 if coupon == 'SAVE10' and subtotal_cents >= 5000",
+          "allowed_calls": []
+        },
+        {
+          "kind": "return",
+          "expression": "total"
+        }
+      ]
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not isinstance(subtotal_cents, int) or isinstance(subtotal_cents, bool)",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "TypeError('subtotal_cents must be an int')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "TypeError('subtotal_cents must be an int')"
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "subtotal_cents < 0",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('subtotal_cents must be non-negative')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('subtotal_cents must be non-negative')"
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "branch",
+      "condition": "tier not in ('basic', 'silver', 'gold')",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('unknown tier')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/2/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('unknown tier')"
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "branch",
+      "condition": "coupon not in ('', 'SAVE10')",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('unknown coupon')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/3/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('unknown coupon')"
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/4",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set total: apply the tier percentage discount with floor division, then subtract 1000 if coupon == 'SAVE10' and subtotal_cents >= 5000",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "compute_total",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 3.2,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/5",
+    "metadata": {
+      "kind": "return",
+      "expression": "total"
+    }
+  }
+]

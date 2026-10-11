@@ -1,0 +1,218 @@
+[
+  {
+    "module": "policy.py",
+    "function": "check_password",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "check_password",
+      "parameters": [
+        {
+          "name": "password",
+          "type": "str"
+        },
+        {
+          "name": "username",
+          "type": "str"
+        }
+      ],
+      "returns": "list",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "not isinstance(password, str) or not isinstance(username, str)",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "TypeError('password and username must be str')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "assign",
+          "target": "violations",
+          "expression": "[]"
+        },
+        {
+          "kind": "hole",
+          "label": "Append the violation codes in the required order; iterate characters as ch, e.g. any(ch.isdigit() for ch in password)",
+          "allowed_calls": [
+            "len",
+            "any",
+            "violations.append",
+            "ch.isdigit",
+            "ch.isupper",
+            "ch.islower",
+            "username.lower",
+            "password.lower"
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "violations"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "policy.py",
+    "function": "check_password",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not isinstance(password, str) or not isinstance(username, str)",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "TypeError('password and username must be str')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "policy.py",
+    "function": "check_password",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "TypeError('password and username must be str')"
+    }
+  },
+  {
+    "module": "policy.py",
+    "function": "check_password",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "assign",
+      "target": "violations",
+      "expression": "[]"
+    }
+  },
+  {
+    "module": "policy.py",
+    "function": "check_password",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "hole",
+      "label": "Append the violation codes in the required order; iterate characters as ch, e.g. any(ch.isdigit() for ch in password)",
+      "allowed_calls": [
+        "len",
+        "any",
+        "violations.append",
+        "ch.isdigit",
+        "ch.isupper",
+        "ch.islower",
+        "username.lower",
+        "password.lower"
+      ]
+    }
+  },
+  {
+    "module": "policy.py",
+    "function": "check_password",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "return",
+      "expression": "violations"
+    }
+  },
+  {
+    "module": "policy.py",
+    "function": "is_acceptable",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "is_acceptable",
+      "parameters": [
+        {
+          "name": "password",
+          "type": "str"
+        },
+        {
+          "name": "username",
+          "type": "str"
+        }
+      ],
+      "returns": "bool",
+      "body": [
+        {
+          "kind": "assign",
+          "target": "problems",
+          "expression": "check_password(password, username)"
+        },
+        {
+          "kind": "return",
+          "expression": "problems == []"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "policy.py",
+    "function": "is_acceptable",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "assign",
+      "target": "problems",
+      "expression": "check_password(password, username)"
+    }
+  },
+  {
+    "module": "policy.py",
+    "function": "is_acceptable",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "return",
+      "expression": "problems == []"
+    }
+  }
+]

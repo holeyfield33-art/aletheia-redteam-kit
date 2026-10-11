@@ -1,0 +1,33 @@
+{
+  "seed": 20261011,
+  "tool_budget": 25,
+  "attempts": [
+    {
+      "run_id": "run-01",
+      "task": "P00_demo_example",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/pilot-ws/run-01",
+      "run_dir": "RUNS/P00_demo_example/A-1",
+      "prompt_chars": 1973
+    },
+    {
+      "run_id": "run-02",
+      "task": "P00_demo_example",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/pilot-ws/run-02",
+      "run_dir": "RUNS/P00_demo_example/C-1",
+      "prompt_chars": 6466
+    },
+    {
+      "run_id": "run-03",
+      "task": "P00_demo_example",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/pilot-ws/run-03",
+      "run_dir": "RUNS/P00_demo_example/B-1",
+      "prompt_chars": 6196
+    }
+  ]
+}

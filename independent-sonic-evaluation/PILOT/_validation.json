@@ -1,0 +1,17 @@
+{
+  "P00_demo_example": {
+    "modules": [
+      "validation.py",
+      "authorization.py",
+      "orders.py"
+    ],
+    "score_elements": 13,
+    "holes": 1,
+    "hidden_tests": 3,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 3,
+    "unfilled_scaffold_tests_passed": 2,
+    "valid": true
+  }
+}

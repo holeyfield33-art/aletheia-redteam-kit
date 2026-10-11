@@ -1,0 +1,136 @@
+{
+  "T01_pricing": {
+    "modules": [
+      "pricing.py"
+    ],
+    "score_elements": 11,
+    "holes": 1,
+    "hidden_tests": 15,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 15,
+    "unfilled_scaffold_tests_passed": 8,
+    "valid": true
+  },
+  "T02_inventory": {
+    "modules": [
+      "inventory.py"
+    ],
+    "score_elements": 20,
+    "holes": 2,
+    "hidden_tests": 13,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 13,
+    "unfilled_scaffold_tests_passed": 9,
+    "valid": true
+  },
+  "T03_rbac": {
+    "modules": [
+      "roles.py",
+      "access.py"
+    ],
+    "score_elements": 15,
+    "holes": 3,
+    "hidden_tests": 13,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 13,
+    "unfilled_scaffold_tests_passed": 4,
+    "valid": true
+  },
+  "T04_stats": {
+    "modules": [
+      "stats.py"
+    ],
+    "score_elements": 13,
+    "holes": 1,
+    "hidden_tests": 13,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 13,
+    "unfilled_scaffold_tests_passed": 7,
+    "valid": true
+  },
+  "T05_password": {
+    "modules": [
+      "policy.py"
+    ],
+    "score_elements": 9,
+    "holes": 1,
+    "hidden_tests": 12,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 12,
+    "unfilled_scaffold_tests_passed": 3,
+    "valid": true
+  },
+  "T06_ratelimit": {
+    "modules": [
+      "limiter.py"
+    ],
+    "score_elements": 10,
+    "holes": 3,
+    "hidden_tests": 9,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 9,
+    "unfilled_scaffold_tests_passed": 1,
+    "valid": true
+  },
+  "T07_orders": {
+    "modules": [
+      "validation.py",
+      "pricing.py",
+      "tax.py",
+      "orders.py"
+    ],
+    "score_elements": 26,
+    "holes": 3,
+    "hidden_tests": 11,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 11,
+    "unfilled_scaffold_tests_passed": 4,
+    "valid": true
+  },
+  "T08_tokens": {
+    "modules": [
+      "tokens.py"
+    ],
+    "score_elements": 19,
+    "holes": 2,
+    "hidden_tests": 10,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 10,
+    "unfilled_scaffold_tests_passed": 2,
+    "valid": true
+  },
+  "T09_grades": {
+    "modules": [
+      "grades.py"
+    ],
+    "score_elements": 19,
+    "holes": 3,
+    "hidden_tests": 10,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 10,
+    "unfilled_scaffold_tests_passed": 4,
+    "valid": true
+  },
+  "T10_ledger": {
+    "modules": [
+      "ledger.py"
+    ],
+    "score_elements": 12,
+    "holes": 1,
+    "hidden_tests": 10,
+    "reference_conformant": true,
+    "reference_conformance_issues": [],
+    "reference_tests_passed": 10,
+    "unfilled_scaffold_tests_passed": 3,
+    "valid": true
+  }
+}

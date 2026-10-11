@@ -1,0 +1,36 @@
+{
+  "P00_demo_example": {
+    "A": {
+      "materials_chars": 643,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 4866,
+      "workspace_bytes": 5443,
+      "workspace_text_bytes": 5443,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/authorization.py",
+        "repo/orders.py",
+        "repo/validation.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 5136,
+      "workspace_bytes": 78330,
+      "workspace_text_bytes": 11726,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/authorization.py",
+        "repo/orders.py",
+        "repo/validation.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  }
+}

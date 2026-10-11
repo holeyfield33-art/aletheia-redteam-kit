@@ -1,0 +1,610 @@
+[
+  {
+    "module": "validation.py",
+    "function": "validate_items",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "validate_items",
+      "parameters": [
+        {
+          "name": "items",
+          "type": "list"
+        }
+      ],
+      "returns": "None",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "not isinstance(items, list) or not items",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('items must be a non-empty list')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "loop",
+          "target": "item",
+          "iterable": "items",
+          "body": [
+            {
+              "kind": "hole",
+              "label": "Set ok to True only if item is a dict whose 'sku' is a non-empty str and whose 'qty' is an int (not bool) > 0",
+              "allowed_calls": [
+                "isinstance",
+                "item.get"
+              ]
+            },
+            {
+              "kind": "branch",
+              "condition": "not ok",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "ValueError('invalid item')"
+                }
+              ],
+              "otherwise": []
+            }
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "None"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "validate_items",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not isinstance(items, list) or not items",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('items must be a non-empty list')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "validate_items",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('items must be a non-empty list')"
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "validate_items",
+    "kind": "loop",
+    "note": 65,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "loop",
+      "target": "item",
+      "iterable": "items",
+      "body": [
+        {
+          "kind": "hole",
+          "label": "Set ok to True only if item is a dict whose 'sku' is a non-empty str and whose 'qty' is an int (not bool) > 0",
+          "allowed_calls": [
+            "isinstance",
+            "item.get"
+          ]
+        },
+        {
+          "kind": "branch",
+          "condition": "not ok",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('invalid item')"
+            }
+          ],
+          "otherwise": []
+        }
+      ]
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "validate_items",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set ok to True only if item is a dict whose 'sku' is a non-empty str and whose 'qty' is an int (not bool) > 0",
+      "allowed_calls": [
+        "isinstance",
+        "item.get"
+      ]
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "validate_items",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not ok",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('invalid item')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "validate_items",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 3,
+    "scope": "body/1/body/1/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('invalid item')"
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "validate_items",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "return",
+      "expression": "None"
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "subtotal",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "subtotal",
+      "parameters": [
+        {
+          "name": "items",
+          "type": "list"
+        },
+        {
+          "name": "catalog",
+          "type": "dict"
+        }
+      ],
+      "returns": "int",
+      "body": [
+        {
+          "kind": "assign",
+          "target": "total",
+          "expression": "0"
+        },
+        {
+          "kind": "loop",
+          "target": "item",
+          "iterable": "items",
+          "body": [
+            {
+              "kind": "hole",
+              "label": "Add catalog[item['sku']] * item['qty'] to total (missing sku must raise KeyError)",
+              "allowed_calls": []
+            }
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "total"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "subtotal",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "assign",
+      "target": "total",
+      "expression": "0"
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "subtotal",
+    "kind": "loop",
+    "note": 65,
+    "start_seconds": 3.2,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "loop",
+      "target": "item",
+      "iterable": "items",
+      "body": [
+        {
+          "kind": "hole",
+          "label": "Add catalog[item['sku']] * item['qty'] to total (missing sku must raise KeyError)",
+          "allowed_calls": []
+        }
+      ]
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "subtotal",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 3.52,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "hole",
+      "label": "Add catalog[item['sku']] * item['qty'] to total (missing sku must raise KeyError)",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "pricing.py",
+    "function": "subtotal",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 3.84,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "return",
+      "expression": "total"
+    }
+  },
+  {
+    "module": "tax.py",
+    "function": "apply_tax",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 4.16,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "apply_tax",
+      "parameters": [
+        {
+          "name": "cents",
+          "type": "int"
+        },
+        {
+          "name": "region",
+          "type": "str"
+        }
+      ],
+      "returns": "int",
+      "body": [
+        {
+          "kind": "assign",
+          "target": "rates",
+          "expression": "{'US-CA': 8, 'US-OR': 0, 'EU-DE': 19}"
+        },
+        {
+          "kind": "branch",
+          "condition": "region not in rates",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('unknown region')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Set taxed to cents + (cents * rate + 50) // 100 using rates[region]",
+          "allowed_calls": []
+        },
+        {
+          "kind": "return",
+          "expression": "taxed"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "tax.py",
+    "function": "apply_tax",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 4.48,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "assign",
+      "target": "rates",
+      "expression": "{'US-CA': 8, 'US-OR': 0, 'EU-DE': 19}"
+    }
+  },
+  {
+    "module": "tax.py",
+    "function": "apply_tax",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 4.8,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "region not in rates",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('unknown region')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "tax.py",
+    "function": "apply_tax",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 5.12,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('unknown region')"
+    }
+  },
+  {
+    "module": "tax.py",
+    "function": "apply_tax",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 5.44,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set taxed to cents + (cents * rate + 50) // 100 using rates[region]",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "tax.py",
+    "function": "apply_tax",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 5.76,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "return",
+      "expression": "taxed"
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "place_order",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 6.08,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "place_order",
+      "parameters": [
+        {
+          "name": "items",
+          "type": "list"
+        },
+        {
+          "name": "catalog",
+          "type": "dict"
+        },
+        {
+          "name": "region",
+          "type": "str"
+        },
+        {
+          "name": "verified",
+          "type": "bool"
+        }
+      ],
+      "returns": "dict",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "verified is not True",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "PermissionError('unverified user')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "validate",
+          "expression": "validate_items(items)"
+        },
+        {
+          "kind": "assign",
+          "target": "sub",
+          "expression": "subtotal(items, catalog)"
+        },
+        {
+          "kind": "assign",
+          "target": "total",
+          "expression": "apply_tax(sub, region)"
+        },
+        {
+          "kind": "return",
+          "expression": "{'subtotal': sub, 'total': total, 'region': region}"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "place_order",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 6.4,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "verified is not True",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "PermissionError('unverified user')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "place_order",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 6.72,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "PermissionError('unverified user')"
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "place_order",
+    "kind": "validate",
+    "note": 62,
+    "start_seconds": 7.04,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "validate",
+      "expression": "validate_items(items)"
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "place_order",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 7.36,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "assign",
+      "target": "sub",
+      "expression": "subtotal(items, catalog)"
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "place_order",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 7.68,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "assign",
+      "target": "total",
+      "expression": "apply_tax(sub, region)"
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "place_order",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 8.0,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/4",
+    "metadata": {
+      "kind": "return",
+      "expression": "{'subtotal': sub, 'total': total, 'region': region}"
+    }
+  }
+]

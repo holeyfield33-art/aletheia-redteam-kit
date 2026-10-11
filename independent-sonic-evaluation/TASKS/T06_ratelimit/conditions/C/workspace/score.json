@@ -1,0 +1,98 @@
+{
+  "format": "sonic-template-v1",
+  "title": "T06 sliding-window rate limiter",
+  "requirements": [
+    "R1 (security/validation): If limit <= 0 or window <= 0, raise ValueError and leave state unchanged.",
+    "R2: state maps client ids to lists of request timestamps (ints). A client with no entry has no history.",
+    "R3: A previous timestamp t counts as recent only if t > now - window (a timestamp exactly window seconds old has expired).",
+    "R4 (security/authorization): If the number of recent timestamps is below limit, append now, store the recent list as state[client], and return True.",
+    "R5 (security/authorization): Otherwise return False without recording now; state[client] must still be replaced by the pruned recent list.",
+    "R6: Other clients' entries in state are never modified.",
+    "R7: The list previously stored for the client must not be mutated in place (build a new list)."
+  ],
+  "modules": [
+    {
+      "path": "limiter.py",
+      "imports": [],
+      "functions": [
+        {
+          "name": "allow",
+          "parameters": [
+            {
+              "name": "state",
+              "type": "dict"
+            },
+            {
+              "name": "client",
+              "type": "str"
+            },
+            {
+              "name": "now",
+              "type": "int"
+            },
+            {
+              "name": "limit",
+              "type": "int"
+            },
+            {
+              "name": "window",
+              "type": "int"
+            }
+          ],
+          "returns": "bool",
+          "body": [
+            {
+              "kind": "branch",
+              "condition": "limit <= 0 or window <= 0",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "ValueError('limit and window must be positive')"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "hole",
+              "label": "Set recent to a new list of the client's timestamps in state that are strictly greater than now - window",
+              "allowed_calls": [
+                "state.get"
+              ]
+            },
+            {
+              "kind": "branch",
+              "condition": "len(recent) < limit",
+              "body": [
+                {
+                  "kind": "call",
+                  "expression": "recent.append(now)"
+                },
+                {
+                  "kind": "hole",
+                  "label": "Store recent as state[client]",
+                  "allowed_calls": []
+                },
+                {
+                  "kind": "return",
+                  "expression": "True"
+                }
+              ],
+              "otherwise": [
+                {
+                  "kind": "hole",
+                  "label": "Store recent as state[client]",
+                  "allowed_calls": []
+                },
+                {
+                  "kind": "return",
+                  "expression": "False"
+                }
+              ]
+            }
+          ],
+          "requirements": []
+        }
+      ]
+    }
+  ]
+}

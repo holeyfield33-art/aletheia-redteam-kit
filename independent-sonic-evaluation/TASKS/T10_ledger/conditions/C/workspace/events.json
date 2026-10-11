@@ -1,0 +1,299 @@
+[
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "apply_transactions",
+      "parameters": [
+        {
+          "name": "balance",
+          "type": "int"
+        },
+        {
+          "name": "transactions",
+          "type": "list"
+        }
+      ],
+      "returns": "dict",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "not isinstance(balance, int) or isinstance(balance, bool) or balance < 0",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('invalid starting balance')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "assign",
+          "target": "current",
+          "expression": "balance"
+        },
+        {
+          "kind": "assign",
+          "target": "rejected",
+          "expression": "[]"
+        },
+        {
+          "kind": "loop",
+          "target": "index",
+          "iterable": "range(len(transactions))",
+          "body": [
+            {
+              "kind": "assign",
+              "target": "kind",
+              "expression": "transactions[index][0]"
+            },
+            {
+              "kind": "assign",
+              "target": "amount",
+              "expression": "transactions[index][1]"
+            },
+            {
+              "kind": "branch",
+              "condition": "kind not in ('deposit', 'withdraw')",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "ValueError('unknown transaction kind')"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "hole",
+              "label": "Apply the transaction to current, or call rejected.append(index) when the amount is invalid or a withdraw exceeds current",
+              "allowed_calls": [
+                "isinstance",
+                "rejected.append"
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "{'balance': current, 'rejected': rejected}"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not isinstance(balance, int) or isinstance(balance, bool) or balance < 0",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('invalid starting balance')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('invalid starting balance')"
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "assign",
+      "target": "current",
+      "expression": "balance"
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "assign",
+      "target": "rejected",
+      "expression": "[]"
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "loop",
+    "note": 65,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "loop",
+      "target": "index",
+      "iterable": "range(len(transactions))",
+      "body": [
+        {
+          "kind": "assign",
+          "target": "kind",
+          "expression": "transactions[index][0]"
+        },
+        {
+          "kind": "assign",
+          "target": "amount",
+          "expression": "transactions[index][1]"
+        },
+        {
+          "kind": "branch",
+          "condition": "kind not in ('deposit', 'withdraw')",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('unknown transaction kind')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Apply the transaction to current, or call rejected.append(index) when the amount is invalid or a withdraw exceeds current",
+          "allowed_calls": [
+            "isinstance",
+            "rejected.append"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/3/body/0",
+    "metadata": {
+      "kind": "assign",
+      "target": "kind",
+      "expression": "transactions[index][0]"
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/3/body/1",
+    "metadata": {
+      "kind": "assign",
+      "target": "amount",
+      "expression": "transactions[index][1]"
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/3/body/2",
+    "metadata": {
+      "kind": "branch",
+      "condition": "kind not in ('deposit', 'withdraw')",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('unknown transaction kind')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 3,
+    "scope": "body/3/body/2/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('unknown transaction kind')"
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 3.2,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/3/body/3",
+    "metadata": {
+      "kind": "hole",
+      "label": "Apply the transaction to current, or call rejected.append(index) when the amount is invalid or a withdraw exceeds current",
+      "allowed_calls": [
+        "isinstance",
+        "rejected.append"
+      ]
+    }
+  },
+  {
+    "module": "ledger.py",
+    "function": "apply_transactions",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 3.52,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/4",
+    "metadata": {
+      "kind": "return",
+      "expression": "{'balance': current, 'rejected': rejected}"
+    }
+  }
+]

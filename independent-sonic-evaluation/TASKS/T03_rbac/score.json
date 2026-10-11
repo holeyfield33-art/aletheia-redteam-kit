@@ -1,0 +1,61 @@
+{
+  "format": "sonic-template-v1",
+  "title": "T03 role-based access control with ownership",
+  "requirements": [
+    "R1: permissions_for returns a NEW set on every call: 'admin' -> {'read', 'write', 'delete'}, 'editor' -> {'read', 'write'}, 'viewer' -> {'read'}, any other value (including None or '') -> empty set. It never raises. Mutating a returned set must not affect later calls.",
+    "R2 (security/validation): is_allowed raises ValueError if action is not exactly one of 'read', 'write', 'delete'. This check happens first, even for inactive users.",
+    "R3 (security/authorization): is_allowed returns False unless user.get('active') is exactly True (missing key, False, 1, 'yes' all deny).",
+    "R4 (security/authorization): For an active user, is_allowed returns True if action is in permissions_for(user.get('role', '')).",
+    "R5 (security/authorization): For an active user, is_allowed also returns True if user.get('name') == owner and action is 'read' or 'write'. Owners may NOT 'delete' unless their role grants it.",
+    "R6: Otherwise is_allowed returns False. is_allowed always returns a bool.",
+    "R7 (security/authorization): perform raises PermissionError('denied') if is_allowed(user, action, owner) is False, and must not modify audit in that case (ValueError from an unknown action also leaves audit unchanged).",
+    "R8: On success perform appends exactly one string f\"{user['name']}:{action}:{owner}\" to audit and returns 'ok'."
+  ],
+  "modules": [
+    {
+      "path": "roles.py",
+      "imports": [],
+      "functions": [
+        {
+          "name": "permissions_for",
+          "parameters": [{"name": "role", "type": "str"}],
+          "returns": "set",
+          "body": [
+            {"kind": "hole", "label": "Set perms to a new set of the actions granted to role", "allowed_calls": ["set"]},
+            {"kind": "return", "expression": "perms"}
+          ]
+        }
+      ]
+    },
+    {
+      "path": "access.py",
+      "imports": ["from roles import permissions_for"],
+      "functions": [
+        {
+          "name": "is_allowed",
+          "parameters": [{"name": "user", "type": "dict"}, {"name": "action", "type": "str"}, {"name": "owner", "type": "str"}],
+          "returns": "bool",
+          "body": [
+            {"kind": "branch", "condition": "action not in ('read', 'write', 'delete')",
+             "body": [{"kind": "raise", "expression": "ValueError('unknown action')"}], "otherwise": []},
+            {"kind": "branch", "condition": "user.get('active') is not True",
+             "body": [{"kind": "return", "expression": "False"}], "otherwise": []},
+            {"kind": "hole", "label": "Set granted to True if action is in permissions_for(user.get('role', '')) or (user.get('name') == owner and action in ('read', 'write')), else False", "allowed_calls": ["permissions_for", "user.get"]},
+            {"kind": "return", "expression": "granted"}
+          ]
+        },
+        {
+          "name": "perform",
+          "parameters": [{"name": "user", "type": "dict"}, {"name": "action", "type": "str"}, {"name": "owner", "type": "str"}, {"name": "audit", "type": "list"}],
+          "returns": "str",
+          "body": [
+            {"kind": "branch", "condition": "not is_allowed(user, action, owner)",
+             "body": [{"kind": "raise", "expression": "PermissionError('denied')"}], "otherwise": []},
+            {"kind": "hole", "label": "Append f\"{user['name']}:{action}:{owner}\" to audit", "allowed_calls": ["audit.append"]},
+            {"kind": "return", "expression": "'ok'"}
+          ]
+        }
+      ]
+    }
+  ]
+}

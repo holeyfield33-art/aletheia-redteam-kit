@@ -1,0 +1,310 @@
+{
+  "T01_pricing": {
+    "A": {
+      "materials_chars": 1253,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 5947,
+      "workspace_bytes": 6461,
+      "workspace_text_bytes": 6461,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/pricing.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 6165,
+      "workspace_bytes": 68981,
+      "workspace_text_bytes": 12617,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/pricing.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  },
+  "T02_inventory": {
+    "A": {
+      "materials_chars": 1152,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 7033,
+      "workspace_bytes": 7692,
+      "workspace_text_bytes": 7692,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/inventory.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 7261,
+      "workspace_bytes": 119927,
+      "workspace_text_bytes": 17483,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/inventory.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  },
+  "T03_rbac": {
+    "A": {
+      "materials_chars": 1867,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 8162,
+      "workspace_bytes": 8927,
+      "workspace_text_bytes": 8927,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/access.py",
+        "repo/roles.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 8426,
+      "workspace_bytes": 93813,
+      "workspace_text_bytes": 16969,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/access.py",
+        "repo/roles.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  },
+  "T04_stats": {
+    "A": {
+      "materials_chars": 854,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 5373,
+      "workspace_bytes": 5819,
+      "workspace_text_bytes": 5819,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/stats.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 5591,
+      "workspace_bytes": 79925,
+      "workspace_text_bytes": 13321,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/stats.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  },
+  "T05_password": {
+    "A": {
+      "materials_chars": 1159,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 5427,
+      "workspace_bytes": 5805,
+      "workspace_text_bytes": 5805,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/policy.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 5645,
+      "workspace_bytes": 57020,
+      "workspace_text_bytes": 10896,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/policy.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  },
+  "T06_ratelimit": {
+    "A": {
+      "materials_chars": 1069,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 5391,
+      "workspace_bytes": 5816,
+      "workspace_text_bytes": 5816,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/limiter.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 5629,
+      "workspace_bytes": 62844,
+      "workspace_text_bytes": 11600,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/limiter.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  },
+  "T07_orders": {
+    "A": {
+      "materials_chars": 1688,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 10236,
+      "workspace_bytes": 11561,
+      "workspace_text_bytes": 11561,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/orders.py",
+        "repo/pricing.py",
+        "repo/tax.py",
+        "repo/validation.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 10552,
+      "workspace_bytes": 158682,
+      "workspace_text_bytes": 25518,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/orders.py",
+        "repo/pricing.py",
+        "repo/tax.py",
+        "repo/validation.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  },
+  "T08_tokens": {
+    "A": {
+      "materials_chars": 1351,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 8085,
+      "workspace_bytes": 9038,
+      "workspace_text_bytes": 9038,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/tokens.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 8313,
+      "workspace_bytes": 116596,
+      "workspace_text_bytes": 19272,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/tokens.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  },
+  "T09_grades": {
+    "A": {
+      "materials_chars": 1097,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 6828,
+      "workspace_bytes": 7478,
+      "workspace_text_bytes": 7478,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/grades.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 7066,
+      "workspace_bytes": 114581,
+      "workspace_text_bytes": 17257,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/grades.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  },
+  "T10_ledger": {
+    "A": {
+      "materials_chars": 1115,
+      "workspace_bytes": 0,
+      "workspace_text_bytes": 0,
+      "workspace_files": []
+    },
+    "B": {
+      "materials_chars": 5919,
+      "workspace_bytes": 6459,
+      "workspace_text_bytes": 6459,
+      "workspace_files": [
+        "HANDOFF.md",
+        "repo/ledger.py",
+        "spec.json"
+      ]
+    },
+    "C": {
+      "materials_chars": 6137,
+      "workspace_bytes": 75371,
+      "workspace_text_bytes": 13887,
+      "workspace_files": [
+        "AGENT_HANDOFF.md",
+        "events.json",
+        "repo/ledger.py",
+        "score.json",
+        "template.wav"
+      ]
+    }
+  }
+}

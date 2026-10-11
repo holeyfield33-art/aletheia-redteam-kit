@@ -1,0 +1,52 @@
+{
+  "model_calls": 4,
+  "tool_calls": 6,
+  "tool_calls_by_name": {
+    "Read": 1,
+    "Write": 3,
+    "Bash": 1,
+    "SubagentHandback": 1
+  },
+  "input_tokens_sum": 219233,
+  "output_tokens_logged_lower_bound": 198,
+  "generated_chars": 2613,
+  "first_call_input_tokens": 50693,
+  "last_call_input_tokens": 56807,
+  "context_growth_tokens": 6114,
+  "per_call": [
+    {
+      "input_total": 50693,
+      "input_uncached": 2,
+      "cache_creation": 50691,
+      "cache_read": 0,
+      "output": 144
+    },
+    {
+      "input_total": 55364,
+      "input_uncached": 2,
+      "cache_creation": 4671,
+      "cache_read": 50691,
+      "output": 8
+    },
+    {
+      "input_total": 56369,
+      "input_uncached": 2,
+      "cache_creation": 1005,
+      "cache_read": 55362,
+      "output": 20
+    },
+    {
+      "input_total": 56807,
+      "input_uncached": 2,
+      "cache_creation": 438,
+      "cache_read": 56367,
+      "output": 26
+    }
+  ],
+  "model_id_sha256": [
+    "005912bee6ee4543",
+    "47a46a22f0c9fb10"
+  ],
+  "isolation_violations": [],
+  "source": "API usage fields recorded in the sub-agent transcript"
+}

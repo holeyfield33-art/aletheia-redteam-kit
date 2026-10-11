@@ -1,0 +1,444 @@
+[
+  {
+    "module": "tokens.py",
+    "function": "sign",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "sign",
+      "parameters": [
+        {
+          "name": "username",
+          "type": "str"
+        },
+        {
+          "name": "expiry",
+          "type": "int"
+        },
+        {
+          "name": "secret",
+          "type": "str"
+        }
+      ],
+      "returns": "str",
+      "body": [
+        {
+          "kind": "assign",
+          "target": "payload",
+          "expression": "f'{username}.{expiry}'"
+        },
+        {
+          "kind": "hole",
+          "label": "Set signature to the hex HMAC-SHA256 of payload keyed by secret; first assign mac = hmac.new(secret.encode(), payload.encode(), hashlib.sha256), then signature = mac.hexdigest()",
+          "allowed_calls": [
+            "hmac.new",
+            "secret.encode",
+            "payload.encode",
+            "mac.hexdigest"
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "f'{payload}.{signature}'"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "sign",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "assign",
+      "target": "payload",
+      "expression": "f'{username}.{expiry}'"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "sign",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set signature to the hex HMAC-SHA256 of payload keyed by secret; first assign mac = hmac.new(secret.encode(), payload.encode(), hashlib.sha256), then signature = mac.hexdigest()",
+      "allowed_calls": [
+        "hmac.new",
+        "secret.encode",
+        "payload.encode",
+        "mac.hexdigest"
+      ]
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "sign",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "return",
+      "expression": "f'{payload}.{signature}'"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "verify",
+      "parameters": [
+        {
+          "name": "token",
+          "type": "str"
+        },
+        {
+          "name": "secret",
+          "type": "str"
+        },
+        {
+          "name": "now",
+          "type": "int"
+        }
+      ],
+      "returns": "str",
+      "body": [
+        {
+          "kind": "assign",
+          "target": "parts",
+          "expression": "token.split('.')"
+        },
+        {
+          "kind": "branch",
+          "condition": "len(parts) != 3",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('malformed token')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "assign",
+          "target": "username",
+          "expression": "parts[0]"
+        },
+        {
+          "kind": "assign",
+          "target": "expiry_text",
+          "expression": "parts[1]"
+        },
+        {
+          "kind": "assign",
+          "target": "provided",
+          "expression": "parts[2]"
+        },
+        {
+          "kind": "branch",
+          "condition": "not username or not expiry_text.isdigit()",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('malformed token')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Set expected to the signature part of sign(username, int(expiry_text), secret); first assign expected_token = sign(...), then expected = expected_token.split('.')[2]",
+          "allowed_calls": [
+            "sign",
+            "int",
+            "expected_token.split"
+          ]
+        },
+        {
+          "kind": "branch",
+          "condition": "not hmac.compare_digest(provided, expected)",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "PermissionError('bad signature')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "branch",
+          "condition": "now >= int(expiry_text)",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "PermissionError('token expired')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "return",
+          "expression": "username"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "assign",
+      "target": "parts",
+      "expression": "token.split('.')"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "len(parts) != 3",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('malformed token')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('malformed token')"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "assign",
+      "target": "username",
+      "expression": "parts[0]"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "assign",
+      "target": "expiry_text",
+      "expression": "parts[1]"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 3.2,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/4",
+    "metadata": {
+      "kind": "assign",
+      "target": "provided",
+      "expression": "parts[2]"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 3.52,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/5",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not username or not expiry_text.isdigit()",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('malformed token')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 3.84,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/5/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('malformed token')"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 4.16,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/6",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set expected to the signature part of sign(username, int(expiry_text), secret); first assign expected_token = sign(...), then expected = expected_token.split('.')[2]",
+      "allowed_calls": [
+        "sign",
+        "int",
+        "expected_token.split"
+      ]
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 4.48,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/7",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not hmac.compare_digest(provided, expected)",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "PermissionError('bad signature')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 4.8,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/7/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "PermissionError('bad signature')"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 5.12,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/8",
+    "metadata": {
+      "kind": "branch",
+      "condition": "now >= int(expiry_text)",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "PermissionError('token expired')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 5.44,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/8/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "PermissionError('token expired')"
+    }
+  },
+  {
+    "module": "tokens.py",
+    "function": "verify",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 5.76,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/9",
+    "metadata": {
+      "kind": "return",
+      "expression": "username"
+    }
+  }
+]

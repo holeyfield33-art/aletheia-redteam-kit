@@ -1,0 +1,161 @@
+{
+  "format": "structured-spec-v1",
+  "title": "T02 inventory reserve and release",
+  "requirements": [
+    "R1 (security/validation): check_qty raises TypeError if qty is not an int or is a bool, and ValueError if qty <= 0; otherwise it returns None.",
+    "R2 (security/validation): reserve and release must call check_qty(qty) before doing anything else.",
+    "R3 (security/validation): If sku is not a key of stock, reserve and release raise KeyError.",
+    "R4 (security/validation): reserve raises ValueError if stock[sku] < qty, and must leave stock completely unchanged in that case.",
+    "R5: reserve decreases stock[sku] by qty in place and returns the new level for that sku.",
+    "R6: release increases stock[sku] by qty in place and returns the new level for that sku.",
+    "R7: Neither function may add or remove keys of stock or change other skus."
+  ],
+  "modules": [
+    {
+      "path": "inventory.py",
+      "imports": [],
+      "functions": [
+        {
+          "name": "check_qty",
+          "parameters": [
+            {
+              "name": "qty",
+              "type": "int"
+            }
+          ],
+          "returns": "None",
+          "body": [
+            {
+              "kind": "branch",
+              "condition": "not isinstance(qty, int) or isinstance(qty, bool)",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "TypeError('qty must be an int')"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "branch",
+              "condition": "qty <= 0",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "ValueError('qty must be positive')"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "return",
+              "expression": "None"
+            }
+          ],
+          "requirements": []
+        },
+        {
+          "name": "reserve",
+          "parameters": [
+            {
+              "name": "stock",
+              "type": "dict"
+            },
+            {
+              "name": "sku",
+              "type": "str"
+            },
+            {
+              "name": "qty",
+              "type": "int"
+            }
+          ],
+          "returns": "int",
+          "body": [
+            {
+              "kind": "validate",
+              "expression": "check_qty(qty)"
+            },
+            {
+              "kind": "branch",
+              "condition": "sku not in stock",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "KeyError(sku)"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "branch",
+              "condition": "stock[sku] < qty",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "ValueError('insufficient stock')"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "todo",
+              "label": "Decrease stock[sku] by qty in place and set remaining to the new level",
+              "allowed_calls": []
+            },
+            {
+              "kind": "return",
+              "expression": "remaining"
+            }
+          ],
+          "requirements": []
+        },
+        {
+          "name": "release",
+          "parameters": [
+            {
+              "name": "stock",
+              "type": "dict"
+            },
+            {
+              "name": "sku",
+              "type": "str"
+            },
+            {
+              "name": "qty",
+              "type": "int"
+            }
+          ],
+          "returns": "int",
+          "body": [
+            {
+              "kind": "validate",
+              "expression": "check_qty(qty)"
+            },
+            {
+              "kind": "branch",
+              "condition": "sku not in stock",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "KeyError(sku)"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "todo",
+              "label": "Increase stock[sku] by qty in place and set remaining to the new level",
+              "allowed_calls": []
+            },
+            {
+              "kind": "return",
+              "expression": "remaining"
+            }
+          ],
+          "requirements": []
+        }
+      ]
+    }
+  ]
+}

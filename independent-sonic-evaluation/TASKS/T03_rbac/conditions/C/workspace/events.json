@@ -1,0 +1,360 @@
+[
+  {
+    "module": "roles.py",
+    "function": "permissions_for",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "permissions_for",
+      "parameters": [
+        {
+          "name": "role",
+          "type": "str"
+        }
+      ],
+      "returns": "set",
+      "body": [
+        {
+          "kind": "hole",
+          "label": "Set perms to a new set of the actions granted to role",
+          "allowed_calls": [
+            "set"
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "perms"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "roles.py",
+    "function": "permissions_for",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set perms to a new set of the actions granted to role",
+      "allowed_calls": [
+        "set"
+      ]
+    }
+  },
+  {
+    "module": "roles.py",
+    "function": "permissions_for",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "return",
+      "expression": "perms"
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "is_allowed",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "is_allowed",
+      "parameters": [
+        {
+          "name": "user",
+          "type": "dict"
+        },
+        {
+          "name": "action",
+          "type": "str"
+        },
+        {
+          "name": "owner",
+          "type": "str"
+        }
+      ],
+      "returns": "bool",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "action not in ('read', 'write', 'delete')",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('unknown action')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "branch",
+          "condition": "user.get('active') is not True",
+          "body": [
+            {
+              "kind": "return",
+              "expression": "False"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Set granted to True if action is in permissions_for(user.get('role', '')) or (user.get('name') == owner and action in ('read', 'write')), else False",
+          "allowed_calls": [
+            "permissions_for",
+            "user.get"
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "granted"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "is_allowed",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "action not in ('read', 'write', 'delete')",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('unknown action')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "is_allowed",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('unknown action')"
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "is_allowed",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "user.get('active') is not True",
+      "body": [
+        {
+          "kind": "return",
+          "expression": "False"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "is_allowed",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "return",
+      "expression": "False"
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "is_allowed",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set granted to True if action is in permissions_for(user.get('role', '')) or (user.get('name') == owner and action in ('read', 'write')), else False",
+      "allowed_calls": [
+        "permissions_for",
+        "user.get"
+      ]
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "is_allowed",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "return",
+      "expression": "granted"
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "perform",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 3.2,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "perform",
+      "parameters": [
+        {
+          "name": "user",
+          "type": "dict"
+        },
+        {
+          "name": "action",
+          "type": "str"
+        },
+        {
+          "name": "owner",
+          "type": "str"
+        },
+        {
+          "name": "audit",
+          "type": "list"
+        }
+      ],
+      "returns": "str",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "not is_allowed(user, action, owner)",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "PermissionError('denied')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Append f\"{user['name']}:{action}:{owner}\" to audit",
+          "allowed_calls": [
+            "audit.append"
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "'ok'"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "perform",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 3.52,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not is_allowed(user, action, owner)",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "PermissionError('denied')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "perform",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 3.84,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "PermissionError('denied')"
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "perform",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 4.16,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "hole",
+      "label": "Append f\"{user['name']}:{action}:{owner}\" to audit",
+      "allowed_calls": [
+        "audit.append"
+      ]
+    }
+  },
+  {
+    "module": "access.py",
+    "function": "perform",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 4.48,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "return",
+      "expression": "'ok'"
+    }
+  }
+]

@@ -1,0 +1,546 @@
+{
+  "seed": 20261011,
+  "tool_budget": 25,
+  "attempts": [
+    {
+      "run_id": "run-01",
+      "task": "T05_password",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-01",
+      "run_dir": "RUNS/T05_password/B-1",
+      "prompt_chars": 6739
+    },
+    {
+      "run_id": "run-02",
+      "task": "T09_grades",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-02",
+      "run_dir": "RUNS/T09_grades/B-1",
+      "prompt_chars": 8140
+    },
+    {
+      "run_id": "run-03",
+      "task": "T05_password",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-03",
+      "run_dir": "RUNS/T05_password/A-1",
+      "prompt_chars": 2471
+    },
+    {
+      "run_id": "run-04",
+      "task": "T05_password",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-04",
+      "run_dir": "RUNS/T05_password/C-1",
+      "prompt_chars": 6957
+    },
+    {
+      "run_id": "run-05",
+      "task": "T07_orders",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-05",
+      "run_dir": "RUNS/T07_orders/C-2",
+      "prompt_chars": 11864
+    },
+    {
+      "run_id": "run-06",
+      "task": "T06_ratelimit",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-06",
+      "run_dir": "RUNS/T06_ratelimit/C-2",
+      "prompt_chars": 6941
+    },
+    {
+      "run_id": "run-07",
+      "task": "T10_ledger",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-07",
+      "run_dir": "RUNS/T10_ledger/A-2",
+      "prompt_chars": 2427
+    },
+    {
+      "run_id": "run-08",
+      "task": "T10_ledger",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-08",
+      "run_dir": "RUNS/T10_ledger/B-1",
+      "prompt_chars": 7231
+    },
+    {
+      "run_id": "run-09",
+      "task": "T05_password",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-09",
+      "run_dir": "RUNS/T05_password/B-2",
+      "prompt_chars": 6739
+    },
+    {
+      "run_id": "run-10",
+      "task": "T02_inventory",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-10",
+      "run_dir": "RUNS/T02_inventory/C-1",
+      "prompt_chars": 8573
+    },
+    {
+      "run_id": "run-11",
+      "task": "T07_orders",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-11",
+      "run_dir": "RUNS/T07_orders/B-2",
+      "prompt_chars": 11548
+    },
+    {
+      "run_id": "run-12",
+      "task": "T04_stats",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-12",
+      "run_dir": "RUNS/T04_stats/A-1",
+      "prompt_chars": 2166
+    },
+    {
+      "run_id": "run-13",
+      "task": "T04_stats",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-13",
+      "run_dir": "RUNS/T04_stats/B-1",
+      "prompt_chars": 6685
+    },
+    {
+      "run_id": "run-14",
+      "task": "T05_password",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-14",
+      "run_dir": "RUNS/T05_password/A-2",
+      "prompt_chars": 2471
+    },
+    {
+      "run_id": "run-15",
+      "task": "T08_tokens",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-15",
+      "run_dir": "RUNS/T08_tokens/A-2",
+      "prompt_chars": 2663
+    },
+    {
+      "run_id": "run-16",
+      "task": "T07_orders",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-16",
+      "run_dir": "RUNS/T07_orders/A-1",
+      "prompt_chars": 3000
+    },
+    {
+      "run_id": "run-17",
+      "task": "T01_pricing",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-17",
+      "run_dir": "RUNS/T01_pricing/C-2",
+      "prompt_chars": 7477
+    },
+    {
+      "run_id": "run-18",
+      "task": "T10_ledger",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-18",
+      "run_dir": "RUNS/T10_ledger/A-1",
+      "prompt_chars": 2427
+    },
+    {
+      "run_id": "run-19",
+      "task": "T03_rbac",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-19",
+      "run_dir": "RUNS/T03_rbac/C-1",
+      "prompt_chars": 9738
+    },
+    {
+      "run_id": "run-20",
+      "task": "T06_ratelimit",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-20",
+      "run_dir": "RUNS/T06_ratelimit/B-1",
+      "prompt_chars": 6703
+    },
+    {
+      "run_id": "run-21",
+      "task": "T02_inventory",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-21",
+      "run_dir": "RUNS/T02_inventory/A-2",
+      "prompt_chars": 2464
+    },
+    {
+      "run_id": "run-22",
+      "task": "T10_ledger",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-22",
+      "run_dir": "RUNS/T10_ledger/B-2",
+      "prompt_chars": 7231
+    },
+    {
+      "run_id": "run-23",
+      "task": "T02_inventory",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-23",
+      "run_dir": "RUNS/T02_inventory/A-1",
+      "prompt_chars": 2464
+    },
+    {
+      "run_id": "run-24",
+      "task": "T02_inventory",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-24",
+      "run_dir": "RUNS/T02_inventory/C-2",
+      "prompt_chars": 8573
+    },
+    {
+      "run_id": "run-25",
+      "task": "T08_tokens",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-25",
+      "run_dir": "RUNS/T08_tokens/C-2",
+      "prompt_chars": 9625
+    },
+    {
+      "run_id": "run-26",
+      "task": "T09_grades",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-26",
+      "run_dir": "RUNS/T09_grades/A-2",
+      "prompt_chars": 2409
+    },
+    {
+      "run_id": "run-27",
+      "task": "T07_orders",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-27",
+      "run_dir": "RUNS/T07_orders/C-1",
+      "prompt_chars": 11864
+    },
+    {
+      "run_id": "run-28",
+      "task": "T01_pricing",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-28",
+      "run_dir": "RUNS/T01_pricing/C-1",
+      "prompt_chars": 7477
+    },
+    {
+      "run_id": "run-29",
+      "task": "T07_orders",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-29",
+      "run_dir": "RUNS/T07_orders/A-2",
+      "prompt_chars": 3000
+    },
+    {
+      "run_id": "run-30",
+      "task": "T06_ratelimit",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-30",
+      "run_dir": "RUNS/T06_ratelimit/C-1",
+      "prompt_chars": 6941
+    },
+    {
+      "run_id": "run-31",
+      "task": "T04_stats",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-31",
+      "run_dir": "RUNS/T04_stats/A-2",
+      "prompt_chars": 2166
+    },
+    {
+      "run_id": "run-32",
+      "task": "T05_password",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-32",
+      "run_dir": "RUNS/T05_password/C-2",
+      "prompt_chars": 6957
+    },
+    {
+      "run_id": "run-33",
+      "task": "T04_stats",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-33",
+      "run_dir": "RUNS/T04_stats/C-2",
+      "prompt_chars": 6903
+    },
+    {
+      "run_id": "run-34",
+      "task": "T03_rbac",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-34",
+      "run_dir": "RUNS/T03_rbac/A-1",
+      "prompt_chars": 3179
+    },
+    {
+      "run_id": "run-35",
+      "task": "T02_inventory",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-35",
+      "run_dir": "RUNS/T02_inventory/B-2",
+      "prompt_chars": 8345
+    },
+    {
+      "run_id": "run-36",
+      "task": "T03_rbac",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-36",
+      "run_dir": "RUNS/T03_rbac/B-2",
+      "prompt_chars": 9474
+    },
+    {
+      "run_id": "run-37",
+      "task": "T03_rbac",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-37",
+      "run_dir": "RUNS/T03_rbac/B-1",
+      "prompt_chars": 9474
+    },
+    {
+      "run_id": "run-38",
+      "task": "T09_grades",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-38",
+      "run_dir": "RUNS/T09_grades/A-1",
+      "prompt_chars": 2409
+    },
+    {
+      "run_id": "run-39",
+      "task": "T01_pricing",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-39",
+      "run_dir": "RUNS/T01_pricing/A-2",
+      "prompt_chars": 2565
+    },
+    {
+      "run_id": "run-40",
+      "task": "T09_grades",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-40",
+      "run_dir": "RUNS/T09_grades/B-2",
+      "prompt_chars": 8140
+    },
+    {
+      "run_id": "run-41",
+      "task": "T02_inventory",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-41",
+      "run_dir": "RUNS/T02_inventory/B-1",
+      "prompt_chars": 8345
+    },
+    {
+      "run_id": "run-42",
+      "task": "T06_ratelimit",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-42",
+      "run_dir": "RUNS/T06_ratelimit/B-2",
+      "prompt_chars": 6703
+    },
+    {
+      "run_id": "run-43",
+      "task": "T07_orders",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-43",
+      "run_dir": "RUNS/T07_orders/B-1",
+      "prompt_chars": 11548
+    },
+    {
+      "run_id": "run-44",
+      "task": "T08_tokens",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-44",
+      "run_dir": "RUNS/T08_tokens/C-1",
+      "prompt_chars": 9625
+    },
+    {
+      "run_id": "run-45",
+      "task": "T03_rbac",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-45",
+      "run_dir": "RUNS/T03_rbac/A-2",
+      "prompt_chars": 3179
+    },
+    {
+      "run_id": "run-46",
+      "task": "T09_grades",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-46",
+      "run_dir": "RUNS/T09_grades/C-1",
+      "prompt_chars": 8378
+    },
+    {
+      "run_id": "run-47",
+      "task": "T08_tokens",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-47",
+      "run_dir": "RUNS/T08_tokens/A-1",
+      "prompt_chars": 2663
+    },
+    {
+      "run_id": "run-48",
+      "task": "T08_tokens",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-48",
+      "run_dir": "RUNS/T08_tokens/B-2",
+      "prompt_chars": 9397
+    },
+    {
+      "run_id": "run-49",
+      "task": "T01_pricing",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-49",
+      "run_dir": "RUNS/T01_pricing/A-1",
+      "prompt_chars": 2565
+    },
+    {
+      "run_id": "run-50",
+      "task": "T08_tokens",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-50",
+      "run_dir": "RUNS/T08_tokens/B-1",
+      "prompt_chars": 9397
+    },
+    {
+      "run_id": "run-51",
+      "task": "T09_grades",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-51",
+      "run_dir": "RUNS/T09_grades/C-2",
+      "prompt_chars": 8378
+    },
+    {
+      "run_id": "run-52",
+      "task": "T06_ratelimit",
+      "condition": "A",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-52",
+      "run_dir": "RUNS/T06_ratelimit/A-1",
+      "prompt_chars": 2381
+    },
+    {
+      "run_id": "run-53",
+      "task": "T10_ledger",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-53",
+      "run_dir": "RUNS/T10_ledger/C-1",
+      "prompt_chars": 7449
+    },
+    {
+      "run_id": "run-54",
+      "task": "T01_pricing",
+      "condition": "B",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-54",
+      "run_dir": "RUNS/T01_pricing/B-1",
+      "prompt_chars": 7259
+    },
+    {
+      "run_id": "run-55",
+      "task": "T01_pricing",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-55",
+      "run_dir": "RUNS/T01_pricing/B-2",
+      "prompt_chars": 7259
+    },
+    {
+      "run_id": "run-56",
+      "task": "T03_rbac",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-56",
+      "run_dir": "RUNS/T03_rbac/C-2",
+      "prompt_chars": 9738
+    },
+    {
+      "run_id": "run-57",
+      "task": "T04_stats",
+      "condition": "B",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-57",
+      "run_dir": "RUNS/T04_stats/B-2",
+      "prompt_chars": 6685
+    },
+    {
+      "run_id": "run-58",
+      "task": "T10_ledger",
+      "condition": "C",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-58",
+      "run_dir": "RUNS/T10_ledger/C-2",
+      "prompt_chars": 7449
+    },
+    {
+      "run_id": "run-59",
+      "task": "T04_stats",
+      "condition": "C",
+      "attempt": 1,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-59",
+      "run_dir": "RUNS/T04_stats/C-1",
+      "prompt_chars": 6903
+    },
+    {
+      "run_id": "run-60",
+      "task": "T06_ratelimit",
+      "condition": "A",
+      "attempt": 2,
+      "workspace": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/ws/run-60",
+      "run_dir": "RUNS/T06_ratelimit/A-2",
+      "prompt_chars": 2381
+    }
+  ]
+}

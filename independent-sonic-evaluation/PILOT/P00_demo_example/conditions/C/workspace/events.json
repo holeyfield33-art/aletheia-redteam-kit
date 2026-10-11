@@ -1,0 +1,282 @@
+[
+  {
+    "module": "validation.py",
+    "function": "require_positive",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "require_positive",
+      "parameters": [
+        {
+          "name": "amount",
+          "type": "int"
+        }
+      ],
+      "returns": "None",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "amount <= 0",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('amount must be positive')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "return",
+          "expression": "None"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "require_positive",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "amount <= 0",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('amount must be positive')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "require_positive",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('amount must be positive')"
+    }
+  },
+  {
+    "module": "validation.py",
+    "function": "require_positive",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "return",
+      "expression": "None"
+    }
+  },
+  {
+    "module": "authorization.py",
+    "function": "require_authorized",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "require_authorized",
+      "parameters": [
+        {
+          "name": "role",
+          "type": "str"
+        }
+      ],
+      "returns": "None",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "role != 'admin'",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "PermissionError('admin required')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "return",
+          "expression": "None"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "authorization.py",
+    "function": "require_authorized",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "role != 'admin'",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "PermissionError('admin required')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "authorization.py",
+    "function": "require_authorized",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "PermissionError('admin required')"
+    }
+  },
+  {
+    "module": "authorization.py",
+    "function": "require_authorized",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "return",
+      "expression": "None"
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "process_order",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "process_order",
+      "parameters": [
+        {
+          "name": "amount",
+          "type": "int"
+        },
+        {
+          "name": "role",
+          "type": "str"
+        }
+      ],
+      "returns": "int",
+      "requirements": [
+        "Keep the validation and authorization calls before implementation."
+      ],
+      "body": [
+        {
+          "kind": "validate",
+          "expression": "require_positive(amount)"
+        },
+        {
+          "kind": "call",
+          "expression": "require_authorized(role)"
+        },
+        {
+          "kind": "hole",
+          "label": "Set receipt to amount * 100",
+          "allowed_calls": []
+        },
+        {
+          "kind": "return",
+          "expression": "receipt"
+        }
+      ]
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "process_order",
+    "kind": "validate",
+    "note": 62,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "validate",
+      "expression": "require_positive(amount)"
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "process_order",
+    "kind": "call",
+    "note": 67,
+    "start_seconds": 3.2,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "call",
+      "expression": "require_authorized(role)"
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "process_order",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 3.52,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set receipt to amount * 100",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "orders.py",
+    "function": "process_order",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 3.84,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "return",
+      "expression": "receipt"
+    }
+  }
+]

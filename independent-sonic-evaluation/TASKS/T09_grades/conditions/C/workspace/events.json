@@ -1,0 +1,441 @@
+[
+  {
+    "module": "grades.py",
+    "function": "letter_for",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "letter_for",
+      "parameters": [
+        {
+          "name": "score",
+          "type": "int"
+        }
+      ],
+      "returns": "str",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "not isinstance(score, int) or isinstance(score, bool)",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "TypeError('score must be an int')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "branch",
+          "condition": "score < 0 or score > 100",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('score out of range')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Set letter from the grade bands",
+          "allowed_calls": []
+        },
+        {
+          "kind": "return",
+          "expression": "letter"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "letter_for",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not isinstance(score, int) or isinstance(score, bool)",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "TypeError('score must be an int')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "letter_for",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "TypeError('score must be an int')"
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "letter_for",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "score < 0 or score > 100",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('score out of range')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "letter_for",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('score out of range')"
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "letter_for",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "hole",
+      "label": "Set letter from the grade bands",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "letter_for",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "return",
+      "expression": "letter"
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "assign_grades",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "assign_grades",
+      "parameters": [
+        {
+          "name": "scores",
+          "type": "dict"
+        }
+      ],
+      "returns": "dict",
+      "body": [
+        {
+          "kind": "assign",
+          "target": "result",
+          "expression": "{}"
+        },
+        {
+          "kind": "loop",
+          "target": "name",
+          "iterable": "scores",
+          "body": [
+            {
+              "kind": "hole",
+              "label": "Store letter_for(scores[name]) as result[name]",
+              "allowed_calls": [
+                "letter_for"
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "result"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "assign_grades",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "assign",
+      "target": "result",
+      "expression": "{}"
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "assign_grades",
+    "kind": "loop",
+    "note": 65,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "loop",
+      "target": "name",
+      "iterable": "scores",
+      "body": [
+        {
+          "kind": "hole",
+          "label": "Store letter_for(scores[name]) as result[name]",
+          "allowed_calls": [
+            "letter_for"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "assign_grades",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 3.2,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "hole",
+      "label": "Store letter_for(scores[name]) as result[name]",
+      "allowed_calls": [
+        "letter_for"
+      ]
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "assign_grades",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 3.52,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "return",
+      "expression": "result"
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "summarize",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 3.84,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "summarize",
+      "parameters": [
+        {
+          "name": "grades",
+          "type": "dict"
+        }
+      ],
+      "returns": "dict",
+      "body": [
+        {
+          "kind": "assign",
+          "target": "counts",
+          "expression": "{'A': 0, 'B': 0, 'C': 0, 'D': 0, 'F': 0}"
+        },
+        {
+          "kind": "loop",
+          "target": "letter",
+          "iterable": "grades.values()",
+          "body": [
+            {
+              "kind": "branch",
+              "condition": "letter not in counts",
+              "body": [
+                {
+                  "kind": "raise",
+                  "expression": "ValueError('unknown letter')"
+                }
+              ],
+              "otherwise": []
+            },
+            {
+              "kind": "hole",
+              "label": "Increment counts[letter]",
+              "allowed_calls": []
+            }
+          ]
+        },
+        {
+          "kind": "return",
+          "expression": "counts"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "summarize",
+    "kind": "assign",
+    "note": 74,
+    "start_seconds": 4.16,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "assign",
+      "target": "counts",
+      "expression": "{'A': 0, 'B': 0, 'C': 0, 'D': 0, 'F': 0}"
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "summarize",
+    "kind": "loop",
+    "note": 65,
+    "start_seconds": 4.48,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "loop",
+      "target": "letter",
+      "iterable": "grades.values()",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "letter not in counts",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('unknown letter')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Increment counts[letter]",
+          "allowed_calls": []
+        }
+      ]
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "summarize",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 4.8,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "letter not in counts",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('unknown letter')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "summarize",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 5.12,
+    "duration_seconds": 0.32,
+    "depth": 3,
+    "scope": "body/1/body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('unknown letter')"
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "summarize",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 5.44,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/1",
+    "metadata": {
+      "kind": "hole",
+      "label": "Increment counts[letter]",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "grades.py",
+    "function": "summarize",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 5.76,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "return",
+      "expression": "counts"
+    }
+  }
+]

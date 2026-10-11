@@ -1,0 +1,40 @@
+{
+  "format": "sonic-template-v1",
+  "title": "T05 password policy",
+  "requirements": [
+    "R1 (security/validation): check_password raises TypeError if password or username is not a str.",
+    "R2: check_password returns a list of violation codes in this fixed order, each at most once: 'too_short' if len(password) < 12; 'no_digit' if no character is a digit (str.isdigit); 'no_upper' if no character is uppercase (str.isupper); 'no_lower' if no character is lowercase (str.islower); 'contains_username' if username is non-empty and username.lower() occurs in password.lower().",
+    "R3: A password of exactly 12 characters is long enough. An empty username never triggers 'contains_username'.",
+    "R4: check_password returns [] for a compliant password.",
+    "R5 (security/validation): is_acceptable returns True only when check_password(password, username) returns an empty list; it must call check_password and propagate its TypeError."
+  ],
+  "modules": [
+    {
+      "path": "policy.py",
+      "imports": [],
+      "functions": [
+        {
+          "name": "check_password",
+          "parameters": [{"name": "password", "type": "str"}, {"name": "username", "type": "str"}],
+          "returns": "list",
+          "body": [
+            {"kind": "branch", "condition": "not isinstance(password, str) or not isinstance(username, str)",
+             "body": [{"kind": "raise", "expression": "TypeError('password and username must be str')"}], "otherwise": []},
+            {"kind": "assign", "target": "violations", "expression": "[]"},
+            {"kind": "hole", "label": "Append the violation codes in the required order; iterate characters as ch, e.g. any(ch.isdigit() for ch in password)", "allowed_calls": ["len", "any", "violations.append", "ch.isdigit", "ch.isupper", "ch.islower", "username.lower", "password.lower"]},
+            {"kind": "return", "expression": "violations"}
+          ]
+        },
+        {
+          "name": "is_acceptable",
+          "parameters": [{"name": "password", "type": "str"}, {"name": "username", "type": "str"}],
+          "returns": "bool",
+          "body": [
+            {"kind": "assign", "target": "problems", "expression": "check_password(password, username)"},
+            {"kind": "return", "expression": "problems == []"}
+          ]
+        }
+      ]
+    }
+  ]
+}

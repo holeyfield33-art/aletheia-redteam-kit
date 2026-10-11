@@ -1,0 +1,450 @@
+[
+  {
+    "module": "inventory.py",
+    "function": "check_qty",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 0.0,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "check_qty",
+      "parameters": [
+        {
+          "name": "qty",
+          "type": "int"
+        }
+      ],
+      "returns": "None",
+      "body": [
+        {
+          "kind": "branch",
+          "condition": "not isinstance(qty, int) or isinstance(qty, bool)",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "TypeError('qty must be an int')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "branch",
+          "condition": "qty <= 0",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('qty must be positive')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "return",
+          "expression": "None"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "check_qty",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.32,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "branch",
+      "condition": "not isinstance(qty, int) or isinstance(qty, bool)",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "TypeError('qty must be an int')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "check_qty",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 0.64,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/0/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "TypeError('qty must be an int')"
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "check_qty",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 0.96,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "qty <= 0",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('qty must be positive')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "check_qty",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 1.28,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('qty must be positive')"
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "check_qty",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 1.6,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "return",
+      "expression": "None"
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "reserve",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 1.92,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "reserve",
+      "parameters": [
+        {
+          "name": "stock",
+          "type": "dict"
+        },
+        {
+          "name": "sku",
+          "type": "str"
+        },
+        {
+          "name": "qty",
+          "type": "int"
+        }
+      ],
+      "returns": "int",
+      "body": [
+        {
+          "kind": "validate",
+          "expression": "check_qty(qty)"
+        },
+        {
+          "kind": "branch",
+          "condition": "sku not in stock",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "KeyError(sku)"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "branch",
+          "condition": "stock[sku] < qty",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "ValueError('insufficient stock')"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Decrease stock[sku] by qty in place and set remaining to the new level",
+          "allowed_calls": []
+        },
+        {
+          "kind": "return",
+          "expression": "remaining"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "reserve",
+    "kind": "validate",
+    "note": 62,
+    "start_seconds": 2.24,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "validate",
+      "expression": "check_qty(qty)"
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "reserve",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 2.56,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "sku not in stock",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "KeyError(sku)"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "reserve",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 2.88,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "KeyError(sku)"
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "reserve",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 3.2,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "branch",
+      "condition": "stock[sku] < qty",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "ValueError('insufficient stock')"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "reserve",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 3.52,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/2/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "ValueError('insufficient stock')"
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "reserve",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 3.84,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "hole",
+      "label": "Decrease stock[sku] by qty in place and set remaining to the new level",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "reserve",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 4.16,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/4",
+    "metadata": {
+      "kind": "return",
+      "expression": "remaining"
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "release",
+    "kind": "function",
+    "note": 60,
+    "start_seconds": 4.48,
+    "duration_seconds": 0.32,
+    "depth": 0,
+    "scope": "function",
+    "metadata": {
+      "kind": "function",
+      "name": "release",
+      "parameters": [
+        {
+          "name": "stock",
+          "type": "dict"
+        },
+        {
+          "name": "sku",
+          "type": "str"
+        },
+        {
+          "name": "qty",
+          "type": "int"
+        }
+      ],
+      "returns": "int",
+      "body": [
+        {
+          "kind": "validate",
+          "expression": "check_qty(qty)"
+        },
+        {
+          "kind": "branch",
+          "condition": "sku not in stock",
+          "body": [
+            {
+              "kind": "raise",
+              "expression": "KeyError(sku)"
+            }
+          ],
+          "otherwise": []
+        },
+        {
+          "kind": "hole",
+          "label": "Increase stock[sku] by qty in place and set remaining to the new level",
+          "allowed_calls": []
+        },
+        {
+          "kind": "return",
+          "expression": "remaining"
+        }
+      ],
+      "requirements": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "release",
+    "kind": "validate",
+    "note": 62,
+    "start_seconds": 4.8,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/0",
+    "metadata": {
+      "kind": "validate",
+      "expression": "check_qty(qty)"
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "release",
+    "kind": "branch",
+    "note": 64,
+    "start_seconds": 5.12,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/1",
+    "metadata": {
+      "kind": "branch",
+      "condition": "sku not in stock",
+      "body": [
+        {
+          "kind": "raise",
+          "expression": "KeyError(sku)"
+        }
+      ],
+      "otherwise": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "release",
+    "kind": "raise",
+    "note": 69,
+    "start_seconds": 5.44,
+    "duration_seconds": 0.32,
+    "depth": 2,
+    "scope": "body/1/body/0",
+    "metadata": {
+      "kind": "raise",
+      "expression": "KeyError(sku)"
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "release",
+    "kind": "hole",
+    "note": 72,
+    "start_seconds": 5.76,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/2",
+    "metadata": {
+      "kind": "hole",
+      "label": "Increase stock[sku] by qty in place and set remaining to the new level",
+      "allowed_calls": []
+    }
+  },
+  {
+    "module": "inventory.py",
+    "function": "release",
+    "kind": "return",
+    "note": 71,
+    "start_seconds": 6.08,
+    "duration_seconds": 0.32,
+    "depth": 1,
+    "scope": "body/3",
+    "metadata": {
+      "kind": "return",
+      "expression": "remaining"
+    }
+  }
+]
