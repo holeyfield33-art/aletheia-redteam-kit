@@ -1,0 +1,27 @@
+{
+  "python": "Python 3.13.16",
+  "platform": "Linux-6.18.44-fc-v114-x86_64-with-glibc2.39",
+  "pip_freeze": [
+    "cffi==2.1.1",
+    "cryptography==50.0.2",
+    "iniconfig==2.3.1",
+    "packaging==26.3",
+    "pluggy==1.6.0",
+    "pycparser==3.11",
+    "Pygments==2.21.0",
+    "pytest==9.1.1",
+    "ruff==0.17.0"
+  ],
+  "node": "v22.22.0",
+  "declared_runtime_dependency": "cryptography>=42,<51",
+  "declared_dev": "pytest>=8,<10, ruff>=0.6,<1",
+  "reported_files_present": {
+    "demos/templates/composer.html": true,
+    "demos/templates/index.html": true,
+    "sonic_templates": true,
+    "README.md": true,
+    "TEMPLATES.md": true,
+    "SONAR.md": true,
+    "demos/templates/scaffold/AGENT_HANDOFF.md": true
+  }
+}

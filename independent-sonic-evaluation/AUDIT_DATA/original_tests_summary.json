@@ -1,0 +1,13 @@
+{
+  "counts_from_-rA": {
+    "passed": 90,
+    "failed": 0,
+    "skipped": 0,
+    "error": 0
+  },
+  "summary_line": [
+    "90 passed in 1.45s"
+  ],
+  "ruff_returncode": 0,
+  "creator_reported": "88 passed, 2 skipped (Windows)"
+}

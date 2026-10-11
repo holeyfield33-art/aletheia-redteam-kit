@@ -1,0 +1,3 @@
+/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/venv/bin/python -m ruff check s2 sonic_templates tests --select E4,E7,E9,F,I --no-cache
+
+All checks passed!

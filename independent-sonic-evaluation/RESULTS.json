@@ -1,0 +1,2624 @@
+{
+  "planned_attempts": 60,
+  "executed_attempts": 60,
+  "attempts_in_this_analysis": 60,
+  "served_model_digest_counts": {
+    "47a46a22f0c9fb10": 57,
+    "005912bee6ee4543": 3
+  },
+  "analysis": "all executed attempts (primary)",
+  "unexecuted": [],
+  "by_condition": {
+    "A": {
+      "attempts": 20,
+      "pass_rate": {
+        "mean": 1.0,
+        "sd": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "full_success": {
+        "mean": 1,
+        "sd": 0.0,
+        "min": 1,
+        "max": 1
+      },
+      "security_pass_rate": {
+        "mean": 1.0,
+        "sd": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "requirements_failed": {
+        "mean": 0,
+        "sd": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "sonic_conformant": {
+        "mean": 0,
+        "sd": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "interface_compliant": {
+        "mean": 1,
+        "sd": 0.0,
+        "min": 1,
+        "max": 1
+      },
+      "input_tokens_sum": {
+        "mean": 245450.65,
+        "sd": 53125.9113,
+        "min": 218498,
+        "max": 392527
+      },
+      "context_growth_tokens": {
+        "mean": 6569.35,
+        "sd": 635.4349,
+        "min": 5780,
+        "max": 7831
+      },
+      "prompt_chars": {
+        "mean": 2572.5,
+        "sd": 288.225,
+        "min": 2166,
+        "max": 3179
+      },
+      "generated_chars": {
+        "mean": 3778.7,
+        "sd": 901.5529,
+        "min": 2466,
+        "max": 5293
+      },
+      "model_calls": {
+        "mean": 4.45,
+        "sd": 0.9206,
+        "min": 4,
+        "max": 7
+      },
+      "tool_calls": {
+        "mean": 4.55,
+        "sd": 0.9206,
+        "min": 4,
+        "max": 7
+      },
+      "bash_calls": {
+        "mean": 1.15,
+        "sd": 0.3571,
+        "min": 1,
+        "max": 2
+      },
+      "duration_s": {
+        "mean": 31.4995,
+        "sd": 4.8099,
+        "min": 24.13,
+        "max": 42.69
+      },
+      "subagent_tokens": {
+        "mean": 57716.2,
+        "sd": 675.2859,
+        "min": 56782,
+        "max": 58977
+      },
+      "full_successes": 20,
+      "isolation_violations": 0,
+      "opened_template_wav": 0,
+      "syntax_or_collection_failures": 0
+    },
+    "B": {
+      "attempts": 20,
+      "pass_rate": {
+        "mean": 1.0,
+        "sd": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "full_success": {
+        "mean": 1,
+        "sd": 0.0,
+        "min": 1,
+        "max": 1
+      },
+      "security_pass_rate": {
+        "mean": 1.0,
+        "sd": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "requirements_failed": {
+        "mean": 0,
+        "sd": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "sonic_conformant": {
+        "mean": 1,
+        "sd": 0.0,
+        "min": 1,
+        "max": 1
+      },
+      "interface_compliant": {
+        "mean": 1,
+        "sd": 0.0,
+        "min": 1,
+        "max": 1
+      },
+      "input_tokens_sum": {
+        "mean": 289190.9,
+        "sd": 50183.0739,
+        "min": 223757,
+        "max": 359045
+      },
+      "context_growth_tokens": {
+        "mean": 9140.65,
+        "sd": 1340.2079,
+        "min": 7605,
+        "max": 13184
+      },
+      "prompt_chars": {
+        "mean": 8152.1,
+        "sd": 1508.7036,
+        "min": 6685,
+        "max": 11548
+      },
+      "generated_chars": {
+        "mean": 3891.8,
+        "sd": 1206.5905,
+        "min": 2600,
+        "max": 7648
+      },
+      "model_calls": {
+        "mean": 5.05,
+        "sd": 0.8047,
+        "min": 4,
+        "max": 6
+      },
+      "tool_calls": {
+        "mean": 5.05,
+        "sd": 0.8047,
+        "min": 4,
+        "max": 6
+      },
+      "bash_calls": {
+        "mean": 1.2,
+        "sd": 0.5099,
+        "min": 1,
+        "max": 3
+      },
+      "duration_s": {
+        "mean": 35.832,
+        "sd": 10.1073,
+        "min": 27.54,
+        "max": 69.7
+      },
+      "subagent_tokens": {
+        "mean": 60332.15,
+        "sd": 1387.2768,
+        "min": 58743,
+        "max": 64475
+      },
+      "full_successes": 20,
+      "isolation_violations": 0,
+      "opened_template_wav": 0,
+      "syntax_or_collection_failures": 0
+    },
+    "C": {
+      "attempts": 20,
+      "pass_rate": {
+        "mean": 1.0,
+        "sd": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "full_success": {
+        "mean": 1,
+        "sd": 0.0,
+        "min": 1,
+        "max": 1
+      },
+      "security_pass_rate": {
+        "mean": 1.0,
+        "sd": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "requirements_failed": {
+        "mean": 0,
+        "sd": 0.0,
+        "min": 0,
+        "max": 0
+      },
+      "sonic_conformant": {
+        "mean": 1,
+        "sd": 0.0,
+        "min": 1,
+        "max": 1
+      },
+      "interface_compliant": {
+        "mean": 1,
+        "sd": 0.0,
+        "min": 1,
+        "max": 1
+      },
+      "input_tokens_sum": {
+        "mean": 307716.55,
+        "sd": 64122.7568,
+        "min": 224147,
+        "max": 411357
+      },
+      "context_growth_tokens": {
+        "mean": 9510.5,
+        "sd": 1427.1656,
+        "min": 7784,
+        "max": 13011
+      },
+      "prompt_chars": {
+        "mean": 8390.5,
+        "sd": 1533.8821,
+        "min": 6903,
+        "max": 11864
+      },
+      "generated_chars": {
+        "mean": 4147.8,
+        "sd": 1162.8223,
+        "min": 2693,
+        "max": 6918
+      },
+      "model_calls": {
+        "mean": 5.35,
+        "sd": 1.0618,
+        "min": 4,
+        "max": 7
+      },
+      "tool_calls": {
+        "mean": 5.65,
+        "sd": 1.1948,
+        "min": 4,
+        "max": 8
+      },
+      "bash_calls": {
+        "mean": 1.2,
+        "sd": 0.4,
+        "min": 1,
+        "max": 2
+      },
+      "duration_s": {
+        "mean": 38.7405,
+        "sd": 8.9327,
+        "min": 28.34,
+        "max": 59.1
+      },
+      "subagent_tokens": {
+        "mean": 60751.15,
+        "sd": 1431.0494,
+        "min": 59173,
+        "max": 64287
+      },
+      "full_successes": 20,
+      "isolation_violations": 0,
+      "opened_template_wav": 0,
+      "syntax_or_collection_failures": 0
+    }
+  },
+  "per_task": {
+    "T01_pricing": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 248591,
+        "context_growth_tokens": 6848.5,
+        "prompt_chars": 2565,
+        "generated_chars": 4150.5,
+        "model_calls": 4.5,
+        "tool_calls": 4.5,
+        "bash_calls": 1.5,
+        "duration_s": 31.43,
+        "subagent_tokens": 58085,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 254606.5,
+        "context_growth_tokens": 8282,
+        "prompt_chars": 7259,
+        "generated_chars": 3186,
+        "model_calls": 4.5,
+        "tool_calls": 4.5,
+        "bash_calls": 1,
+        "duration_s": 30.48,
+        "subagent_tokens": 59456,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 285113.5,
+        "context_growth_tokens": 8916.5,
+        "prompt_chars": 7477,
+        "generated_chars": 3521.5,
+        "model_calls": 5,
+        "tool_calls": 5,
+        "bash_calls": 1,
+        "duration_s": 33.855,
+        "subagent_tokens": 60176.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "T02_inventory": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 219482.5,
+        "context_growth_tokens": 6313.5,
+        "prompt_chars": 2464,
+        "generated_chars": 3720,
+        "model_calls": 4,
+        "tool_calls": 4,
+        "bash_calls": 1,
+        "duration_s": 30.43,
+        "subagent_tokens": 57452,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 345101,
+        "context_growth_tokens": 9242,
+        "prompt_chars": 8345,
+        "generated_chars": 3457,
+        "model_calls": 6,
+        "tool_calls": 6,
+        "bash_calls": 1,
+        "duration_s": 34.145,
+        "subagent_tokens": 60410,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 375990,
+        "context_growth_tokens": 9646.5,
+        "prompt_chars": 8573,
+        "generated_chars": 3830,
+        "model_calls": 6.5,
+        "tool_calls": 6.5,
+        "bash_calls": 1.5,
+        "duration_s": 37.06,
+        "subagent_tokens": 60806,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "T03_rbac": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 220969,
+        "context_growth_tokens": 6988.5,
+        "prompt_chars": 3179,
+        "generated_chars": 4196,
+        "model_calls": 4,
+        "tool_calls": 5,
+        "bash_calls": 1,
+        "duration_s": 33.505,
+        "subagent_tokens": 58120,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 349170,
+        "context_growth_tokens": 10532,
+        "prompt_chars": 9474,
+        "generated_chars": 5072,
+        "model_calls": 6,
+        "tool_calls": 6,
+        "bash_calls": 1,
+        "duration_s": 48.835,
+        "subagent_tokens": 61702.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 411228,
+        "context_growth_tokens": 11408.5,
+        "prompt_chars": 9738,
+        "generated_chars": 6048,
+        "model_calls": 7,
+        "tool_calls": 7,
+        "bash_calls": 2,
+        "duration_s": 53.435,
+        "subagent_tokens": 62682,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "T04_stats": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 218555,
+        "context_growth_tokens": 5809,
+        "prompt_chars": 2166,
+        "generated_chars": 2473,
+        "model_calls": 4,
+        "tool_calls": 4,
+        "bash_calls": 1,
+        "duration_s": 25.1,
+        "subagent_tokens": 56808.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 253012,
+        "context_growth_tokens": 7812,
+        "prompt_chars": 6685,
+        "generated_chars": 2657.5,
+        "model_calls": 4.5,
+        "tool_calls": 4.5,
+        "bash_calls": 1,
+        "duration_s": 27.685,
+        "subagent_tokens": 58955.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 282805.5,
+        "context_growth_tokens": 8257,
+        "prompt_chars": 6903,
+        "generated_chars": 2897,
+        "model_calls": 5,
+        "tool_calls": 5,
+        "bash_calls": 1,
+        "duration_s": 30.38,
+        "subagent_tokens": 59400,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "T05_password": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 247858.5,
+        "context_growth_tokens": 6411.5,
+        "prompt_chars": 2471,
+        "generated_chars": 3932,
+        "model_calls": 4.5,
+        "tool_calls": 4.5,
+        "bash_calls": 1.5,
+        "duration_s": 31.225,
+        "subagent_tokens": 57497.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 281920.5,
+        "context_growth_tokens": 7932.5,
+        "prompt_chars": 6739,
+        "generated_chars": 3224.5,
+        "model_calls": 5,
+        "tool_calls": 5,
+        "bash_calls": 1,
+        "duration_s": 28.23,
+        "subagent_tokens": 59062,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 253307,
+        "context_growth_tokens": 7919,
+        "prompt_chars": 6957,
+        "generated_chars": 3462,
+        "model_calls": 4.5,
+        "tool_calls": 4.5,
+        "bash_calls": 1,
+        "duration_s": 30.995,
+        "subagent_tokens": 59210,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "T06_ratelimit": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 219083.5,
+        "context_growth_tokens": 6131.5,
+        "prompt_chars": 2381,
+        "generated_chars": 2974.5,
+        "model_calls": 4,
+        "tool_calls": 4,
+        "bash_calls": 1,
+        "duration_s": 30.625,
+        "subagent_tokens": 57227.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 253651,
+        "context_growth_tokens": 8161.5,
+        "prompt_chars": 6703,
+        "generated_chars": 3511.5,
+        "model_calls": 4.5,
+        "tool_calls": 4.5,
+        "bash_calls": 1.5,
+        "duration_s": 34.735,
+        "subagent_tokens": 59287.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 283696.5,
+        "context_growth_tokens": 8810.5,
+        "prompt_chars": 6941,
+        "generated_chars": 4331.5,
+        "model_calls": 5,
+        "tool_calls": 5,
+        "bash_calls": 1.5,
+        "duration_s": 39.025,
+        "subagent_tokens": 60084,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "T07_orders": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 392496,
+        "context_growth_tokens": 7788,
+        "prompt_chars": 3000,
+        "generated_chars": 5153.5,
+        "model_calls": 7,
+        "tool_calls": 7,
+        "bash_calls": 1,
+        "duration_s": 41.81,
+        "subagent_tokens": 58952.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 355789,
+        "context_growth_tokens": 12152.5,
+        "prompt_chars": 11548,
+        "generated_chars": 6169,
+        "model_calls": 6,
+        "tool_calls": 6,
+        "bash_calls": 2,
+        "duration_s": 56.91,
+        "subagent_tokens": 63442,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 267015,
+        "context_growth_tokens": 12739,
+        "prompt_chars": 11864,
+        "generated_chars": 6603,
+        "model_calls": 4.5,
+        "tool_calls": 7.5,
+        "bash_calls": 1,
+        "duration_s": 55.285,
+        "subagent_tokens": 64017,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "T08_tokens": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 219452.5,
+        "context_growth_tokens": 6211.5,
+        "prompt_chars": 2663,
+        "generated_chars": 3310,
+        "model_calls": 4,
+        "tool_calls": 4,
+        "bash_calls": 1,
+        "duration_s": 27.595,
+        "subagent_tokens": 57434,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 287744.5,
+        "context_growth_tokens": 9505,
+        "prompt_chars": 9397,
+        "generated_chars": 3852,
+        "model_calls": 5,
+        "tool_calls": 5,
+        "bash_calls": 1,
+        "duration_s": 33.015,
+        "subagent_tokens": 60708,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 227785.5,
+        "context_growth_tokens": 9056.5,
+        "prompt_chars": 9625,
+        "generated_chars": 3652.5,
+        "model_calls": 4,
+        "tool_calls": 4,
+        "bash_calls": 1,
+        "duration_s": 29.33,
+        "subagent_tokens": 60259.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "T09_grades": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 248852.5,
+        "context_growth_tokens": 7042.5,
+        "prompt_chars": 2409,
+        "generated_chars": 4735,
+        "model_calls": 4.5,
+        "tool_calls": 4.5,
+        "bash_calls": 1.5,
+        "duration_s": 33.42,
+        "subagent_tokens": 58219,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 256124,
+        "context_growth_tokens": 8873.5,
+        "prompt_chars": 8140,
+        "generated_chars": 3470.5,
+        "model_calls": 4.5,
+        "tool_calls": 4.5,
+        "bash_calls": 1,
+        "duration_s": 32.375,
+        "subagent_tokens": 60000,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 406098.5,
+        "context_growth_tokens": 9807,
+        "prompt_chars": 8378,
+        "generated_chars": 3570,
+        "model_calls": 7,
+        "tool_calls": 7,
+        "bash_calls": 1,
+        "duration_s": 41.015,
+        "subagent_tokens": 60942,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "T10_ledger": {
+      "A": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 0,
+        "interface_compliant": 1,
+        "input_tokens_sum": 219166,
+        "context_growth_tokens": 6149,
+        "prompt_chars": 2427,
+        "generated_chars": 3142.5,
+        "model_calls": 4,
+        "tool_calls": 4,
+        "bash_calls": 1,
+        "duration_s": 29.855,
+        "subagent_tokens": 57366,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "B": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 254790.5,
+        "context_growth_tokens": 8913.5,
+        "prompt_chars": 7231,
+        "generated_chars": 4318,
+        "model_calls": 4.5,
+        "tool_calls": 4.5,
+        "bash_calls": 1.5,
+        "duration_s": 31.91,
+        "subagent_tokens": 60298,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      },
+      "C": {
+        "attempts": 2,
+        "pass_rate": 1.0,
+        "full_success": 1,
+        "security_pass_rate": 1.0,
+        "requirements_failed": 0,
+        "sonic_conformant": 1,
+        "interface_compliant": 1,
+        "input_tokens_sum": 284126,
+        "context_growth_tokens": 8544.5,
+        "prompt_chars": 7449,
+        "generated_chars": 3562.5,
+        "model_calls": 5,
+        "tool_calls": 5,
+        "bash_calls": 1,
+        "duration_s": 37.025,
+        "subagent_tokens": 59934.5,
+        "pass_rate_range": [
+          1.0,
+          1.0
+        ]
+      }
+    }
+  },
+  "paired_per_task": {
+    "B_minus_A": {
+      "pass_rate": {
+        "tasks": 10,
+        "mean_diff": 0.0,
+        "bootstrap95_over_tasks": [
+          0.0,
+          0.0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "full_success": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "security_pass_rate": {
+        "tasks": 10,
+        "mean_diff": 0.0,
+        "bootstrap95_over_tasks": [
+          0.0,
+          0.0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "requirements_failed": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "sonic_conformant": {
+        "tasks": 10,
+        "mean_diff": 1,
+        "bootstrap95_over_tasks": [
+          1,
+          1
+        ],
+        "sign_test": {
+          "positive": 10,
+          "negative": 0,
+          "ties": 0,
+          "p_two_sided": 0.002
+        }
+      },
+      "interface_compliant": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "input_tokens_sum": {
+        "tasks": 10,
+        "mean_diff": 43740.25,
+        "bootstrap95_over_tasks": [
+          15183.45,
+          75108.9
+        ],
+        "sign_test": {
+          "positive": 9,
+          "negative": 1,
+          "ties": 0,
+          "p_two_sided": 0.0215
+        }
+      },
+      "context_growth_tokens": {
+        "tasks": 10,
+        "mean_diff": 2571.3,
+        "bootstrap95_over_tasks": [
+          2031.4,
+          3150.75
+        ],
+        "sign_test": {
+          "positive": 10,
+          "negative": 0,
+          "ties": 0,
+          "p_two_sided": 0.002
+        }
+      },
+      "prompt_chars": {
+        "tasks": 10,
+        "mean_diff": 5579.6,
+        "bootstrap95_over_tasks": [
+          4852.8,
+          6422.1
+        ],
+        "sign_test": {
+          "positive": 10,
+          "negative": 0,
+          "ties": 0,
+          "p_two_sided": 0.002
+        }
+      },
+      "generated_chars": {
+        "tasks": 10,
+        "mean_diff": 113.1,
+        "bootstrap95_over_tasks": [
+          -406.0,
+          605.2
+        ],
+        "sign_test": {
+          "positive": 6,
+          "negative": 4,
+          "ties": 0,
+          "p_two_sided": 0.7539
+        }
+      },
+      "model_calls": {
+        "tasks": 10,
+        "mean_diff": 0.6,
+        "bootstrap95_over_tasks": [
+          0.1,
+          1.15
+        ],
+        "sign_test": {
+          "positive": 7,
+          "negative": 1,
+          "ties": 2,
+          "p_two_sided": 0.0703
+        }
+      },
+      "tool_calls": {
+        "tasks": 10,
+        "mean_diff": 0.5,
+        "bootstrap95_over_tasks": [
+          0.05,
+          0.95
+        ],
+        "sign_test": {
+          "positive": 7,
+          "negative": 1,
+          "ties": 2,
+          "p_two_sided": 0.0703
+        }
+      },
+      "bash_calls": {
+        "tasks": 10,
+        "mean_diff": 0.05,
+        "bootstrap95_over_tasks": [
+          -0.25,
+          0.35
+        ],
+        "sign_test": {
+          "positive": 3,
+          "negative": 3,
+          "ties": 4,
+          "p_two_sided": 1.0
+        }
+      },
+      "duration_s": {
+        "tasks": 10,
+        "mean_diff": 4.3325,
+        "bootstrap95_over_tasks": [
+          0.925,
+          8.179
+        ],
+        "sign_test": {
+          "positive": 7,
+          "negative": 3,
+          "ties": 0,
+          "p_two_sided": 0.3438
+        }
+      },
+      "subagent_tokens": {
+        "tasks": 10,
+        "mean_diff": 2615.95,
+        "bootstrap95_over_tasks": [
+          2053.35,
+          3211.55
+        ],
+        "sign_test": {
+          "positive": 10,
+          "negative": 0,
+          "ties": 0,
+          "p_two_sided": 0.002
+        }
+      }
+    },
+    "C_minus_A": {
+      "pass_rate": {
+        "tasks": 10,
+        "mean_diff": 0.0,
+        "bootstrap95_over_tasks": [
+          0.0,
+          0.0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "full_success": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "security_pass_rate": {
+        "tasks": 10,
+        "mean_diff": 0.0,
+        "bootstrap95_over_tasks": [
+          0.0,
+          0.0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "requirements_failed": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "sonic_conformant": {
+        "tasks": 10,
+        "mean_diff": 1,
+        "bootstrap95_over_tasks": [
+          1,
+          1
+        ],
+        "sign_test": {
+          "positive": 10,
+          "negative": 0,
+          "ties": 0,
+          "p_two_sided": 0.002
+        }
+      },
+      "interface_compliant": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "input_tokens_sum": {
+        "tasks": 10,
+        "mean_diff": 62265.9,
+        "bootstrap95_over_tasks": [
+          7104.35,
+          114377.95
+        ],
+        "sign_test": {
+          "positive": 9,
+          "negative": 1,
+          "ties": 0,
+          "p_two_sided": 0.0215
+        }
+      },
+      "context_growth_tokens": {
+        "tasks": 10,
+        "mean_diff": 2941.15,
+        "bootstrap95_over_tasks": [
+          2362.15,
+          3587.1
+        ],
+        "sign_test": {
+          "positive": 10,
+          "negative": 0,
+          "ties": 0,
+          "p_two_sided": 0.002
+        }
+      },
+      "prompt_chars": {
+        "tasks": 10,
+        "mean_diff": 5818,
+        "bootstrap95_over_tasks": [
+          5078.8,
+          6679.1
+        ],
+        "sign_test": {
+          "positive": 10,
+          "negative": 0,
+          "ties": 0,
+          "p_two_sided": 0.002
+        }
+      },
+      "generated_chars": {
+        "tasks": 10,
+        "mean_diff": 369.1,
+        "bootstrap95_over_tasks": [
+          -196.55,
+          930.6
+        ],
+        "sign_test": {
+          "positive": 7,
+          "negative": 3,
+          "ties": 0,
+          "p_two_sided": 0.3438
+        }
+      },
+      "model_calls": {
+        "tasks": 10,
+        "mean_diff": 0.9,
+        "bootstrap95_over_tasks": [
+          -0.05,
+          1.8
+        ],
+        "sign_test": {
+          "positive": 7,
+          "negative": 1,
+          "ties": 2,
+          "p_two_sided": 0.0703
+        }
+      },
+      "tool_calls": {
+        "tasks": 10,
+        "mean_diff": 1.1,
+        "bootstrap95_over_tasks": [
+          0.6,
+          1.65
+        ],
+        "sign_test": {
+          "positive": 8,
+          "negative": 0,
+          "ties": 2,
+          "p_two_sided": 0.0078
+        }
+      },
+      "bash_calls": {
+        "tasks": 10,
+        "mean_diff": 0.05,
+        "bootstrap95_over_tasks": [
+          -0.2,
+          0.35
+        ],
+        "sign_test": {
+          "positive": 3,
+          "negative": 3,
+          "ties": 4,
+          "p_two_sided": 1.0
+        }
+      },
+      "duration_s": {
+        "tasks": 10,
+        "mean_diff": 7.241,
+        "bootstrap95_over_tasks": [
+          4.046,
+          10.9385
+        ],
+        "sign_test": {
+          "positive": 9,
+          "negative": 1,
+          "ties": 0,
+          "p_two_sided": 0.0215
+        }
+      },
+      "subagent_tokens": {
+        "tasks": 10,
+        "mean_diff": 3034.95,
+        "bootstrap95_over_tasks": [
+          2466.05,
+          3676.45
+        ],
+        "sign_test": {
+          "positive": 10,
+          "negative": 0,
+          "ties": 0,
+          "p_two_sided": 0.002
+        }
+      }
+    },
+    "C_minus_B": {
+      "pass_rate": {
+        "tasks": 10,
+        "mean_diff": 0.0,
+        "bootstrap95_over_tasks": [
+          0.0,
+          0.0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "full_success": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "security_pass_rate": {
+        "tasks": 10,
+        "mean_diff": 0.0,
+        "bootstrap95_over_tasks": [
+          0.0,
+          0.0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "requirements_failed": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "sonic_conformant": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "interface_compliant": {
+        "tasks": 10,
+        "mean_diff": 0,
+        "bootstrap95_over_tasks": [
+          0,
+          0
+        ],
+        "sign_test": {
+          "positive": 0,
+          "negative": 0,
+          "ties": 10,
+          "p_two_sided": 1.0
+        }
+      },
+      "input_tokens_sum": {
+        "tasks": 10,
+        "mean_diff": 18525.65,
+        "bootstrap95_over_tasks": [
+          -20208.35,
+          60128.8
+        ],
+        "sign_test": {
+          "positive": 7,
+          "negative": 3,
+          "ties": 0,
+          "p_two_sided": 0.3438
+        }
+      },
+      "context_growth_tokens": {
+        "tasks": 10,
+        "mean_diff": 369.85,
+        "bootstrap95_over_tasks": [
+          64.55,
+          645.4
+        ],
+        "sign_test": {
+          "positive": 7,
+          "negative": 3,
+          "ties": 0,
+          "p_two_sided": 0.3438
+        }
+      },
+      "prompt_chars": {
+        "tasks": 10,
+        "mean_diff": 238.4,
+        "bootstrap95_over_tasks": [
+          223,
+          259
+        ],
+        "sign_test": {
+          "positive": 10,
+          "negative": 0,
+          "ties": 0,
+          "p_two_sided": 0.002
+        }
+      },
+      "generated_chars": {
+        "tasks": 10,
+        "mean_diff": 256.0,
+        "bootstrap95_over_tasks": [
+          -43.55,
+          529.65
+        ],
+        "sign_test": {
+          "positive": 8,
+          "negative": 2,
+          "ties": 0,
+          "p_two_sided": 0.1094
+        }
+      },
+      "model_calls": {
+        "tasks": 10,
+        "mean_diff": 0.3,
+        "bootstrap95_over_tasks": [
+          -0.35,
+          1.0
+        ],
+        "sign_test": {
+          "positive": 7,
+          "negative": 3,
+          "ties": 0,
+          "p_two_sided": 0.3438
+        }
+      },
+      "tool_calls": {
+        "tasks": 10,
+        "mean_diff": 0.6,
+        "bootstrap95_over_tasks": [
+          0.05,
+          1.2
+        ],
+        "sign_test": {
+          "positive": 8,
+          "negative": 2,
+          "ties": 0,
+          "p_two_sided": 0.1094
+        }
+      },
+      "bash_calls": {
+        "tasks": 10,
+        "mean_diff": 0.0,
+        "bootstrap95_over_tasks": [
+          -0.3,
+          0.3
+        ],
+        "sign_test": {
+          "positive": 2,
+          "negative": 2,
+          "ties": 6,
+          "p_two_sided": 1.0
+        }
+      },
+      "duration_s": {
+        "tasks": 10,
+        "mean_diff": 2.9085,
+        "bootstrap95_over_tasks": [
+          0.818,
+          4.8845
+        ],
+        "sign_test": {
+          "positive": 8,
+          "negative": 2,
+          "ties": 0,
+          "p_two_sided": 0.1094
+        }
+      },
+      "subagent_tokens": {
+        "tasks": 10,
+        "mean_diff": 419.0,
+        "bootstrap95_over_tasks": [
+          100.75,
+          700.95
+        ],
+        "sign_test": {
+          "positive": 8,
+          "negative": 2,
+          "ties": 0,
+          "p_two_sided": 0.1094
+        }
+      }
+    }
+  },
+  "unfilled_scaffold_hidden_tests_passed": {
+    "T01_pricing": "8/15",
+    "T02_inventory": "9/13",
+    "T03_rbac": "4/13",
+    "T04_stats": "7/13",
+    "T05_password": "3/12",
+    "T06_ratelimit": "1/9",
+    "T07_orders": "4/11",
+    "T08_tokens": "2/10",
+    "T09_grades": "4/10",
+    "T10_ledger": "3/10"
+  },
+  "fixed_material_chars_by_condition": {
+    "A": 12605,
+    "B": 68401,
+    "C": 70785
+  },
+  "challenge_summary": {
+    "mutants": 14,
+    "behavior_changing_mutants": 11,
+    "flagged_by_checker": 7,
+    "behavior_changing_but_not_flagged": [
+      "boundary_in_hole",
+      "authorization_bypass_in_hole",
+      "validation_gutted_in_hole",
+      "overdraft_in_hole",
+      "signature_check_swapped_args"
+    ],
+    "flagged_planned_structure_changes": "6/6",
+    "flagged_hole_changes": "1/7",
+    "template_wav_changed_by_any_code_mutation": false,
+    "distinct_deviation_wavs_among_flagged": 1,
+    "flagged_mutants_grouped_by_identical_deviation_wav": [
+      [
+        "boundary_le_to_lt_fixed",
+        "remove_authorization",
+        "wrong_call_order",
+        "swap_branches",
+        "return_before_validation",
+        "unexpected_import",
+        "unlisted_call_in_hole"
+      ]
+    ]
+  },
+  "music_probe_summary": {
+    "code_semantics_changes_with_identical_audio": 5,
+    "of": 5,
+    "benchmark_scores_whose_kind_sequence_decodes_exactly": 10,
+    "pitch_mapping": {
+      "function": 60,
+      "validate": 62,
+      "branch": 64,
+      "loop": 65,
+      "call": 67,
+      "raise": 69,
+      "return": 71,
+      "hole": 72,
+      "assign": 74
+    }
+  },
+  "notes": [
+    "Token figures are API usage fields recorded in sub-agent transcripts; input tokens include a fixed agent harness overhead (first_call_input_tokens) identical across conditions.",
+    "Logged output_tokens are mid-stream snapshots and only a lower bound; generated_chars is the exact size of text and tool-call inputs the agent produced.",
+    "p-values are exact two-sided sign tests over 10 tasks; no correction for multiple comparisons."
+  ],
+  "sensitivity_majority_served_model_only": {
+    "attempts_in_this_analysis": 57,
+    "analysis": "majority-served-model attempts only (sensitivity)",
+    "by_condition": {
+      "A": {
+        "attempts": 18,
+        "pass_rate": {
+          "mean": 1.0,
+          "sd": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "full_success": {
+          "mean": 1,
+          "sd": 0.0,
+          "min": 1,
+          "max": 1
+        },
+        "security_pass_rate": {
+          "mean": 1.0,
+          "sd": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "requirements_failed": {
+          "mean": 0,
+          "sd": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "sonic_conformant": {
+          "mean": 0,
+          "sd": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "interface_compliant": {
+          "mean": 1,
+          "sd": 0.0,
+          "min": 1,
+          "max": 1
+        },
+        "input_tokens_sum": {
+          "mean": 241877.1667,
+          "sd": 54847.5453,
+          "min": 218498,
+          "max": 392527
+        },
+        "context_growth_tokens": {
+          "mean": 6468.5556,
+          "sd": 586.1614,
+          "min": 5780,
+          "max": 7831
+        },
+        "prompt_chars": {
+          "mean": 2582,
+          "sd": 301.2068,
+          "min": 2166,
+          "max": 3179
+        },
+        "generated_chars": {
+          "mean": 3655.2222,
+          "sd": 856.1261,
+          "min": 2466,
+          "max": 5293
+        },
+        "model_calls": {
+          "mean": 4.3889,
+          "sd": 0.951,
+          "min": 4,
+          "max": 7
+        },
+        "tool_calls": {
+          "mean": 4.5,
+          "sd": 0.9574,
+          "min": 4,
+          "max": 7
+        },
+        "bash_calls": {
+          "mean": 1.0556,
+          "sd": 0.2291,
+          "min": 1,
+          "max": 2
+        },
+        "duration_s": {
+          "mean": 31.4189,
+          "sd": 5.0558,
+          "min": 24.13,
+          "max": 42.69
+        },
+        "subagent_tokens": {
+          "mean": 57604.5556,
+          "sd": 616.3998,
+          "min": 56782,
+          "max": 58977
+        },
+        "full_successes": 18,
+        "isolation_violations": 0,
+        "opened_template_wav": 0,
+        "syntax_or_collection_failures": 0
+      },
+      "B": {
+        "attempts": 19,
+        "pass_rate": {
+          "mean": 1.0,
+          "sd": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "full_success": {
+          "mean": 1,
+          "sd": 0.0,
+          "min": 1,
+          "max": 1
+        },
+        "security_pass_rate": {
+          "mean": 1.0,
+          "sd": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "requirements_failed": {
+          "mean": 0,
+          "sd": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "sonic_conformant": {
+          "mean": 1,
+          "sd": 0.0,
+          "min": 1,
+          "max": 1
+        },
+        "interface_compliant": {
+          "mean": 1,
+          "sd": 0.0,
+          "min": 1,
+          "max": 1
+        },
+        "input_tokens_sum": {
+          "mean": 292516.9474,
+          "sd": 49291.3111,
+          "min": 223757,
+          "max": 359045
+        },
+        "context_growth_tokens": {
+          "mean": 9128.4737,
+          "sd": 1373.9456,
+          "min": 7605,
+          "max": 13184
+        },
+        "prompt_chars": {
+          "mean": 8200.5789,
+          "sd": 1532.6388,
+          "min": 6685,
+          "max": 11548
+        },
+        "generated_chars": {
+          "mean": 3794.9474,
+          "sd": 1159.688,
+          "min": 2600,
+          "max": 7648
+        },
+        "model_calls": {
+          "mean": 5.1053,
+          "sd": 0.7877,
+          "min": 4,
+          "max": 6
+        },
+        "tool_calls": {
+          "mean": 5.1053,
+          "sd": 0.7877,
+          "min": 4,
+          "max": 6
+        },
+        "bash_calls": {
+          "mean": 1.1579,
+          "sd": 0.4881,
+          "min": 1,
+          "max": 3
+        },
+        "duration_s": {
+          "mean": 35.8763,
+          "sd": 10.368,
+          "min": 27.54,
+          "max": 69.7
+        },
+        "subagent_tokens": {
+          "mean": 60295.1579,
+          "sd": 1413.669,
+          "min": 58743,
+          "max": 64475
+        },
+        "full_successes": 19,
+        "isolation_violations": 0,
+        "opened_template_wav": 0,
+        "syntax_or_collection_failures": 0
+      },
+      "C": {
+        "attempts": 20,
+        "pass_rate": {
+          "mean": 1.0,
+          "sd": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "full_success": {
+          "mean": 1,
+          "sd": 0.0,
+          "min": 1,
+          "max": 1
+        },
+        "security_pass_rate": {
+          "mean": 1.0,
+          "sd": 0.0,
+          "min": 1.0,
+          "max": 1.0
+        },
+        "requirements_failed": {
+          "mean": 0,
+          "sd": 0.0,
+          "min": 0,
+          "max": 0
+        },
+        "sonic_conformant": {
+          "mean": 1,
+          "sd": 0.0,
+          "min": 1,
+          "max": 1
+        },
+        "interface_compliant": {
+          "mean": 1,
+          "sd": 0.0,
+          "min": 1,
+          "max": 1
+        },
+        "input_tokens_sum": {
+          "mean": 307716.55,
+          "sd": 64122.7568,
+          "min": 224147,
+          "max": 411357
+        },
+        "context_growth_tokens": {
+          "mean": 9510.5,
+          "sd": 1427.1656,
+          "min": 7784,
+          "max": 13011
+        },
+        "prompt_chars": {
+          "mean": 8390.5,
+          "sd": 1533.8821,
+          "min": 6903,
+          "max": 11864
+        },
+        "generated_chars": {
+          "mean": 4147.8,
+          "sd": 1162.8223,
+          "min": 2693,
+          "max": 6918
+        },
+        "model_calls": {
+          "mean": 5.35,
+          "sd": 1.0618,
+          "min": 4,
+          "max": 7
+        },
+        "tool_calls": {
+          "mean": 5.65,
+          "sd": 1.1948,
+          "min": 4,
+          "max": 8
+        },
+        "bash_calls": {
+          "mean": 1.2,
+          "sd": 0.4,
+          "min": 1,
+          "max": 2
+        },
+        "duration_s": {
+          "mean": 38.7405,
+          "sd": 8.9327,
+          "min": 28.34,
+          "max": 59.1
+        },
+        "subagent_tokens": {
+          "mean": 60751.15,
+          "sd": 1431.0494,
+          "min": 59173,
+          "max": 64287
+        },
+        "full_successes": 20,
+        "isolation_violations": 0,
+        "opened_template_wav": 0,
+        "syntax_or_collection_failures": 0
+      }
+    },
+    "paired_per_task": {
+      "B_minus_A": {
+        "pass_rate": {
+          "tasks": 10,
+          "mean_diff": 0.0,
+          "bootstrap95_over_tasks": [
+            0.0,
+            0.0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "full_success": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "security_pass_rate": {
+          "tasks": 10,
+          "mean_diff": 0.0,
+          "bootstrap95_over_tasks": [
+            0.0,
+            0.0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "requirements_failed": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "sonic_conformant": {
+          "tasks": 10,
+          "mean_diff": 1,
+          "bootstrap95_over_tasks": [
+            1,
+            1
+          ],
+          "sign_test": {
+            "positive": 10,
+            "negative": 0,
+            "ties": 0,
+            "p_two_sided": 0.002
+          }
+        },
+        "interface_compliant": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "input_tokens_sum": {
+          "tasks": 10,
+          "mean_diff": 52397.75,
+          "bootstrap95_over_tasks": [
+            24382.8,
+            80888.45
+          ],
+          "sign_test": {
+            "positive": 9,
+            "negative": 1,
+            "ties": 0,
+            "p_two_sided": 0.0215
+          }
+        },
+        "context_growth_tokens": {
+          "tasks": 10,
+          "mean_diff": 2631.65,
+          "bootstrap95_over_tasks": [
+            2139.45,
+            3174.85
+          ],
+          "sign_test": {
+            "positive": 10,
+            "negative": 0,
+            "ties": 0,
+            "p_two_sided": 0.002
+          }
+        },
+        "prompt_chars": {
+          "tasks": 10,
+          "mean_diff": 5579.6,
+          "bootstrap95_over_tasks": [
+            4852.8,
+            6422.1
+          ],
+          "sign_test": {
+            "positive": 10,
+            "negative": 0,
+            "ties": 0,
+            "p_two_sided": 0.002
+          }
+        },
+        "generated_chars": {
+          "tasks": 10,
+          "mean_diff": 61.15,
+          "bootstrap95_over_tasks": [
+            -316.65,
+            451.45
+          ],
+          "sign_test": {
+            "positive": 5,
+            "negative": 5,
+            "ties": 0,
+            "p_two_sided": 1.0
+          }
+        },
+        "model_calls": {
+          "tasks": 10,
+          "mean_diff": 0.75,
+          "bootstrap95_over_tasks": [
+            0.25,
+            1.25
+          ],
+          "sign_test": {
+            "positive": 9,
+            "negative": 1,
+            "ties": 0,
+            "p_two_sided": 0.0215
+          }
+        },
+        "tool_calls": {
+          "tasks": 10,
+          "mean_diff": 0.65,
+          "bootstrap95_over_tasks": [
+            0.2,
+            1.05
+          ],
+          "sign_test": {
+            "positive": 9,
+            "negative": 1,
+            "ties": 0,
+            "p_two_sided": 0.0215
+          }
+        },
+        "bash_calls": {
+          "tasks": 10,
+          "mean_diff": 0.1,
+          "bootstrap95_over_tasks": [
+            -0.1,
+            0.35
+          ],
+          "sign_test": {
+            "positive": 2,
+            "negative": 1,
+            "ties": 7,
+            "p_two_sided": 1.0
+          }
+        },
+        "duration_s": {
+          "tasks": 10,
+          "mean_diff": 3.9845,
+          "bootstrap95_over_tasks": [
+            0.4385,
+            7.9695
+          ],
+          "sign_test": {
+            "positive": 6,
+            "negative": 4,
+            "ties": 0,
+            "p_two_sided": 0.7539
+          }
+        },
+        "subagent_tokens": {
+          "tasks": 10,
+          "mean_diff": 2656.05,
+          "bootstrap95_over_tasks": [
+            2160.85,
+            3208.65
+          ],
+          "sign_test": {
+            "positive": 10,
+            "negative": 0,
+            "ties": 0,
+            "p_two_sided": 0.002
+          }
+        }
+      },
+      "C_minus_A": {
+        "pass_rate": {
+          "tasks": 10,
+          "mean_diff": 0.0,
+          "bootstrap95_over_tasks": [
+            0.0,
+            0.0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "full_success": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "security_pass_rate": {
+          "tasks": 10,
+          "mean_diff": 0.0,
+          "bootstrap95_over_tasks": [
+            0.0,
+            0.0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "requirements_failed": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "sonic_conformant": {
+          "tasks": 10,
+          "mean_diff": 1,
+          "bootstrap95_over_tasks": [
+            1,
+            1
+          ],
+          "sign_test": {
+            "positive": 10,
+            "negative": 0,
+            "ties": 0,
+            "p_two_sided": 0.002
+          }
+        },
+        "interface_compliant": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "input_tokens_sum": {
+          "tasks": 10,
+          "mean_diff": 68043.95,
+          "bootstrap95_over_tasks": [
+            10577.0,
+            121340.7
+          ],
+          "sign_test": {
+            "positive": 9,
+            "negative": 1,
+            "ties": 0,
+            "p_two_sided": 0.0215
+          }
+        },
+        "context_growth_tokens": {
+          "tasks": 10,
+          "mean_diff": 3047.35,
+          "bootstrap95_over_tasks": [
+            2475.5,
+            3666.15
+          ],
+          "sign_test": {
+            "positive": 10,
+            "negative": 0,
+            "ties": 0,
+            "p_two_sided": 0.002
+          }
+        },
+        "prompt_chars": {
+          "tasks": 10,
+          "mean_diff": 5818,
+          "bootstrap95_over_tasks": [
+            5078.8,
+            6679.1
+          ],
+          "sign_test": {
+            "positive": 10,
+            "negative": 0,
+            "ties": 0,
+            "p_two_sided": 0.002
+          }
+        },
+        "generated_chars": {
+          "tasks": 10,
+          "mean_diff": 458.55,
+          "bootstrap95_over_tasks": [
+            -21.9,
+            959.9
+          ],
+          "sign_test": {
+            "positive": 7,
+            "negative": 3,
+            "ties": 0,
+            "p_two_sided": 0.3438
+          }
+        },
+        "model_calls": {
+          "tasks": 10,
+          "mean_diff": 1.0,
+          "bootstrap95_over_tasks": [
+            0.0,
+            1.9
+          ],
+          "sign_test": {
+            "positive": 7,
+            "negative": 1,
+            "ties": 2,
+            "p_two_sided": 0.0703
+          }
+        },
+        "tool_calls": {
+          "tasks": 10,
+          "mean_diff": 1.2,
+          "bootstrap95_over_tasks": [
+            0.65,
+            1.8
+          ],
+          "sign_test": {
+            "positive": 8,
+            "negative": 0,
+            "ties": 2,
+            "p_two_sided": 0.0078
+          }
+        },
+        "bash_calls": {
+          "tasks": 10,
+          "mean_diff": 0.15,
+          "bootstrap95_over_tasks": [
+            -0.1,
+            0.4
+          ],
+          "sign_test": {
+            "positive": 3,
+            "negative": 1,
+            "ties": 6,
+            "p_two_sided": 0.625
+          }
+        },
+        "duration_s": {
+          "tasks": 10,
+          "mean_diff": 7.201,
+          "bootstrap95_over_tasks": [
+            4.001,
+            10.906
+          ],
+          "sign_test": {
+            "positive": 9,
+            "negative": 1,
+            "ties": 0,
+            "p_two_sided": 0.0215
+          }
+        },
+        "subagent_tokens": {
+          "tasks": 10,
+          "mean_diff": 3148.75,
+          "bootstrap95_over_tasks": [
+            2601.55,
+            3765.75
+          ],
+          "sign_test": {
+            "positive": 10,
+            "negative": 0,
+            "ties": 0,
+            "p_two_sided": 0.002
+          }
+        }
+      },
+      "C_minus_B": {
+        "pass_rate": {
+          "tasks": 10,
+          "mean_diff": 0.0,
+          "bootstrap95_over_tasks": [
+            0.0,
+            0.0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "full_success": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "security_pass_rate": {
+          "tasks": 10,
+          "mean_diff": 0.0,
+          "bootstrap95_over_tasks": [
+            0.0,
+            0.0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "requirements_failed": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "sonic_conformant": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "interface_compliant": {
+          "tasks": 10,
+          "mean_diff": 0,
+          "bootstrap95_over_tasks": [
+            0,
+            0
+          ],
+          "sign_test": {
+            "positive": 0,
+            "negative": 0,
+            "ties": 10,
+            "p_two_sided": 1.0
+          }
+        },
+        "input_tokens_sum": {
+          "tasks": 10,
+          "mean_diff": 15646.2,
+          "bootstrap95_over_tasks": [
+            -22686.65,
+            57377.45
+          ],
+          "sign_test": {
+            "positive": 7,
+            "negative": 3,
+            "ties": 0,
+            "p_two_sided": 0.3438
+          }
+        },
+        "context_growth_tokens": {
+          "tasks": 10,
+          "mean_diff": 415.7,
+          "bootstrap95_over_tasks": [
+            143.75,
+            654.75
+          ],
+          "sign_test": {
+            "positive": 8,
+            "negative": 2,
+            "ties": 0,
+            "p_two_sided": 0.1094
+          }
+        },
+        "prompt_chars": {
+          "tasks": 10,
+          "mean_diff": 238.4,
+          "bootstrap95_over_tasks": [
+            223,
+            259
+          ],
+          "sign_test": {
+            "positive": 10,
+            "negative": 0,
+            "ties": 0,
+            "p_two_sided": 0.002
+          }
+        },
+        "generated_chars": {
+          "tasks": 10,
+          "mean_diff": 397.4,
+          "bootstrap95_over_tasks": [
+            192.35,
+            603.45
+          ],
+          "sign_test": {
+            "positive": 9,
+            "negative": 1,
+            "ties": 0,
+            "p_two_sided": 0.0215
+          }
+        },
+        "model_calls": {
+          "tasks": 10,
+          "mean_diff": 0.25,
+          "bootstrap95_over_tasks": [
+            -0.4,
+            0.95
+          ],
+          "sign_test": {
+            "positive": 6,
+            "negative": 3,
+            "ties": 1,
+            "p_two_sided": 0.5078
+          }
+        },
+        "tool_calls": {
+          "tasks": 10,
+          "mean_diff": 0.55,
+          "bootstrap95_over_tasks": [
+            -0.05,
+            1.15
+          ],
+          "sign_test": {
+            "positive": 7,
+            "negative": 2,
+            "ties": 1,
+            "p_two_sided": 0.1797
+          }
+        },
+        "bash_calls": {
+          "tasks": 10,
+          "mean_diff": 0.05,
+          "bootstrap95_over_tasks": [
+            -0.25,
+            0.35
+          ],
+          "sign_test": {
+            "positive": 2,
+            "negative": 1,
+            "ties": 7,
+            "p_two_sided": 1.0
+          }
+        },
+        "duration_s": {
+          "tasks": 10,
+          "mean_diff": 3.2165,
+          "bootstrap95_over_tasks": [
+            0.9375,
+            5.385
+          ],
+          "sign_test": {
+            "positive": 8,
+            "negative": 2,
+            "ties": 0,
+            "p_two_sided": 0.1094
+          }
+        },
+        "subagent_tokens": {
+          "tasks": 10,
+          "mean_diff": 492.7,
+          "bootstrap95_over_tasks": [
+            219.4,
+            722.5
+          ],
+          "sign_test": {
+            "positive": 9,
+            "negative": 1,
+            "ties": 0,
+            "p_two_sided": 0.0215
+          }
+        }
+      }
+    }
+  }
+}

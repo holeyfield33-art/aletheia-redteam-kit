@@ -1,0 +1,39 @@
+{
+  "format": "sonic-template-conformance-v1",
+  "compliant": false,
+  "issues": [
+    {
+      "path": "access.py",
+      "function": "perform",
+      "kind": "body_changed",
+      "message": "Required structure/order differs, or a hole exceeds its allowed calls/control flow",
+      "expected": "def perform(user: dict, action: str, owner: str, audit: list) -> str:\n    if not is_allowed(user, action, owner):\n        raise PermissionError('denied')\n    raise NotImplementedError('__SONIC_HOLE__:Append f\"{user[\\'name\\']}:{action}:{owner}\" to audit')\n    return 'ok'",
+      "actual": "--- planned\n+++ observed\n@@ -1,5 +1,3 @@\n def perform(user: dict, action: str, owner: str, audit: list) -> str:\n-    if not is_allowed(user, action, owner):\n-        raise PermissionError('denied')\n-    raise NotImplementedError('__SONIC_HOLE__:Append f\"{user[\\'name\\']}:{action}:{owner}\" to audit')\n+    audit.append(f\"{user['name']}:{action}:{owner}\")\n     return 'ok'"
+    }
+  ],
+  "unresolved_holes": [],
+  "score_sha256": "c742d8d1fd166c7e818040af09741c7da7f7fbc54da9a9dd4e8ea28babe3fed7",
+  "scope": {
+    "declared_files": [
+      "roles.py",
+      "access.py"
+    ],
+    "excluded_directory_names": [
+      ".git",
+      ".venv",
+      "venv",
+      "node_modules",
+      "__pycache__",
+      ".pytest_cache",
+      ".ruff_cache"
+    ]
+  },
+  "limitations": [
+    "This checks Python AST structure against an unsigned plan, not runtime behavior or security.",
+    "Validation/authorization labels do not prove that their called functions enforce those properties.",
+    "Holes allow only listed calls and forbid early return/raise, imports and new definitions.",
+    "Names may be rebound at runtime; matching calls are syntactic, not resolved targets.",
+    "Live scans are not atomic; use a quiescent checkout.",
+    "Audio repeats structural tokens once; it does not simulate branches or loop execution."
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "exported_score_contains_pitch_fields": false,
+  "composer_export_code": "download handler serialises JSON.stringify(score) (demos/templates/composer.html line 59); pitches come from a fixed kind->MIDI table (line 31)",
+  "events_json_contains_notes": true,
+  "distinct_notes_in_events": [
+    60,
+    64,
+    69,
+    71,
+    72
+  ],
+  "note_is_function_of_kind_only": true
+}

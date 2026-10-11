@@ -1,0 +1,29 @@
+{
+  "format": "sonic-template-conformance-v1",
+  "compliant": true,
+  "issues": [],
+  "unresolved_holes": [],
+  "score_sha256": "8ae92c4870c469ce3a7204774feae3e70bd2f10d0c00cc6f2a50d570f9480d7a",
+  "scope": {
+    "declared_files": [
+      "ledger.py"
+    ],
+    "excluded_directory_names": [
+      ".git",
+      ".venv",
+      "venv",
+      "node_modules",
+      "__pycache__",
+      ".pytest_cache",
+      ".ruff_cache"
+    ]
+  },
+  "limitations": [
+    "This checks Python AST structure against an unsigned plan, not runtime behavior or security.",
+    "Validation/authorization labels do not prove that their called functions enforce those properties.",
+    "Holes allow only listed calls and forbid early return/raise, imports and new definitions.",
+    "Names may be rebound at runtime; matching calls are syntactic, not resolved targets.",
+    "Live scans are not atomic; use a quiescent checkout.",
+    "Audio repeats structural tokens once; it does not simulate branches or loop execution."
+  ]
+}

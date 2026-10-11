@@ -1,0 +1,97 @@
+/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/venv/bin/python -m pytest -q -rA -p no:cacheprovider --basetemp /tmp/tmp9fnj9umh/bt
+
+........................................................................ [ 80%]
+..................                                                       [100%]
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_audio.py::test_audio_is_deterministic_and_stereo_channels_match_mono
+PASSED tests/test_audio.py::test_changed_module_does_not_shift_or_normalize_unrelated_audio
+PASSED tests/test_cli_sonar.py::test_cli_freezes_silent_baseline_then_reports_added_function
+PASSED tests/test_evaluation.py::test_explicit_security_witnesses_and_benign_control
+PASSED tests/test_evaluation.py::test_rank_preserves_ties_and_uses_raw_feature_ablation
+PASSED tests/test_evaluation.py::test_full_evaluation_truth_and_collision_without_resynthesizing_audio
+PASSED tests/test_integrity.py::test_scanner_rejects_hardlinked_alias_of_an_external_file
+PASSED tests/test_integrity.py::test_malformed_crypto_input_fails_with_integrity_error[signature]
+PASSED tests/test_integrity.py::test_malformed_crypto_input_fails_with_integrity_error[public_key]
+PASSED tests/test_integrity.py::test_baseline_authenticates_exact_bytes_with_external_key
+PASSED tests/test_integrity.py::test_payload_tampering_is_rejected_even_when_hash_is_recomputed
+PASSED tests/test_integrity.py::test_wrong_trusted_key_is_rejected
+PASSED tests/test_integrity.py::test_baseline_cannot_supply_its_own_trust_anchor
+PASSED tests/test_integrity.py::test_keys_and_baselines_must_be_outside_repository[key]
+PASSED tests/test_integrity.py::test_keys_and_baselines_must_be_outside_repository[baseline]
+PASSED tests/test_integrity.py::test_scanner_covers_binary_hidden_functionless_and_invalid_python
+PASSED tests/test_integrity.py::test_scanning_does_not_execute_repository_python
+PASSED tests/test_integrity.py::test_symlink_outside_repository_is_rejected[False]
+PASSED tests/test_integrity.py::test_symlink_outside_repository_is_rejected[True]
+PASSED tests/test_integrity.py::test_exact_gate_for_byte_addition_removal_and_syntax_changes[unchanged]
+PASSED tests/test_integrity.py::test_exact_gate_for_byte_addition_removal_and_syntax_changes[modified]
+PASSED tests/test_integrity.py::test_exact_gate_for_byte_addition_removal_and_syntax_changes[added]
+PASSED tests/test_integrity.py::test_exact_gate_for_byte_addition_removal_and_syntax_changes[removed]
+PASSED tests/test_integrity.py::test_exact_gate_for_byte_addition_removal_and_syntax_changes[cosmetic]
+PASSED tests/test_integrity.py::test_exact_gate_for_byte_addition_removal_and_syntax_changes[invalid]
+PASSED tests/test_integrity.py::test_musical_collision_never_passes_exact_integrity_gate
+PASSED tests/test_integrity.py::test_invalid_baseline_signature_produces_no_report
+PASSED tests/test_sonar.py::test_aligned_sonar_keeps_unchanged_slots_exactly_silent
+PASSED tests/test_sonar.py::test_every_change_status_produces_a_bounded_deterministic_ping[added]
+PASSED tests/test_sonar.py::test_every_change_status_produces_a_bounded_deterministic_ping[modified]
+PASSED tests/test_sonar.py::test_every_change_status_produces_a_bounded_deterministic_ping[removed]
+PASSED tests/test_sonar.py::test_compact_sonar_removes_silent_slots_but_preserves_ping_order
+PASSED tests/test_sonar.py::test_no_changes_produce_valid_complete_silence[False-3-3]
+PASSED tests/test_sonar.py::test_no_changes_produce_valid_complete_silence[False-0-1]
+PASSED tests/test_sonar.py::test_no_changes_produce_valid_complete_silence[True-3-1]
+PASSED tests/test_sonar.py::test_renderer_rejects_unknown_event_status
+PASSED tests/test_sonar.py::test_renderer_rejects_negative_slot_count
+PASSED tests/test_sonar.py::test_renderer_rejects_duration_that_disagrees_with_module_timestamps
+PASSED tests/test_sonar.py::test_exact_gate_events_and_stereo_silence_agree[added]
+PASSED tests/test_sonar.py::test_exact_gate_events_and_stereo_silence_agree[modified]
+PASSED tests/test_sonar.py::test_exact_gate_events_and_stereo_silence_agree[removed]
+PASSED tests/test_sonar.py::test_matching_authenticated_baseline_is_silent_in_all_sonar_outputs
+PASSED tests/test_sonar.py::test_musical_collision_still_triggers_exact_byte_sonar_alert
+PASSED tests/test_sonar.py::test_invalid_signature_creates_no_sonar_or_report_output
+PASSED tests/test_sonar_demo.py::test_sonar_demo_silent_baseline_and_all_changed_modules_ping
+PASSED tests/test_structure.py::test_async_and_module_checks_are_extracted
+PASSED tests/test_structure.py::test_cosmetic_comments_and_whitespace_preserve_structural_features
+PASSED tests/test_structure.py::test_auth_bypass_with_identical_statement_shape_changes_semantic_digest
+PASSED tests/test_structure.py::test_condition_operator_changes_are_localizable[!=]
+PASSED tests/test_structure.py::test_condition_operator_changes_are_localizable[>=]
+PASSED tests/test_structure.py::test_condition_operator_changes_are_localizable[is]
+PASSED tests/test_structure.py::test_removing_validation_changes_calls_and_checks
+PASSED tests/test_structure.py::test_top_level_literal_change_is_detected_without_functions
+PASSED tests/test_structure.py::test_dependency_pin_change_is_identified
+PASSED tests/test_structure.py::test_syntax_errors_are_flagged_and_do_not_block_byte_coverage
+PASSED tests/test_templates.py::test_compiler_preserves_exact_structure_and_marks_unfinished_work
+PASSED tests/test_templates.py::test_filling_hole_and_comments_preserves_plan_and_behavior
+PASSED tests/test_templates.py::test_holes_reject_undeclared_calls_definitions_and_early_control_flow[return 0]
+PASSED tests/test_templates.py::test_holes_reject_undeclared_calls_definitions_and_early_control_flow[receipt = eval(str(amount))]
+PASSED tests/test_templates.py::test_holes_reject_undeclared_calls_definitions_and_early_control_flow[import os\n    receipt = amount]
+PASSED tests/test_templates.py::test_holes_reject_undeclared_calls_definitions_and_early_control_flow[def require_positive(amount):\n        pass\n    receipt = amount]
+PASSED tests/test_templates.py::test_holes_reject_undeclared_calls_definitions_and_early_control_flow[receipt = (lambda: 1)()]
+PASSED tests/test_templates.py::test_holes_reject_undeclared_calls_definitions_and_early_control_flow[raise ValueError('skip')]
+PASSED tests/test_templates.py::test_holes_reject_undeclared_calls_definitions_and_early_control_flow[global receipt\n    receipt = amount]
+PASSED tests/test_templates.py::test_checker_flags_pinned_changes_without_executing_source[<lambda>-body_changed0]
+PASSED tests/test_templates.py::test_checker_flags_pinned_changes_without_executing_source[<lambda>-body_changed1]
+PASSED tests/test_templates.py::test_checker_flags_pinned_changes_without_executing_source[<lambda>-imports_changed]
+PASSED tests/test_templates.py::test_checker_flags_pinned_changes_without_executing_source[<lambda>-signature_changed]
+PASSED tests/test_templates.py::test_checker_flags_pinned_changes_without_executing_source[<lambda>-missing_module]
+PASSED tests/test_templates.py::test_checker_flags_pinned_changes_without_executing_source[<lambda>-unexpected_file]
+PASSED tests/test_templates.py::test_checker_flags_pinned_changes_without_executing_source[<lambda>-unexpected_function]
+PASSED tests/test_templates.py::test_checker_flags_pinned_changes_without_executing_source[<lambda>-unexpected_top_level]
+PASSED tests/test_templates.py::test_declared_hole_call_is_allowed_but_nested_extra_call_is_not
+PASSED tests/test_templates.py::test_wrong_but_conforming_implementation_is_not_a_behavior_guarantee
+PASSED tests/test_templates.py::test_score_rejects_unsafe_or_ambiguous_module_paths[../escape.py]
+PASSED tests/test_templates.py::test_score_rejects_unsafe_or_ambiguous_module_paths[/absolute.py]
+PASSED tests/test_templates.py::test_score_rejects_unsafe_or_ambiguous_module_paths[pkg\\escape.py]
+PASSED tests/test_templates.py::test_score_rejects_unsafe_or_ambiguous_module_paths[C:/escape.py]
+PASSED tests/test_templates.py::test_score_rejects_unsafe_or_ambiguous_module_paths[pkg/../escape.py]
+PASSED tests/test_templates.py::test_score_rejects_unsafe_or_ambiguous_module_paths[CON.py]
+PASSED tests/test_templates.py::test_score_rejects_unsafe_or_ambiguous_module_paths[pkg//app.py]
+PASSED tests/test_templates.py::test_unknown_fields_duplicate_paths_and_executable_annotations_are_rejected
+PASSED tests/test_templates.py::test_nonstring_node_kind_is_rejected_as_a_score_error
+PASSED tests/test_templates.py::test_nested_branch_loop_and_exact_metadata_roundtrip
+PASSED tests/test_templates.py::test_audio_is_deterministic_and_conforming_report_is_silent
+PASSED tests/test_templates.py::test_build_bundle_handoff_cli_exit_codes_and_no_overwrite
+PASSED tests/test_templates.py::test_composer_escapes_script_content_and_never_evaluates_code
+PASSED tests/test_templates.py::test_composer_edits_exports_and_schedules_notes_in_javascript_harness
+PASSED tests/test_templates.py::test_duplicate_json_fields_fail_instead_of_silently_overwriting
+PASSED tests/test_templates.py::test_full_controlled_demo_reports_real_checks_without_llm_claim
+90 passed in 1.45s

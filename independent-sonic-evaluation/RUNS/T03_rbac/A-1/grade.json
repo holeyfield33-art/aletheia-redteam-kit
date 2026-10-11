@@ -1,0 +1,29 @@
+{
+  "task": "T03_rbac",
+  "tests_total": 13,
+  "tests_passed": 13,
+  "pass_rate": 1.0,
+  "full_success": true,
+  "failed_tests": {},
+  "requirements_failed": [],
+  "requirements_failed_high": [],
+  "requirements_failed_medium": [],
+  "security_tests_total": 8,
+  "security_tests_passed": 8,
+  "syntax_errors": [],
+  "collection_error": false,
+  "timeout": false,
+  "runtime_error_tests": [],
+  "sonic_conformance": {
+    "compliant": false,
+    "issue_kinds": [
+      "body_changed",
+      "unexpected_top_level"
+    ],
+    "issues": 3,
+    "unresolved_holes": 0
+  },
+  "interface_problems": [],
+  "interface_compliant": true,
+  "pytest_tail": ".............                                                            [100%]\n13 passed in 0.03s\n"
+}

@@ -1,0 +1,11 @@
+{
+  "run_id": "run-20",
+  "total_tokens": 59631,
+  "tool_uses": 5,
+  "duration_ms": 37215,
+  "workspace_files_outside_repo_scratch": [
+    "HANDOFF.md",
+    "spec.json"
+  ],
+  "source": "Agent tool completion record (verbatim)"
+}

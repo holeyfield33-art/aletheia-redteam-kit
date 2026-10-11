@@ -1,0 +1,143 @@
+{
+  "runs": [
+    {
+      "cmd": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/venv/bin/python -m sonic_templates --help",
+      "returncode": 0,
+      "stdout": "usage: __main__.py [-h] {build,check,composer,demo} ...\n\nCompose and check exact Python templates with an audible view\n\npositional arguments:\n  {build,check,composer,demo}\n\noptions:\n  -h, --help            show this help message and exit\n",
+      "stderr": "",
+      "expected_returncode": 0,
+      "ok": true
+    },
+    {
+      "cmd": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/venv/bin/python -m sonic_templates demo --out /tmp/tmp9fnj9umh/demo",
+      "returncode": 0,
+      "stdout": "{\n  \"cases\": 10,\n  \"verdict\": \"Templates generate code scaffolds and detect tested structural deviations. No audio or LLM performance advantage is established.\",\n  \"demo\": \"/tmp/tmp9fnj9umh/demo/index.html\"\n}\n",
+      "stderr": "",
+      "expected_returncode": 0,
+      "ok": true
+    },
+    {
+      "cmd": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/venv/bin/python -m sonic_templates build /home/user/aletheia-redteam-kit/independent-sonic-evaluation/TASKS/T03_rbac/score.json --out /tmp/tmp9fnj9umh/build",
+      "returncode": 0,
+      "stdout": "{\n  \"files\": [\n    \"roles.py\",\n    \"access.py\"\n  ],\n  \"repo\": \"/tmp/tmp9fnj9umh/build/repo\",\n  \"handoff\": \"/tmp/tmp9fnj9umh/build/AGENT_HANDOFF.md\",\n  \"events\": 15\n}\n",
+      "stderr": "",
+      "expected_returncode": 0,
+      "ok": true
+    },
+    {
+      "cmd": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/venv/bin/python -m sonic_templates check /tmp/tmp9fnj9umh/build/score.json /tmp/tmp9fnj9umh/build/repo --out /tmp/tmp9fnj9umh/check1",
+      "returncode": 1,
+      "stdout": "{\n  \"compliant\": false,\n  \"issues\": 3,\n  \"report\": \"/tmp/tmp9fnj9umh/check1/report.html\"\n}\n",
+      "stderr": "",
+      "expected_returncode": 1,
+      "ok": true
+    },
+    {
+      "cmd": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/venv/bin/python -m sonic_templates build /home/user/aletheia-redteam-kit/independent-sonic-evaluation/TASKS/T03_rbac/score.json --out /tmp/tmp9fnj9umh/build",
+      "returncode": 2,
+      "stdout": "",
+      "stderr": "Template operation failed: Build output must be a new directory; existing projects are never replaced\n",
+      "expected_returncode": 2,
+      "ok": true
+    },
+    {
+      "cmd": "/tmp/claude-0/-home-user-aletheia-redteam-kit/fe51d682-0577-53e5-8f5b-f05cb53542c4/scratchpad/venv/bin/python -m sonic_templates build /tmp/tmp9fnj9umh/bad.json --out /tmp/tmp9fnj9umh/bad",
+      "returncode": 2,
+      "stdout": "",
+      "stderr": "Template operation failed: Module paths must be normalized relative .py paths\n",
+      "expected_returncode": 2,
+      "ok": true
+    }
+  ],
+  "demo_results": {
+    "format": "sonic-template-demo-v1",
+    "cases": [
+      {
+        "name": "filled_as_planned",
+        "compliant": true,
+        "issues": 0,
+        "report": "cases/filled_as_planned/comparison/report.html"
+      },
+      {
+        "name": "comments_only",
+        "compliant": true,
+        "issues": 0,
+        "report": "cases/comments_only/comparison/report.html"
+      },
+      {
+        "name": "unfinished_scaffold",
+        "compliant": false,
+        "issues": 1,
+        "report": "cases/unfinished_scaffold/comparison/report.html"
+      },
+      {
+        "name": "missing_validation",
+        "compliant": false,
+        "issues": 1,
+        "report": "cases/missing_validation/comparison/report.html"
+      },
+      {
+        "name": "reordered_checks",
+        "compliant": false,
+        "issues": 1,
+        "report": "cases/reordered_checks/comparison/report.html"
+      },
+      {
+        "name": "changed_guard",
+        "compliant": false,
+        "issues": 1,
+        "report": "cases/changed_guard/comparison/report.html"
+      },
+      {
+        "name": "unexpected_dependency",
+        "compliant": false,
+        "issues": 1,
+        "report": "cases/unexpected_dependency/comparison/report.html"
+      },
+      {
+        "name": "unlisted_hole_call",
+        "compliant": false,
+        "issues": 1,
+        "report": "cases/unlisted_hole_call/comparison/report.html"
+      },
+      {
+        "name": "early_return_in_hole",
+        "compliant": false,
+        "issues": 1,
+        "report": "cases/early_return_in_hole/comparison/report.html"
+      },
+      {
+        "name": "missing_module",
+        "compliant": false,
+        "issues": 1,
+        "report": "cases/missing_module/comparison/report.html"
+      }
+    ],
+    "controlled_behavior": [
+      {
+        "amount": 3,
+        "role": "admin",
+        "outcome": {
+          "return": 300
+        }
+      },
+      {
+        "amount": 0,
+        "role": "admin",
+        "outcome": {
+          "raises": "ValueError"
+        }
+      },
+      {
+        "amount": 3,
+        "role": "guest",
+        "outcome": {
+          "raises": "PermissionError"
+        }
+      }
+    ],
+    "llm_experiment_performed": false,
+    "human_experiment_performed": false,
+    "verdict": "Templates generate code scaffolds and detect tested structural deviations. No audio or LLM performance advantage is established."
+  }
+}

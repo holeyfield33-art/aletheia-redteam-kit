@@ -1,0 +1,8 @@
+{
+  "run_id": "run-34",
+  "total_tokens": 58213,
+  "tool_uses": 5,
+  "duration_ms": 35236,
+  "workspace_files_outside_repo_scratch": [],
+  "source": "Agent tool completion record (verbatim)"
+}

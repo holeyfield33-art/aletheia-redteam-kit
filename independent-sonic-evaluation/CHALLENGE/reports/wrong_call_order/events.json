@@ -1,0 +1,16 @@
+[
+  {
+    "path": "orders.py",
+    "status": "modified",
+    "start_seconds": 0.0,
+    "duration_seconds": 1.2,
+    "issue": {
+      "path": "orders.py",
+      "function": "place_order",
+      "kind": "body_changed",
+      "message": "Required structure/order differs, or a hole exceeds its allowed calls/control flow",
+      "expected": "def place_order(items: list, catalog: dict, region: str, verified: bool) -> dict:\n    if verified is not True:\n        raise PermissionError('unverified user')\n    validate_items(items)\n    sub = subtotal(items, catalog)\n    total = apply_tax(sub, region)\n    return {'subtotal': sub, 'total': total, 'region': region}",
+      "actual": "--- planned\n+++ observed\n@@ -1,7 +1,7 @@\n def place_order(items: list, catalog: dict, region: str, verified: bool) -> dict:\n     if verified is not True:\n         raise PermissionError('unverified user')\n+    sub = subtotal(items, catalog)\n     validate_items(items)\n-    sub = subtotal(items, catalog)\n     total = apply_tax(sub, region)\n     return {'subtotal': sub, 'total': total, 'region': region}"
+    }
+  }
+]

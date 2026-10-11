@@ -1,0 +1,38 @@
+{
+  "format": "sonic-template-conformance-v1",
+  "compliant": false,
+  "issues": [
+    {
+      "path": "pricing.py",
+      "function": "compute_total",
+      "kind": "body_changed",
+      "message": "Required structure/order differs, or a hole exceeds its allowed calls/control flow",
+      "expected": "def compute_total(subtotal_cents: int, tier: str, coupon: str) -> int:\n    if not isinstance(subtotal_cents, int) or isinstance(subtotal_cents, bool):\n        raise TypeError('subtotal_cents must be an int')\n    if subtotal_cents < 0:\n        raise ValueError('subtotal_cents must be non-negative')\n    if tier not in ('basic', 'silver', 'gold'):\n        raise ValueError('unknown tier')\n    if coupon not in ('', 'SAVE10'):\n        raise ValueError('unknown coupon')\n    raise NotImplementedError(\"__SONIC_HOLE__:Set total: apply the tier percentage discount with floor division, then subtract 1000 if coupon == 'SAVE10' and subtotal_cents >= 5000\")\n    return total",
+      "actual": "--- planned\n+++ observed\n@@ -1,4 +1,5 @@\n def compute_total(subtotal_cents: int, tier: str, coupon: str) -> int:\n+    return subtotal_cents\n     if not isinstance(subtotal_cents, int) or isinstance(subtotal_cents, bool):\n         raise TypeError('subtotal_cents must be an int')\n     if subtotal_cents < 0:\n@@ -7,5 +8,8 @@\n         raise ValueError('unknown tier')\n     if coupon not in ('', 'SAVE10'):\n         raise ValueError('unknown coupon')\n-    raise NotImplementedError(\"__SONIC_HOLE__:Set total: apply the tier percentage discount with floor division, then subtract 1000 if coupon == 'SAVE10' and subtotal_cents >= 5000\")\n+    percent = {'basic': 0, 'silver': 5, 'gold': 10}[tier]\n+    total = subtotal_cents - subtotal_cents * percent // 100\n+    if coupon == 'SAVE10' and subtotal_cents >= 5000:\n+        total = total - 1000\n     return total"
+    }
+  ],
+  "unresolved_holes": [],
+  "score_sha256": "96df28c49fa44d8e362ddca3a60030e58453da4a6b729fc009d6d39016d404dc",
+  "scope": {
+    "declared_files": [
+      "pricing.py"
+    ],
+    "excluded_directory_names": [
+      ".git",
+      ".venv",
+      "venv",
+      "node_modules",
+      "__pycache__",
+      ".pytest_cache",
+      ".ruff_cache"
+    ]
+  },
+  "limitations": [
+    "This checks Python AST structure against an unsigned plan, not runtime behavior or security.",
+    "Validation/authorization labels do not prove that their called functions enforce those properties.",
+    "Holes allow only listed calls and forbid early return/raise, imports and new definitions.",
+    "Names may be rebound at runtime; matching calls are syntactic, not resolved targets.",
+    "Live scans are not atomic; use a quiescent checkout.",
+    "Audio repeats structural tokens once; it does not simulate branches or loop execution."
+  ]
+}

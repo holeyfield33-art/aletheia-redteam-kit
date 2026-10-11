@@ -1,0 +1,16 @@
+[
+  {
+    "path": "limiter.py",
+    "status": "modified",
+    "start_seconds": 0.0,
+    "duration_seconds": 1.2,
+    "issue": {
+      "path": "limiter.py",
+      "function": "allow",
+      "kind": "body_changed",
+      "message": "Required structure/order differs, or a hole exceeds its allowed calls/control flow",
+      "expected": "def allow(state: dict, client: str, now: int, limit: int, window: int) -> bool:\n    if limit <= 0 or window <= 0:\n        raise ValueError('limit and window must be positive')\n    raise NotImplementedError(\"__SONIC_HOLE__:Set recent to a new list of the client's timestamps in state that are strictly greater than now - window\")\n    if len(recent) < limit:\n        recent.append(now)\n        raise NotImplementedError('__SONIC_HOLE__:Store recent as state[client]')\n        return True\n    else:\n        raise NotImplementedError('__SONIC_HOLE__:Store recent as state[client]')\n        return False",
+      "actual": "--- planned\n+++ observed\n@@ -1,11 +1,11 @@\n def allow(state: dict, client: str, now: int, limit: int, window: int) -> bool:\n     if limit <= 0 or window <= 0:\n         raise ValueError('limit and window must be positive')\n-    raise NotImplementedError(\"__SONIC_HOLE__:Set recent to a new list of the client's timestamps in state that are strictly greater than now - window\")\n+    recent = [t for t in state.get(client, []) if t > now - window]\n     if len(recent) < limit:\n+        state[client] = recent\n+        return False\n+    else:\n         recent.append(now)\n-        raise NotImplementedError('__SONIC_HOLE__:Store recent as state[client]')\n-        return True\n-    else:\n-        raise NotImplementedError('__SONIC_HOLE__:Store recent as state[client]')\n-        return False+        state[client] = recent\n+        return True"
+    }
+  }
+]

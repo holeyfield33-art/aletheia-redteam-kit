@@ -1,0 +1,16 @@
+[
+  {
+    "path": "access.py",
+    "status": "modified",
+    "start_seconds": 0.0,
+    "duration_seconds": 1.2,
+    "issue": {
+      "path": "access.py",
+      "function": "perform",
+      "kind": "body_changed",
+      "message": "Required structure/order differs, or a hole exceeds its allowed calls/control flow",
+      "expected": "def perform(user: dict, action: str, owner: str, audit: list) -> str:\n    if not is_allowed(user, action, owner):\n        raise PermissionError('denied')\n    raise NotImplementedError('__SONIC_HOLE__:Append f\"{user[\\'name\\']}:{action}:{owner}\" to audit')\n    return 'ok'",
+      "actual": "--- planned\n+++ observed\n@@ -1,5 +1,3 @@\n def perform(user: dict, action: str, owner: str, audit: list) -> str:\n-    if not is_allowed(user, action, owner):\n-        raise PermissionError('denied')\n-    raise NotImplementedError('__SONIC_HOLE__:Append f\"{user[\\'name\\']}:{action}:{owner}\" to audit')\n+    audit.append(f\"{user['name']}:{action}:{owner}\")\n     return 'ok'"
+    }
+  }
+]

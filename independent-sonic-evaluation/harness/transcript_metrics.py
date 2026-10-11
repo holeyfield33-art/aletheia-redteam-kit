@@ -41,17 +41,20 @@ def main(transcript, workspace, run_dir):
     lines = [json.loads(line) for line in Path(transcript).read_text(encoding="utf-8").splitlines() if line.strip()]
     workspace = str(Path(workspace))
     calls, tool_calls, out_lines, model_ids = {}, [], [], set()
+    configured, served = set(), {}
     generated_chars = [0]
     for entry in lines:
         attachment = entry.get("attachment") or {}
         if attachment.get("type") and isinstance(attachment.get("identity"), dict):
             model_ids.add(attachment["identity"].get("modelId", ""))
+            configured.add(attachment["identity"].get("modelId", ""))
         message = entry.get("message") or {}
         role = message.get("role")
         if role == "assistant":
             mid = message.get("id") or entry.get("uuid")
             if message.get("model"):
                 model_ids.add(message["model"])
+                served.setdefault(mid, message["model"])
             usage = message.get("usage") or {}
             # Streamed fragments of one call share an id. Input fields are fixed per call;
             # output_tokens is logged mid-stream, so keep the maximum seen (a lower bound).
@@ -90,6 +93,8 @@ def main(transcript, workspace, run_dir):
     # Isolation audit: any absolute path in a tool input that is not inside this workspace.
     violations = []
     for call in tool_calls:
+        if call["name"] == "SubagentHandback":  # the final prose report, not a file/shell access
+            continue
         blob = json.dumps(call["input"])
         for path in re.findall(r"/(?:tmp|root|home)[^\s\"'`;|&<>)]*", blob):
             if not path.startswith(workspace) and not workspace.startswith(path.rstrip("/")):
@@ -115,6 +120,8 @@ def main(transcript, workspace, run_dir):
         "context_growth_tokens": (per_call[-1]["input_total"] - per_call[0]["input_total"]) if per_call else None,
         "per_call": per_call,
         "model_id_sha256": sorted(hashlib.sha256(m.encode()).hexdigest()[:16] for m in model_ids if m),
+        "configured_model_sha256": sorted(hashlib.sha256(m.encode()).hexdigest()[:16] for m in configured if m),
+        "served_model_sha256_by_call": sorted({hashlib.sha256(m.encode()).hexdigest()[:16] for m in served.values()}),
         "isolation_violations": violations,
         "source": "API usage fields recorded in the sub-agent transcript",
     }

@@ -1,0 +1,16 @@
+[
+  {
+    "path": "pricing.py",
+    "status": "modified",
+    "start_seconds": 0.0,
+    "duration_seconds": 1.2,
+    "issue": {
+      "path": "pricing.py",
+      "function": "compute_total",
+      "kind": "body_changed",
+      "message": "Required structure/order differs, or a hole exceeds its allowed calls/control flow",
+      "expected": "def compute_total(subtotal_cents: int, tier: str, coupon: str) -> int:\n    if not isinstance(subtotal_cents, int) or isinstance(subtotal_cents, bool):\n        raise TypeError('subtotal_cents must be an int')\n    if subtotal_cents < 0:\n        raise ValueError('subtotal_cents must be non-negative')\n    if tier not in ('basic', 'silver', 'gold'):\n        raise ValueError('unknown tier')\n    if coupon not in ('', 'SAVE10'):\n        raise ValueError('unknown coupon')\n    raise NotImplementedError(\"__SONIC_HOLE__:Set total: apply the tier percentage discount with floor division, then subtract 1000 if coupon == 'SAVE10' and subtotal_cents >= 5000\")\n    return total",
+      "actual": "--- planned\n+++ observed\n@@ -1,4 +1,5 @@\n def compute_total(subtotal_cents: int, tier: str, coupon: str) -> int:\n+    return subtotal_cents\n     if not isinstance(subtotal_cents, int) or isinstance(subtotal_cents, bool):\n         raise TypeError('subtotal_cents must be an int')\n     if subtotal_cents < 0:\n@@ -7,5 +8,8 @@\n         raise ValueError('unknown tier')\n     if coupon not in ('', 'SAVE10'):\n         raise ValueError('unknown coupon')\n-    raise NotImplementedError(\"__SONIC_HOLE__:Set total: apply the tier percentage discount with floor division, then subtract 1000 if coupon == 'SAVE10' and subtotal_cents >= 5000\")\n+    percent = {'basic': 0, 'silver': 5, 'gold': 10}[tier]\n+    total = subtotal_cents - subtotal_cents * percent // 100\n+    if coupon == 'SAVE10' and subtotal_cents >= 5000:\n+        total = total - 1000\n     return total"
+    }
+  }
+]

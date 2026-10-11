@@ -1,0 +1,232 @@
+{
+  "P1_condition_change": {
+    "change": "check_qty: 'qty <= 0' -> 'qty < 0' in the score",
+    "wav_identical": true
+  },
+  "P2_names_and_expressions": {
+    "change": "rename release -> restock_anything, its sku guard -> 'False', exception type changed",
+    "wav_identical": true
+  },
+  "P3_nesting": {
+    "a": "if x < 0: raise ValueError(); return x   (rejects negatives)",
+    "b": "if x < 0: pass; raise ValueError(); return x   (always raises)",
+    "wav_identical": true
+  },
+  "P4_body_vs_otherwise": {
+    "a": "if x < 0: raise   (rejects negatives)",
+    "b": "if x < 0: pass  else: raise   (rejects non-negatives)",
+    "wav_identical": true
+  },
+  "P5_authorization_neutralised": {
+    "change": "perform: 'not is_allowed(user, action, owner)' -> 'False' (authorization never enforced)",
+    "wav_identical": true
+  },
+  "P6_blind_decoding": {
+    "T01_pricing": {
+      "events": 11,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 2276,
+      "audio_information_upper_bound_bits": 52.3,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    },
+    "T02_inventory": {
+      "events": 20,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 2610,
+      "audio_information_upper_bound_bits": 95.1,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    },
+    "T03_rbac": {
+      "events": 15,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 3178,
+      "audio_information_upper_bound_bits": 71.3,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    },
+    "T04_stats": {
+      "events": 13,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 1903,
+      "audio_information_upper_bound_bits": 61.8,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    },
+    "T05_password": {
+      "events": 9,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 2067,
+      "audio_information_upper_bound_bits": 42.8,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    },
+    "T06_ratelimit": {
+      "events": 10,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 1924,
+      "audio_information_upper_bound_bits": 47.5,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    },
+    "T07_orders": {
+      "events": 26,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 3910,
+      "audio_information_upper_bound_bits": 123.6,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    },
+    "T08_tokens": {
+      "events": 19,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 3152,
+      "audio_information_upper_bound_bits": 90.3,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    },
+    "T09_grades": {
+      "events": 19,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 2515,
+      "audio_information_upper_bound_bits": 90.3,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    },
+    "T10_ledger": {
+      "events": 12,
+      "decoded_exactly": true,
+      "recoverable_from_audio": "ordered sequence of element kinds (and one of 3 harmonic classes per module)",
+      "score_json_bytes": 2215,
+      "audio_information_upper_bound_bits": 57.1,
+      "not_recoverable": [
+        "module paths",
+        "function names",
+        "parameters and types",
+        "conditions",
+        "expressions",
+        "nesting depth",
+        "body vs otherwise",
+        "hole labels",
+        "allowed calls",
+        "requirements"
+      ]
+    }
+  },
+  "summary": {
+    "code_semantics_changes_with_identical_audio": 5,
+    "of": 5,
+    "benchmark_scores_whose_kind_sequence_decodes_exactly": 10,
+    "pitch_mapping": {
+      "function": 60,
+      "validate": 62,
+      "branch": 64,
+      "loop": 65,
+      "call": 67,
+      "raise": 69,
+      "return": 71,
+      "hole": 72,
+      "assign": 74
+    }
+  }
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "path": "tokens.py",
+    "status": "modified",
+    "start_seconds": 0.0,
+    "duration_seconds": 1.2,
+    "issue": {
+      "path": "tokens.py",
+      "function": null,
+      "kind": "imports_changed",
+      "message": "Import inventory/order differs from the plan",
+      "expected": [
+        "import hashlib",
+        "import hmac"
+      ],
+      "actual": [
+        "import hashlib",
+        "import hmac",
+        "import os"
+      ]
+    }
+  }
+]

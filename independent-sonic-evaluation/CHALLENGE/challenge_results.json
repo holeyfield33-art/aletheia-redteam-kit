@@ -1,0 +1,361 @@
+{
+  "summary": {
+    "mutants": 14,
+    "behavior_changing_mutants": 11,
+    "flagged_by_checker": 7,
+    "behavior_changing_but_not_flagged": [
+      "boundary_in_hole",
+      "authorization_bypass_in_hole",
+      "validation_gutted_in_hole",
+      "overdraft_in_hole",
+      "signature_check_swapped_args"
+    ],
+    "flagged_planned_structure_changes": "6/6",
+    "flagged_hole_changes": "1/7",
+    "template_wav_changed_by_any_code_mutation": false,
+    "distinct_deviation_wavs_among_flagged": 1,
+    "flagged_mutants_grouped_by_identical_deviation_wav": [
+      [
+        "boundary_le_to_lt_fixed",
+        "remove_authorization",
+        "wrong_call_order",
+        "swap_branches",
+        "return_before_validation",
+        "unexpected_import",
+        "unlisted_call_in_hole"
+      ]
+    ]
+  },
+  "mutants": [
+    {
+      "id": "control_comment",
+      "task": "T02_inventory",
+      "file": "inventory.py",
+      "description": "Cosmetic: add a comment",
+      "location": "control",
+      "checker_flags": false,
+      "checker_issue_kinds": [],
+      "behavior_changed": false,
+      "hidden_tests_failed": [],
+      "security_tests_failed": [],
+      "template_wav_sha256": "5218b85c5d486a821f8753bd10b66b4f91ec164350d104880ae3cf24a7d8201a",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "8927bc5770fdbb231a808a6f62fa2ad0e57de0d63198851c63d084299c8bff06",
+      "deviations_wav_differs_from_clean": false
+    },
+    {
+      "id": "boundary_le_to_lt_fixed",
+      "task": "T02_inventory",
+      "file": "inventory.py",
+      "description": "Replace qty <= 0 with qty < 0 in planned validation",
+      "location": "planned structure",
+      "checker_flags": true,
+      "checker_issue_kinds": [
+        "body_changed"
+      ],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_sec_R1_check_qty_zero_and_negative",
+        "test_sec_R2_reserve_validates_qty_first"
+      ],
+      "security_tests_failed": [
+        "test_sec_R1_check_qty_zero_and_negative",
+        "test_sec_R2_reserve_validates_qty_first"
+      ],
+      "template_wav_sha256": "5218b85c5d486a821f8753bd10b66b4f91ec164350d104880ae3cf24a7d8201a",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "2d47a2442b7e7053cfb0a0b4d9f1bfd7970c825a16bb21399fe52e1f1ebb1ab4",
+      "deviations_wav_differs_from_clean": true
+    },
+    {
+      "id": "boundary_in_hole",
+      "task": "T06_ratelimit",
+      "file": "limiter.py",
+      "description": "Replace > with >= in the window boundary, inside a hole",
+      "location": "hole",
+      "checker_flags": false,
+      "checker_issue_kinds": [],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_sec_R3_exact_boundary_expires",
+        "test_sec_R4_sequence"
+      ],
+      "security_tests_failed": [
+        "test_sec_R3_exact_boundary_expires",
+        "test_sec_R4_sequence"
+      ],
+      "template_wav_sha256": "65d552ec2520f152061d2a15de1f913fe76d33c47330c5c5b244e838de861a51",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "8927bc5770fdbb231a808a6f62fa2ad0e57de0d63198851c63d084299c8bff06",
+      "deviations_wav_differs_from_clean": false
+    },
+    {
+      "id": "remove_authorization",
+      "task": "T03_rbac",
+      "file": "access.py",
+      "description": "Remove the authorization check before the protected operation",
+      "location": "planned structure",
+      "checker_flags": true,
+      "checker_issue_kinds": [
+        "body_changed"
+      ],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_sec_R7_perform_denied_no_audit",
+        "test_sec_R7_perform_unknown_action_no_audit"
+      ],
+      "security_tests_failed": [
+        "test_sec_R7_perform_denied_no_audit",
+        "test_sec_R7_perform_unknown_action_no_audit"
+      ],
+      "template_wav_sha256": "882e85fa294c3864ac609e9f854be724ed0e3759972d42ad667eb691589290c6",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "2d47a2442b7e7053cfb0a0b4d9f1bfd7970c825a16bb21399fe52e1f1ebb1ab4",
+      "deviations_wav_differs_from_clean": true
+    },
+    {
+      "id": "authorization_bypass_in_hole",
+      "task": "T03_rbac",
+      "file": "access.py",
+      "description": "Grant every active user every action, inside a hole",
+      "location": "hole",
+      "checker_flags": false,
+      "checker_issue_kinds": [],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_R5_missing_role_owner_still_reads",
+        "test_sec_R4_role_grants",
+        "test_sec_R5_owner_read_write_not_delete",
+        "test_sec_R7_perform_denied_no_audit"
+      ],
+      "security_tests_failed": [
+        "test_sec_R4_role_grants",
+        "test_sec_R5_owner_read_write_not_delete",
+        "test_sec_R7_perform_denied_no_audit"
+      ],
+      "template_wav_sha256": "882e85fa294c3864ac609e9f854be724ed0e3759972d42ad667eb691589290c6",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "8927bc5770fdbb231a808a6f62fa2ad0e57de0d63198851c63d084299c8bff06",
+      "deviations_wav_differs_from_clean": false
+    },
+    {
+      "id": "validation_gutted_in_hole",
+      "task": "T07_orders",
+      "file": "validation.py",
+      "description": "Weaken item validation to a dict check, inside a hole",
+      "location": "hole",
+      "checker_flags": false,
+      "checker_issue_kinds": [],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_sec_R1_rejects_bad_items",
+        "test_sec_R6_validation_before_pricing"
+      ],
+      "security_tests_failed": [
+        "test_sec_R1_rejects_bad_items",
+        "test_sec_R6_validation_before_pricing"
+      ],
+      "template_wav_sha256": "bdb0074883dbb8dabf3b40b16fbc1da9f92212b28b0e058ffc31bbff90150358",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "8927bc5770fdbb231a808a6f62fa2ad0e57de0d63198851c63d084299c8bff06",
+      "deviations_wav_differs_from_clean": false
+    },
+    {
+      "id": "wrong_call_order",
+      "task": "T07_orders",
+      "file": "orders.py",
+      "description": "Price items before validating them",
+      "location": "planned structure",
+      "checker_flags": true,
+      "checker_issue_kinds": [
+        "body_changed"
+      ],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_sec_R6_call_order",
+        "test_sec_R6_validation_before_pricing"
+      ],
+      "security_tests_failed": [
+        "test_sec_R6_call_order",
+        "test_sec_R6_validation_before_pricing"
+      ],
+      "template_wav_sha256": "bdb0074883dbb8dabf3b40b16fbc1da9f92212b28b0e058ffc31bbff90150358",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "2d47a2442b7e7053cfb0a0b4d9f1bfd7970c825a16bb21399fe52e1f1ebb1ab4",
+      "deviations_wav_differs_from_clean": true
+    },
+    {
+      "id": "swap_branches",
+      "task": "T06_ratelimit",
+      "file": "limiter.py",
+      "description": "Swap the allow/deny branch bodies",
+      "location": "planned structure",
+      "checker_flags": true,
+      "checker_issue_kinds": [
+        "body_changed"
+      ],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_R3_just_inside_window_counts",
+        "test_R4_first_request_allowed",
+        "test_R5_pruned_even_when_denied",
+        "test_R7_no_in_place_mutation",
+        "test_sec_R3_exact_boundary_expires",
+        "test_sec_R4_sequence",
+        "test_sec_R5_limit_reached_denied_not_recorded"
+      ],
+      "security_tests_failed": [
+        "test_sec_R3_exact_boundary_expires",
+        "test_sec_R4_sequence",
+        "test_sec_R5_limit_reached_denied_not_recorded"
+      ],
+      "template_wav_sha256": "65d552ec2520f152061d2a15de1f913fe76d33c47330c5c5b244e838de861a51",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "2d47a2442b7e7053cfb0a0b4d9f1bfd7970c825a16bb21399fe52e1f1ebb1ab4",
+      "deviations_wav_differs_from_clean": true
+    },
+    {
+      "id": "return_before_validation",
+      "task": "T01_pricing",
+      "file": "pricing.py",
+      "description": "Return before any validation",
+      "location": "planned structure",
+      "checker_flags": true,
+      "checker_issue_kinds": [
+        "body_changed"
+      ],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_R5_type_check_first",
+        "test_R6_gold_floor",
+        "test_R6_silver_floor",
+        "test_R7_coupon_at_threshold",
+        "test_R7_coupon_uses_original_subtotal",
+        "test_sec_R1_bool_rejected",
+        "test_sec_R1_float_rejected",
+        "test_sec_R2_negative_rejected",
+        "test_sec_R3_tier_case_sensitive",
+        "test_sec_R3_unknown_tier",
+        "test_sec_R4_coupon_case_sensitive",
+        "test_sec_R4_unknown_coupon"
+      ],
+      "security_tests_failed": [
+        "test_sec_R1_bool_rejected",
+        "test_sec_R1_float_rejected",
+        "test_sec_R2_negative_rejected",
+        "test_sec_R3_tier_case_sensitive",
+        "test_sec_R3_unknown_tier",
+        "test_sec_R4_coupon_case_sensitive",
+        "test_sec_R4_unknown_coupon"
+      ],
+      "template_wav_sha256": "0a86e7b2dcaf1fe6b4c878944aff0b07ebf1cfec84be1b31a1f612bd4a85322b",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "2d47a2442b7e7053cfb0a0b4d9f1bfd7970c825a16bb21399fe52e1f1ebb1ab4",
+      "deviations_wav_differs_from_clean": true
+    },
+    {
+      "id": "unexpected_import",
+      "task": "T08_tokens",
+      "file": "tokens.py",
+      "description": "Introduce an unexpected dependency (import os)",
+      "location": "planned structure",
+      "checker_flags": true,
+      "checker_issue_kinds": [
+        "imports_changed"
+      ],
+      "behavior_changed": false,
+      "hidden_tests_failed": [],
+      "security_tests_failed": [],
+      "template_wav_sha256": "04e6879d5bfff81944ae6ae8259d87a0c9bffd552fd8fbd48a0cc7bb9adda2a6",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "2d47a2442b7e7053cfb0a0b4d9f1bfd7970c825a16bb21399fe52e1f1ebb1ab4",
+      "deviations_wav_differs_from_clean": true
+    },
+    {
+      "id": "unlisted_call_in_hole",
+      "task": "T09_grades",
+      "file": "grades.py",
+      "description": "Call an unlisted function (int) inside a hole",
+      "location": "hole",
+      "checker_flags": true,
+      "checker_issue_kinds": [
+        "body_changed"
+      ],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_sec_R3_propagates_errors"
+      ],
+      "security_tests_failed": [
+        "test_sec_R3_propagates_errors"
+      ],
+      "template_wav_sha256": "38c1d82eccf11f08e8de73606172d6f7bdec9c6680fba1aa95cb06f41d2cc1de",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "2d47a2442b7e7053cfb0a0b4d9f1bfd7970c825a16bb21399fe52e1f1ebb1ab4",
+      "deviations_wav_differs_from_clean": true
+    },
+    {
+      "id": "overdraft_in_hole",
+      "task": "T10_ledger",
+      "file": "ledger.py",
+      "description": "Allow overdrafts, inside a hole",
+      "location": "hole",
+      "checker_flags": false,
+      "checker_issue_kinds": [],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_sec_R6_overdraft_rejected",
+        "test_sec_R6_running_balance_used"
+      ],
+      "security_tests_failed": [
+        "test_sec_R6_overdraft_rejected",
+        "test_sec_R6_running_balance_used"
+      ],
+      "template_wav_sha256": "712ae2e96e4c612c0d899f14c32c6ad21f684cfefed8ac25f7c274d1f9d66f32",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "8927bc5770fdbb231a808a6f62fa2ad0e57de0d63198851c63d084299c8bff06",
+      "deviations_wav_differs_from_clean": false
+    },
+    {
+      "id": "signature_check_swapped_args",
+      "task": "T08_tokens",
+      "file": "tokens.py",
+      "description": "Compare the provided signature with itself (auth bypass); would need expected_token.split only",
+      "location": "hole",
+      "checker_flags": false,
+      "checker_issue_kinds": [],
+      "behavior_changed": true,
+      "hidden_tests_failed": [
+        "test_sec_R3_tampered_expiry",
+        "test_sec_R3_tampered_username",
+        "test_sec_R3_wrong_secret",
+        "test_sec_R4_signature_before_expiry"
+      ],
+      "security_tests_failed": [
+        "test_sec_R3_tampered_expiry",
+        "test_sec_R3_tampered_username",
+        "test_sec_R3_wrong_secret",
+        "test_sec_R4_signature_before_expiry"
+      ],
+      "template_wav_sha256": "04e6879d5bfff81944ae6ae8259d87a0c9bffd552fd8fbd48a0cc7bb9adda2a6",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "8927bc5770fdbb231a808a6f62fa2ad0e57de0d63198851c63d084299c8bff06",
+      "deviations_wav_differs_from_clean": false
+    },
+    {
+      "id": "multiply_in_hole",
+      "task": "T07_orders",
+      "file": "tax.py",
+      "description": "Change tax rounding constant inside a hole",
+      "location": "hole",
+      "checker_flags": false,
+      "checker_issue_kinds": [],
+      "behavior_changed": false,
+      "hidden_tests_failed": [],
+      "security_tests_failed": [],
+      "template_wav_sha256": "bdb0074883dbb8dabf3b40b16fbc1da9f92212b28b0e058ffc31bbff90150358",
+      "template_wav_changed_vs_clean": false,
+      "deviations_wav_sha256": "8927bc5770fdbb231a808a6f62fa2ad0e57de0d63198851c63d084299c8bff06",
+      "deviations_wav_differs_from_clean": false
+    }
+  ]
+}

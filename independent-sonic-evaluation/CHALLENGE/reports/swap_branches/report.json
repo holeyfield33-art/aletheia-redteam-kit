@@ -1,0 +1,38 @@
+{
+  "format": "sonic-template-conformance-v1",
+  "compliant": false,
+  "issues": [
+    {
+      "path": "limiter.py",
+      "function": "allow",
+      "kind": "body_changed",
+      "message": "Required structure/order differs, or a hole exceeds its allowed calls/control flow",
+      "expected": "def allow(state: dict, client: str, now: int, limit: int, window: int) -> bool:\n    if limit <= 0 or window <= 0:\n        raise ValueError('limit and window must be positive')\n    raise NotImplementedError(\"__SONIC_HOLE__:Set recent to a new list of the client's timestamps in state that are strictly greater than now - window\")\n    if len(recent) < limit:\n        recent.append(now)\n        raise NotImplementedError('__SONIC_HOLE__:Store recent as state[client]')\n        return True\n    else:\n        raise NotImplementedError('__SONIC_HOLE__:Store recent as state[client]')\n        return False",
+      "actual": "--- planned\n+++ observed\n@@ -1,11 +1,11 @@\n def allow(state: dict, client: str, now: int, limit: int, window: int) -> bool:\n     if limit <= 0 or window <= 0:\n         raise ValueError('limit and window must be positive')\n-    raise NotImplementedError(\"__SONIC_HOLE__:Set recent to a new list of the client's timestamps in state that are strictly greater than now - window\")\n+    recent = [t for t in state.get(client, []) if t > now - window]\n     if len(recent) < limit:\n+        state[client] = recent\n+        return False\n+    else:\n         recent.append(now)\n-        raise NotImplementedError('__SONIC_HOLE__:Store recent as state[client]')\n-        return True\n-    else:\n-        raise NotImplementedError('__SONIC_HOLE__:Store recent as state[client]')\n-        return False+        state[client] = recent\n+        return True"
+    }
+  ],
+  "unresolved_holes": [],
+  "score_sha256": "24efc83e6efb9f99dd187f0b0252139e3455800fe637e035fff583d165dd5091",
+  "scope": {
+    "declared_files": [
+      "limiter.py"
+    ],
+    "excluded_directory_names": [
+      ".git",
+      ".venv",
+      "venv",
+      "node_modules",
+      "__pycache__",
+      ".pytest_cache",
+      ".ruff_cache"
+    ]
+  },
+  "limitations": [
+    "This checks Python AST structure against an unsigned plan, not runtime behavior or security.",
+    "Validation/authorization labels do not prove that their called functions enforce those properties.",
+    "Holes allow only listed calls and forbid early return/raise, imports and new definitions.",
+    "Names may be rebound at runtime; matching calls are syntactic, not resolved targets.",
+    "Live scans are not atomic; use a quiescent checkout.",
+    "Audio repeats structural tokens once; it does not simulate branches or loop execution."
+  ]
+}

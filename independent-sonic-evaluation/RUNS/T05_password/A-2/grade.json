@@ -1,0 +1,28 @@
+{
+  "task": "T05_password",
+  "tests_total": 12,
+  "tests_passed": 12,
+  "pass_rate": 1.0,
+  "full_success": true,
+  "failed_tests": {},
+  "requirements_failed": [],
+  "requirements_failed_high": [],
+  "requirements_failed_medium": [],
+  "security_tests_total": 4,
+  "security_tests_passed": 4,
+  "syntax_errors": [],
+  "collection_error": false,
+  "timeout": false,
+  "runtime_error_tests": [],
+  "sonic_conformance": {
+    "compliant": false,
+    "issue_kinds": [
+      "body_changed"
+    ],
+    "issues": 2,
+    "unresolved_holes": 0
+  },
+  "interface_problems": [],
+  "interface_compliant": true,
+  "pytest_tail": "............                                                             [100%]\n12 passed in 0.03s\n"
+}

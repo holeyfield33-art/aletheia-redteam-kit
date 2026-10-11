@@ -1,0 +1,16 @@
+[
+  {
+    "path": "grades.py",
+    "status": "modified",
+    "start_seconds": 0.0,
+    "duration_seconds": 1.2,
+    "issue": {
+      "path": "grades.py",
+      "function": "assign_grades",
+      "kind": "body_changed",
+      "message": "Required structure/order differs, or a hole exceeds its allowed calls/control flow",
+      "expected": "def assign_grades(scores: dict) -> dict:\n    result = {}\n    for name in scores:\n        raise NotImplementedError('__SONIC_HOLE__:Store letter_for(scores[name]) as result[name]')\n    return result",
+      "actual": "--- planned\n+++ observed\n@@ -1,5 +1,5 @@\n def assign_grades(scores: dict) -> dict:\n     result = {}\n     for name in scores:\n-        raise NotImplementedError('__SONIC_HOLE__:Store letter_for(scores[name]) as result[name]')\n+        result[name] = letter_for(int(scores[name]))\n     return result"
+    }
+  }
+]

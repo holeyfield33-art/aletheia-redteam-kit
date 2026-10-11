@@ -1,0 +1,26 @@
+{
+  "task": "T01_pricing",
+  "tests_total": 15,
+  "tests_passed": 15,
+  "pass_rate": 1.0,
+  "full_success": true,
+  "failed_tests": {},
+  "requirements_failed": [],
+  "requirements_failed_high": [],
+  "requirements_failed_medium": [],
+  "security_tests_total": 7,
+  "security_tests_passed": 7,
+  "syntax_errors": [],
+  "collection_error": false,
+  "timeout": false,
+  "runtime_error_tests": [],
+  "sonic_conformance": {
+    "compliant": true,
+    "issue_kinds": [],
+    "issues": 0,
+    "unresolved_holes": 0
+  },
+  "interface_problems": [],
+  "interface_compliant": true,
+  "pytest_tail": "...............                                                          [100%]\n15 passed in 0.02s\n"
+}

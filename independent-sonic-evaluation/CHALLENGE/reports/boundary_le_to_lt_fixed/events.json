@@ -1,0 +1,16 @@
+[
+  {
+    "path": "inventory.py",
+    "status": "modified",
+    "start_seconds": 0.0,
+    "duration_seconds": 1.2,
+    "issue": {
+      "path": "inventory.py",
+      "function": "check_qty",
+      "kind": "body_changed",
+      "message": "Required structure/order differs, or a hole exceeds its allowed calls/control flow",
+      "expected": "def check_qty(qty: int) -> None:\n    if not isinstance(qty, int) or isinstance(qty, bool):\n        raise TypeError('qty must be an int')\n    if qty <= 0:\n        raise ValueError('qty must be positive')\n    return None",
+      "actual": "--- planned\n+++ observed\n@@ -1,6 +1,6 @@\n def check_qty(qty: int) -> None:\n     if not isinstance(qty, int) or isinstance(qty, bool):\n         raise TypeError('qty must be an int')\n-    if qty <= 0:\n+    if qty < 0:\n         raise ValueError('qty must be positive')\n     return None"
+    }
+  }
+]
