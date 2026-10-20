@@ -443,17 +443,13 @@ def test_command_center_normalizes_dependency_suspicious_signal_metrics() -> Non
     assert metrics["suspicious_dependency_package_total"] == 2.0
 
 
-def test_repo_audit_auto_runs_pip_audit_when_python_manifest_present(monkeypatch, tmp_path) -> None:
-    (tmp_path / "pyproject.toml").write_text(
-        """
-[project]
-name = "sample"
-version = "0.0.1"
-dependencies = ["httpx>=0.27"]
-""".strip()
-    )
+def test_repo_audit_auto_runs_pip_audit_when_requirements_file_present(monkeypatch, tmp_path) -> None:
+    (tmp_path / "requirements.txt").write_text("httpx>=0.27\n")
+
+    captured_args: list[list[str]] = []
 
     def _fake_run(*args, **kwargs):
+        captured_args.append(list(args[0]) if args else list(kwargs.get("args", [])))
         payload = {
             "dependencies": [
                 {
@@ -479,6 +475,40 @@ dependencies = ["httpx>=0.27"]
     assert summary["dependencies"]["tools"]["pip_audit"]["status"] == "executed"
     assert summary["dependencies"]["findings_total"] >= 1
     assert summary["findings_by_type"].get("dependency_vulnerability", 0) >= 1
+    # The audit must be SCOPED to the repo's own requirements.txt via `-r`, never a
+    # bare `pip-audit` call that falls back to auditing the ambient environment this
+    # scanner happens to be running in.
+    assert len(captured_args) == 1
+    invoked = captured_args[0]
+    assert "-r" in invoked
+    assert str(tmp_path / "requirements.txt") in invoked
+
+
+def test_repo_audit_skips_pip_audit_for_pyproject_only_manifest(monkeypatch, tmp_path) -> None:
+    # pyproject.toml with no requirements.txt: pip-audit has no `-r`-style flag for
+    # this without resolving/installing the project, which this scanner does not do.
+    # It must report that honestly rather than silently falling back to a bare
+    # `pip-audit` call, which audits whatever happens to be installed in the ACTIVE
+    # environment running the scan -- a different (and misleading) thing entirely.
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[project]
+name = "sample"
+version = "0.0.1"
+dependencies = ["httpx>=0.27"]
+""".strip()
+    )
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("pip-audit must not run against the ambient environment")
+
+    monkeypatch.setattr("engine.repo_audit.scanner.shutil.which", lambda binary: f"/usr/bin/{binary}")
+    monkeypatch.setattr("engine.repo_audit.scanner.subprocess.run", _fail_if_called)
+
+    summary = run_repo_audit(tmp_path, deps_scan="auto")
+
+    assert summary["dependencies"]["tools"]["pip_audit"]["status"] == "skipped_unscoped_manifest"
+    assert summary["findings_by_type"].get("dependency_vulnerability", 0) == 0
 
 
 def test_repo_audit_applies_threat_feed_context(tmp_path) -> None:

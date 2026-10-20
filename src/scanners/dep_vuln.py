@@ -368,12 +368,26 @@ def _collect_dependency_findings(repo_root: Path, deps_scan: str, timeout_second
             tools["pip_audit"] = {"status": "report_loaded", "source": str(report_path.relative_to(repo_root))}
 
     python_manifests = manifests.get("python") or []
-    if deps_scan in {"auto", "full"} and python_manifests and tools["pip_audit"]["status"] == "not_run":
+    # Scope the audit to the repo's OWN declared dependency files. `pip-audit` with no
+    # `-r`/project-path argument audits whatever is installed in the ACTIVE Python
+    # environment running this scanner — which can be a completely different set of
+    # packages than anything the target repo declares (e.g. this tool's own venv
+    # pulls in packages the scanned repo never mentions). That produced false
+    # "vulnerable dependency" findings against repos with no such dependency at all.
+    # `-r <file>` (repeatable) instead audits exactly the pinned requirements in that
+    # file, nothing else.
+    requirements_manifests = [m for m in python_manifests if Path(m).name == "requirements.txt"]
+    if deps_scan in {"auto", "full"} and requirements_manifests and tools["pip_audit"]["status"] == "not_run":
         pip_audit_bin = shutil.which("pip-audit")
         if not pip_audit_bin:
             tools["pip_audit"] = {"status": "unavailable", "reason": "binary_not_found"}
         else:
-            stdout, stderr, exit_code, timed_out = _run_command([pip_audit_bin, "-f", "json"], repo_root, timeout_seconds)
+            req_args: list[str] = []
+            for rel in requirements_manifests:
+                req_args += ["-r", str(repo_root / rel)]
+            stdout, stderr, exit_code, timed_out = _run_command(
+                [pip_audit_bin, "-f", "json", "--progress-spinner", "off", *req_args], repo_root, timeout_seconds
+            )
             if timed_out:
                 tools["pip_audit"] = {"status": "timeout", "reason": "scan_timed_out"}
             else:
@@ -382,9 +396,24 @@ def _collect_dependency_findings(repo_root: Path, deps_scan: str, timeout_second
                     findings_payload, payload_meta = _parse_pip_audit_payload(payload, "pip-audit:runtime")
                     findings.extend(findings_payload)
                     metadata.extend(payload_meta)
-                    tools["pip_audit"] = {"status": "executed", "exit_code": str(exit_code), "source": "runtime_scan"}
+                    tools["pip_audit"] = {
+                        "status": "executed",
+                        "exit_code": str(exit_code),
+                        "source": "runtime_scan",
+                        "scoped_to": requirements_manifests,
+                    }
                 except json.JSONDecodeError:
                     tools["pip_audit"] = {"status": "invalid_output", "reason": "non_json_output", "stderr": stderr[:512]}
+    elif deps_scan in {"auto", "full"} and python_manifests and not requirements_manifests and tools["pip_audit"]["status"] == "not_run":
+        # pyproject.toml/Pipfile manifests with no requirements.txt: pip-audit has no
+        # equivalent `-r`-style flag for these without resolving/installing the project
+        # first, which this scanner does not do. Report honestly that nothing was
+        # audited here rather than silently falling back to the ambient environment.
+        tools["pip_audit"] = {
+            "status": "skipped_unscoped_manifest",
+            "reason": "no requirements.txt found; pyproject.toml/Pipfile audit without installing the project is not supported",
+            "manifests_seen": python_manifests,
+        }
 
     npm_manifests = manifests.get("npm") or []
     if deps_scan in {"auto", "full"} and npm_manifests:
